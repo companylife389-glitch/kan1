@@ -9,7 +9,7 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -54,6 +54,7 @@ interface Post {
   userId: string;
   text: string;
   media?: { type: 'image' | 'video' | 'file'; url: string; name?: string; size?: number };
+  isReel?: boolean;
   timestamp: number;
   likes: string[];
   comments: Comment[];
@@ -260,6 +261,7 @@ interface PostRow {
   media_type: 'image' | 'video' | 'file' | null;
   media_name: string | null;
   media_size: number | null;
+  is_reel: boolean;
   created_at: string;
   post_likes: { user_id: string }[];
   bookmarks: { user_id: string }[];
@@ -276,7 +278,7 @@ interface PostRow {
 async function loadPosts(): Promise<Post[]> {
   const { data, error } = await supabase
     .from('posts')
-    .select('id, user_id, text, media_url, media_type, media_name, media_size, created_at, post_likes(user_id), bookmarks(user_id), comments(id, parent_id, user_id, text, created_at, comment_likes(user_id))')
+    .select('id, user_id, text, media_url, media_type, media_name, media_size, is_reel, created_at, post_likes(user_id), bookmarks(user_id), comments(id, parent_id, user_id, text, created_at, comment_likes(user_id))')
     .order('created_at', { ascending: false })
     .order('created_at', { referencedTable: 'comments', ascending: true })
     .limit(100);
@@ -297,6 +299,7 @@ async function loadPosts(): Promise<Post[]> {
       media: row.media_url && row.media_type
         ? { type: row.media_type, url: row.media_url, name: row.media_name ?? undefined, size: row.media_size ?? undefined }
         : undefined,
+      isReel: row.is_reel,
       timestamp: new Date(row.created_at).getTime(),
       likes: row.post_likes.map(l => l.user_id),
       bookmarks: row.bookmarks.map(b => b.user_id),
@@ -616,8 +619,8 @@ function CoinBurst({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
       transition={{ duration: 1, ease: 'easeOut' }}
       className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
     >
-      <div className={`${dim} rounded-full flex items-center justify-center font-extrabold tracking-wider text-amber-950 bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 border-4 border-amber-300 shadow-[0_0_30px_rgba(251,191,36,0.6)] ring-2 ring-amber-700/40`}>
-        <span>KAN</span>
+      <div className={`${dim} rounded-full flex items-center justify-center font-extrabold tracking-wider text-white bg-gradient-to-br from-violet-600 via-violet-500 to-cyan-500 border-4 border-white/80 shadow-[0_0_34px_rgba(124,58,237,0.65)] ring-4 ring-cyan-400/30`}>
+        <span className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]">KAN</span>
       </div>
     </motion.div>
   );
@@ -748,7 +751,7 @@ export default function App() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'feed' | 'search' | 'create' | 'profile' | 'settings' | 'messages'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'reels' | 'search' | 'create' | 'profile' | 'settings' | 'messages'>('feed');
   const [showLogin, setShowLogin] = useState(true);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
 
@@ -987,15 +990,15 @@ export default function App() {
   return (
     <div dir="rtl" className="min-h-screen bg-gray-950 text-white font-sans">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-gray-900/95 backdrop-blur-md border-b border-gray-800">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/70 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src={LOGO_URL} alt="" className="w-8 h-8 rounded-lg" />
-            <h1 className="text-xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
+            <h1 className="text-xl font-bold kan-gradient-text">
               KAN
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => goTab('messages')}
               className="relative p-2 hover:bg-gray-800 rounded-full transition-colors"
@@ -1010,8 +1013,16 @@ export default function App() {
             <button
               onClick={() => goTab('search')}
               className="p-2 hover:bg-gray-800 rounded-full transition-colors"
+              aria-label="بحث"
             >
               <Search size={20} />
+            </button>
+            <button
+              onClick={() => goTab('settings')}
+              className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${activeTab === 'settings' && !viewedUserId ? 'text-violet-300' : ''}`}
+              aria-label="الإعدادات"
+            >
+              <Settings size={20} />
             </button>
           </div>
         </div>
@@ -1067,6 +1078,11 @@ export default function App() {
               />
             </motion.div>
           )}
+          {!viewedUserId && activeTab === 'reels' && (
+            <motion.div key="reels" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <ReelsTab posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} />
+            </motion.div>
+          )}
           {!viewedUserId && activeTab === 'create' && (
             <motion.div key="create" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <CreatePost currentUser={currentUser} setPosts={setPosts} setActiveTab={goTab} />
@@ -1098,32 +1114,48 @@ export default function App() {
       </main>
 
       {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 z-50">
-        <div className="max-w-2xl mx-auto flex items-center justify-around py-2">
-          {[
-            { tab: 'feed' as const, icon: Home, label: 'الرئيسية' },
-            { tab: 'search' as const, icon: Search, label: 'بحث' },
-            { tab: 'create' as const, icon: PlusCircle, label: 'نشر' },
-            { tab: 'messages' as const, icon: MessageSquare, label: 'رسائل', badge: unreadCount },
-            { tab: 'profile' as const, icon: User, label: 'حسابي' },
-            { tab: 'settings' as const, icon: Settings, label: 'إعدادات' },
-          ].map(({ tab, icon: Icon, label, badge }) => (
-            <button
-              key={tab}
-              onClick={() => goTab(tab)}
-              className={`relative flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
-                activeTab === tab ? 'text-violet-400' : 'text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              <Icon size={20} />
-              <span className="text-[10px]">{label}</span>
-              {badge && badge > 0 ? (
-                <span className="absolute -top-0.5 right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] flex items-center justify-center text-white font-bold">
-                  {badge > 9 ? '9+' : badge}
-                </span>
-              ) : null}
-            </button>
-          ))}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-xl border-t border-white/5">
+        <div className="max-w-2xl mx-auto grid grid-cols-[1fr_auto_1fr] items-end px-1 pb-[env(safe-area-inset-bottom)]">
+          {(() => {
+            const tabs = {
+              feed: { icon: Home, label: 'الرئيسية' },
+              reels: { icon: Film, label: 'ريلز' },
+              profile: { icon: User, label: 'حسابي' },
+            };
+            const tabButton = (tab: 'feed' | 'reels' | 'profile') => {
+              const { icon: Icon, label } = tabs[tab];
+              const active = activeTab === tab && !viewedUserId;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => goTab(tab)}
+                  className={`relative flex flex-col items-center gap-0.5 px-4 py-2 transition-colors ${active ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  <Icon size={22} className={active ? 'text-cyan-300' : ''} />
+                  <span className="text-[10px]">{label}</span>
+                  <span className={`h-0.5 w-5 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
+                </button>
+              );
+            };
+            const createActive = activeTab === 'create' && !viewedUserId;
+            return (
+              <>
+                <div className="flex items-end justify-around">
+                  {tabButton('feed')}
+                  {tabButton('reels')}
+                </div>
+                <button onClick={() => goTab('create')} className="relative flex flex-col items-center -mt-6 px-3 pb-1.5" aria-label="نشر">
+                  <span className={`kan-fab w-14 h-14 rounded-full flex items-center justify-center ring-4 ring-gray-950 ${createActive ? 'scale-105' : ''}`}>
+                    <Plus size={28} strokeWidth={2.6} className="text-white" />
+                  </span>
+                  <span className="mt-1 text-[10px] font-semibold kan-gradient-text">نشر</span>
+                </button>
+                <div className="flex items-end justify-around">
+                  {tabButton('profile')}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </nav>
     </div>
@@ -1370,7 +1402,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
               whileTap={{ scale: 0.98 }}
               onClick={showLogin ? handleLogin : handleRegister}
               disabled={busy}
-              className="w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-600 rounded-xl text-white font-medium shadow-lg shadow-violet-500/25 disabled:opacity-60"
+              className="w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-xl text-white font-medium shadow-lg shadow-violet-500/25 disabled:opacity-60"
             >
               {busy ? '...' : showLogin ? 'دخول' : 'إنشاء حساب'}
             </motion.button>
@@ -1390,7 +1422,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile }: {
   onOpenProfile: (id: string) => void;
 }) {
   const [mode, setMode] = useState<'all' | 'following' | 'files'>('all');
-  const sorted = [...posts].sort((a, b) => b.timestamp - a.timestamp);
+  const sorted = posts.filter(p => !p.isReel).sort((a, b) => b.timestamp - a.timestamp);
   const displayPosts = mode === 'all'
     ? sorted
     : mode === 'files'
@@ -1745,15 +1777,299 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
   );
 }
 
+// ============ Reels ============
+function togglePostLike(post: Post, me: string, setPosts: React.Dispatch<React.SetStateAction<Post[]>>) {
+  const was = post.likes.includes(me);
+  const apply = (on: boolean) =>
+    setPosts(prev => prev.map(p =>
+      p.id === post.id ? { ...p, likes: on ? [...p.likes.filter(id => id !== me), me] : p.likes.filter(id => id !== me) } : p
+    ));
+  apply(!was);
+  void (async () => {
+    const { error } = was
+      ? await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', me)
+      : await supabase.from('post_likes').insert({ post_id: post.id, user_id: me });
+    if (error) apply(was);
+  })();
+}
+
+function ReelItem({ post, author, currentUser, muted, onToggleMute, setPosts, onOpenProfile, onOpenComments, onShowLikes }: {
+  post: Post;
+  author: User;
+  currentUser: User;
+  muted: boolean;
+  onToggleMute: () => void;
+  setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
+  onOpenProfile: (id: string) => void;
+  onOpenComments: () => void;
+  onShowLikes: () => void;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [paused, setPaused] = useState(false);
+  const [coinId, setCoinId] = useState(0);
+  const coinTimer = useRef<number | undefined>(undefined);
+  const lastTap = useRef(0);
+  const tapTimer = useRef<number | undefined>(undefined);
+  const isLiked = post.likes.includes(currentUser.id);
+  const commentCount = post.comments.reduce((n, c) => n + 1 + c.replies.length, 0);
+
+  // Play only the reel that is on screen.
+  useEffect(() => {
+    const box = boxRef.current;
+    const video = videoRef.current;
+    if (!box || !video) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+        setPaused(false);
+        void video.play().catch(() => undefined);
+      } else {
+        video.pause();
+        video.currentTime = 0;
+      }
+    }, { threshold: [0, 0.6, 1] });
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, []);
+
+  // One tap: pause / play. Double tap: love it with the KAN coin.
+  const handleTap = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 320) {
+      lastTap.current = 0;
+      window.clearTimeout(tapTimer.current);
+      setCoinId(n => n + 1);
+      window.clearTimeout(coinTimer.current);
+      coinTimer.current = window.setTimeout(() => setCoinId(0), 1000);
+      if (!isLiked) togglePostLike(post, currentUser.id, setPosts);
+      return;
+    }
+    lastTap.current = now;
+    window.clearTimeout(tapTimer.current);
+    tapTimer.current = window.setTimeout(() => {
+      const video = videoRef.current;
+      if (!video) return;
+      if (video.paused) { void video.play().catch(() => undefined); setPaused(false); }
+      else { video.pause(); setPaused(true); }
+    }, 320);
+  };
+
+  return (
+    <div ref={boxRef} className="relative h-full w-full snap-start snap-always bg-black overflow-hidden select-none touch-manipulation" onClick={handleTap}>
+      <video
+        ref={videoRef}
+        src={post.media?.url}
+        className="absolute inset-0 w-full h-full object-cover"
+        loop
+        muted={muted}
+        playsInline
+        preload="metadata"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/30 pointer-events-none" />
+      {coinId > 0 && <CoinBurst key={coinId} />}
+      {paused && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-16 h-16 rounded-full bg-black/45 flex items-center justify-center"><Play size={30} className="text-white" /></div>
+        </div>
+      )}
+
+      <button
+        onClick={e => { e.stopPropagation(); onToggleMute(); }}
+        className="absolute top-3 left-3 p-2 rounded-full bg-black/45 text-white"
+        aria-label={muted ? 'تشغيل الصوت' : 'كتم الصوت'}
+      >
+        {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+      </button>
+
+      <div className="absolute bottom-4 left-3 flex flex-col items-center gap-5" onClick={e => e.stopPropagation()}>
+        <div className="flex flex-col items-center">
+          <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-2.5 rounded-full bg-black/40 ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label="إعجاب">
+            <Heart size={26} className={isLiked ? 'fill-red-400' : ''} />
+          </button>
+          {post.likes.length > 0 && (
+            <button onClick={onShowLikes} className="text-xs text-white mt-1 font-medium">{post.likes.length}</button>
+          )}
+        </div>
+        <div className="flex flex-col items-center">
+          <button onClick={onOpenComments} className="p-2.5 rounded-full bg-black/40 text-white" aria-label="التعليقات">
+            <MessageCircle size={26} />
+          </button>
+          <span className="text-xs text-white mt-1 font-medium">{commentCount > 0 ? commentCount : ''}</span>
+        </div>
+      </div>
+
+      <div className="absolute bottom-4 right-4 left-20 text-right" onClick={e => e.stopPropagation()}>
+        <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2 mb-2">
+          <Avatar src={author.avatar} name={author.displayName} size="sm" />
+          <span className="text-white font-semibold text-sm">{author.displayName}</span>
+          <span className="text-white/60 text-xs">@{author.username}</span>
+        </button>
+        {post.text && <p className="text-white text-sm leading-relaxed line-clamp-3 whitespace-pre-wrap">{post.text}</p>}
+      </div>
+    </div>
+  );
+}
+
+function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClose }: {
+  post: Post;
+  users: User[];
+  currentUser: User;
+  setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
+  onOpenProfile: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState('');
+  const me = currentUser.id;
+  const mutate = (fn: (p: Post) => Post) => setPosts(prev => prev.map(p => (p.id === post.id ? fn(p) : p)));
+
+  const add = async () => {
+    const body = text.trim();
+    if (!body) return;
+    const id = crypto.randomUUID();
+    const comment: Comment = { id, userId: me, text: body, timestamp: Date.now(), likes: [], replies: [] };
+    mutate(p => ({ ...p, comments: [...p.comments, comment] }));
+    setText('');
+    const { error } = await supabase.from('comments').insert({ id, post_id: post.id, user_id: me, text: body });
+    if (error) {
+      mutate(p => ({ ...p, comments: p.comments.filter(c => c.id !== id) }));
+      setText(body);
+      window.alert('تعذّر إضافة التعليق، حاول مرة أخرى');
+    }
+  };
+
+  const remove = async (id: string) => {
+    if (!window.confirm('حذف هذا التعليق؟')) return;
+    const snapshot = post.comments;
+    mutate(p => ({
+      ...p,
+      comments: p.comments.filter(c => c.id !== id).map(c => ({ ...c, replies: c.replies.filter(r => r.id !== id) })),
+    }));
+    const { error } = await supabase.from('comments').delete().eq('id', id);
+    if (error) {
+      mutate(p => ({ ...p, comments: snapshot }));
+      window.alert('تعذّر الحذف، حاول مرة أخرى');
+    }
+  };
+
+  const rows: { id: string; userId: string; text: string; timestamp: number; reply: boolean }[] = [];
+  for (const c of post.comments) {
+    rows.push({ id: c.id, userId: c.userId, text: c.text, timestamp: c.timestamp, reply: false });
+    for (const r of c.replies) rows.push({ id: r.id, userId: r.userId, text: r.text, timestamp: r.timestamp, reply: true });
+  }
+
+  return createPortal(
+    <div dir="rtl" className="fixed inset-0 z-[100] bg-black/60 flex items-end justify-center" onClick={onClose}>
+      <div className="w-full max-w-md bg-gray-900 border-t border-white/10 rounded-t-2xl h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-800">
+          <h3 className="font-bold text-white">التعليقات <span className="text-gray-500 text-sm font-normal">({rows.length})</span></h3>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white" aria-label="إغلاق"><X size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          {rows.length === 0 && <p className="text-center text-gray-500 py-10">لا توجد تعليقات بعد. كن أول من يعلّق!</p>}
+          {rows.map(r => {
+            const u = users.find(x => x.id === r.userId);
+            if (!u) return null;
+            return (
+              <div key={r.id} className={`flex gap-2 ${r.reply ? 'mr-8' : ''}`}>
+                <button onClick={() => { onClose(); onOpenProfile(u.id); }} className="self-start"><Avatar src={u.avatar} name={u.displayName} size="sm" /></button>
+                <div className="flex-1 bg-gray-800/60 rounded-xl p-2.5 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-medium text-white">{u.displayName}</span>
+                    <span className="text-xs text-gray-500">{formatTime(r.timestamp)}</span>
+                    {r.userId === me && (
+                      <button onClick={() => remove(r.id)} className="mr-auto text-gray-500 hover:text-red-400" aria-label="حذف"><Trash2 size={13} /></button>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">{r.text}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="p-3 border-t border-gray-800 flex items-center gap-2">
+          <input
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && add()}
+            placeholder="اكتب تعليقاً..."
+            className="flex-1 px-4 py-2.5 bg-gray-800 rounded-full text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          />
+          <button onClick={add} className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white" aria-label="إرسال"><Send size={18} /></button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function ReelsTab({ posts, setPosts, users, currentUser, onOpenProfile, onCreate }: {
+  posts: Post[];
+  setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
+  users: User[];
+  currentUser: User;
+  onOpenProfile: (id: string) => void;
+  onCreate: () => void;
+}) {
+  const [muted, setMuted] = useState(true);
+  const [commentsFor, setCommentsFor] = useState<string | null>(null);
+  const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
+  const reels = posts.filter(p => p.media?.type === 'video').sort((a, b) => b.timestamp - a.timestamp);
+  const commentPost = commentsFor ? posts.find(p => p.id === commentsFor) : undefined;
+
+  if (reels.length === 0) {
+    return (
+      <div className="px-4 py-16 text-center">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl kan-fab flex items-center justify-center"><Film size={30} className="text-white" /></div>
+        <p className="text-white font-semibold mb-1">لا توجد ريلز بعد</p>
+        <p className="text-gray-500 text-sm mb-5">أي فيديو يُنشر يظهر هنا بتصميم الريلز</p>
+        <button onClick={onCreate} className="px-6 py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white font-medium">انشر ريل</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-md mx-auto">
+      <div className="h-[calc(100dvh-9rem)] overflow-y-scroll snap-y snap-mandatory no-scrollbar rounded-2xl">
+        {reels.map(post => {
+          const author = users.find(u => u.id === post.userId);
+          if (!author) return null;
+          return (
+            <div key={post.id} className="h-full">
+              <ReelItem
+                post={post}
+                author={author}
+                currentUser={currentUser}
+                muted={muted}
+                onToggleMute={() => setMuted(m => !m)}
+                setPosts={setPosts}
+                onOpenProfile={onOpenProfile}
+                onOpenComments={() => setCommentsFor(post.id)}
+                onShowLikes={() => setListModal({ title: 'الإعجابات', ids: post.likes })}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {commentPost && (
+        <ReelComments post={commentPost} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} onClose={() => setCommentsFor(null)} />
+      )}
+      {listModal && (
+        <UserListModal title={listModal.title} userIds={listModal.ids} users={users} onOpenProfile={onOpenProfile} onClose={() => setListModal(null)} />
+      )}
+    </div>
+  );
+}
+
 // ============ Create Post ============
 function CreatePost({ currentUser, setPosts, setActiveTab }: {
   currentUser: User;
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
-  setActiveTab: (tab: 'feed' | 'search' | 'create' | 'profile' | 'settings' | 'messages') => void;
+  setActiveTab: (tab: 'feed' | 'reels' | 'search' | 'create' | 'profile' | 'settings' | 'messages') => void;
 }) {
   const [text, setText] = useState('');
   const [media, setMedia] = useState<{ type: 'image' | 'video' | 'file'; url: string; file: File } | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [kind, setKind] = useState<'post' | 'reel'>('post');
   const [error, setError] = useState('');
   const [posting, setPosting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1767,16 +2083,21 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       setError(`حجم الملف يجب أن لا يتجاوز ${MAX_FILE_MB} ميجابايت`);
       return;
     }
-    const kind: 'image' | 'video' | 'file' =
+    const fileKind: 'image' | 'video' | 'file' =
       /^image\/(jpeg|png|webp|gif)$/.test(file.type) ? 'image'
       : /^video\/(mp4|webm|quicktime)$/.test(file.type) ? 'video'
       : 'file';
+    if (kind === 'reel' && fileKind !== 'video') {
+      setError('الريل يجب أن يكون فيديو (MP4 أو WebM أو MOV)');
+      return;
+    }
     if (media && media.url) URL.revokeObjectURL(media.url);
-    setMedia({ type: kind, url: kind === 'file' ? '' : URL.createObjectURL(file), file });
+    setMedia({ type: fileKind, url: fileKind === 'file' ? '' : URL.createObjectURL(file), file });
   };
 
   const handlePost = async () => {
     if (posting) return;
+    if (kind === 'reel' && media?.type !== 'video') { setError('اختر فيديو لنشره كريل'); return; }
     if (!text.trim() && !media) { setError('اكتب شيئاً أو أضف صورة أو فيديو أو ملف'); return; }
     setPosting(true);
     setError('');
@@ -1801,18 +2122,20 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         media_type: media ? media.type : null,
         media_name: media ? media.file.name.slice(0, 200) : null,
         media_size: media ? media.file.size : null,
+        is_reel: kind === 'reel',
       });
       if (insErr) throw insErr;
       const newPost: Post = {
         id, userId: currentUser.id, text: text.trim(),
         media: mediaUrl && media ? { type: media.type, url: mediaUrl, name: media.file.name, size: media.file.size } : undefined,
+        isReel: kind === 'reel',
         timestamp: Date.now(), likes: [], comments: [], bookmarks: [],
       };
       setPosts(prev => [newPost, ...prev.filter(p => p.id !== id)]);
       if (media && media.url) URL.revokeObjectURL(media.url);
       setText('');
       setMedia(null);
-      setActiveTab('feed');
+      setActiveTab(kind === 'reel' ? 'reels' : 'feed');
     } catch (e) {
       console.error(e);
       if (uploadedPath) void supabase.storage.from(POST_MEDIA_BUCKET).remove([uploadedPath]);
@@ -1824,13 +2147,31 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
 
   return (
     <div className="px-4 py-4">
-      <h2 className="text-xl font-bold text-white mb-4">منشور جديد</h2>
+      <h2 className="text-xl font-bold text-white mb-4">{kind === 'reel' ? 'ريل جديد' : 'منشور جديد'}</h2>
+      <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800 mb-4">
+        {([{ key: 'post' as const, label: 'منشور' }, { key: 'reel' as const, label: 'ريل 🎬' }]).map(t => (
+          <button
+            key={t.key}
+            onClick={() => {
+              setKind(t.key);
+              setError('');
+              if (t.key === 'reel' && media && media.type !== 'video') {
+                if (media.url) URL.revokeObjectURL(media.url);
+                setMedia(null);
+              }
+            }}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${kind === t.key ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
         <div className="flex gap-3 mb-4">
           <Avatar src={currentUser.avatar} name={currentUser.displayName} size="md" />
           <textarea
             value={text} onChange={e => setText(e.target.value)}
-            placeholder="ماذا يدور في ذهنك؟" rows={4}
+            placeholder={kind === 'reel' ? 'اكتب وصفاً للريل...' : 'ماذا يدور في ذهنك؟'} rows={4}
             className="flex-1 bg-transparent text-white placeholder-gray-500 focus:outline-none resize-none text-lg"
           />
         </div>
@@ -1857,16 +2198,20 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
         <div className="flex items-center justify-between border-t border-gray-800 pt-3">
           <div className="flex items-center gap-2">
-            <input ref={fileRef} type="file" onChange={handleFile} className="hidden" />
-            <button onClick={() => fileRef.current?.click()} className="p-2 text-cyan-400 hover:bg-gray-800 rounded-full transition-colors">
-              <ImageIcon size={20} />
-            </button>
+            <input ref={fileRef} type="file" accept={kind === 'reel' ? 'video/mp4,video/webm,video/quicktime' : undefined} onChange={handleFile} className="hidden" />
+            {kind === 'post' && (
+              <button onClick={() => fileRef.current?.click()} className="p-2 text-cyan-400 hover:bg-gray-800 rounded-full transition-colors">
+                <ImageIcon size={20} />
+              </button>
+            )}
             <button onClick={() => fileRef.current?.click()} className="p-2 text-green-400 hover:bg-gray-800 rounded-full transition-colors">
               <Video size={20} />
             </button>
-            <button onClick={() => fileRef.current?.click()} className="p-2 text-amber-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="ملف">
-              <Paperclip size={20} />
-            </button>
+            {kind === 'post' && (
+              <button onClick={() => fileRef.current?.click()} className="p-2 text-amber-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="ملف">
+                <Paperclip size={20} />
+              </button>
+            )}
             <div className="relative">
               <button onClick={() => setEmojiOpen(o => !o)} className="p-2 text-yellow-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="إيموجي">
                 <Smile size={20} />
@@ -1874,8 +2219,8 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
               {emojiOpen && <EmojiPicker onPick={e => setText(t => t + e)} onClose={() => setEmojiOpen(false)} />}
             </div>
           </div>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handlePost} disabled={posting} className="px-6 py-2 bg-gradient-to-r from-violet-600 to-cyan-600 rounded-full text-white font-medium disabled:opacity-60">
-            {posting ? 'جارٍ النشر...' : 'نشر'}
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handlePost} disabled={posting} className="px-6 py-2 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-medium disabled:opacity-60">
+            {posting ? 'جارٍ النشر...' : kind === 'reel' ? 'نشر الريل' : 'نشر'}
           </motion.button>
         </div>
       </div>
@@ -2390,7 +2735,7 @@ function SettingsTab({ currentUser, setUsers }: {
           <input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://example.com" className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-violet-500" />
         </div>
         {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
-        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSave} className="w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-600 rounded-xl text-white font-medium flex items-center justify-center gap-2">
+        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSave} className="w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-xl text-white font-medium flex items-center justify-center gap-2">
           {saved ? <><Check size={18} /> تم الحفظ</> : 'حفظ التغييرات'}
         </motion.button>
       </div>
@@ -2725,7 +3070,7 @@ function ChatBgPicker({ current, onChange, onImageUpload }: {
       </div>
       <div className="flex gap-2">
         <button
-          onClick={() => onChange({ type: 'color', value: '#030712' })}
+          onClick={() => onChange({ type: 'color', value: '#0b0b1a' })}
           className={`flex-1 py-2 rounded-lg text-xs border-2 transition-all ${
             current?.type === 'color' ? 'border-violet-400 bg-gray-800' : 'border-gray-700 bg-gray-800 hover:border-gray-600'
           }`}
@@ -2830,7 +3175,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   }, [messages.length]);
 
   const getBgStyle = () => {
-    if (!bg) return { background: '#030712' };
+    if (!bg) return { background: '#0b0b1a' };
     if (bg.type === 'image') return { backgroundImage: `url("${bg.value}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
     if (bg.type === 'color') return { background: bg.value };
     return {};
@@ -3343,7 +3688,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             />
             {text.trim() || media ? (
-              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={sendMessage} disabled={sending} className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-600 rounded-full disabled:opacity-60">
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={sendMessage} disabled={sending} className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full disabled:opacity-60">
                 <Send size={18} />
               </motion.button>
             ) : (
@@ -3351,7 +3696,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={() => setRecording(true)}
-                className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-600 rounded-full"
+                className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full"
               >
                 <Mic size={18} />
               </motion.button>
