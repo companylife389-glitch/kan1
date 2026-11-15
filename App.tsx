@@ -9,7 +9,7 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -55,6 +55,10 @@ interface Post {
   text: string;
   media?: { type: 'image' | 'video' | 'file'; url: string; name?: string; size?: number };
   isReel?: boolean;
+  isVideo?: boolean;
+  title?: string;
+  coverUrl?: string;
+  cursor: string;
   timestamp: number;
   likes: string[];
   comments: Comment[];
@@ -262,6 +266,9 @@ interface PostRow {
   media_name: string | null;
   media_size: number | null;
   is_reel: boolean;
+  is_video: boolean;
+  title: string | null;
+  cover_url: string | null;
   created_at: string;
   post_likes: { user_id: string }[];
   bookmarks: { user_id: string }[];
@@ -275,47 +282,82 @@ interface PostRow {
   }[];
 }
 
-async function loadPosts(): Promise<Post[]> {
-  const { data, error } = await supabase
-    .from('posts')
-    .select('id, user_id, text, media_url, media_type, media_name, media_size, is_reel, created_at, post_likes(user_id), bookmarks(user_id), comments(id, parent_id, user_id, text, created_at, comment_likes(user_id))')
+const POST_SELECT = 'id, user_id, text, media_url, media_type, media_name, media_size, is_reel, is_video, title, cover_url, created_at, post_likes(user_id), bookmarks(user_id), comments(id, parent_id, user_id, text, created_at, comment_likes(user_id))';
+
+function rowToPost(row: PostRow): Post {
+  const repliesByParent = new Map<string, Reply[]>();
+  for (const c of row.comments) {
+    if (!c.parent_id) continue;
+    repliesByParent.set(c.parent_id, [
+      ...(repliesByParent.get(c.parent_id) ?? []),
+      { id: c.id, userId: c.user_id, text: c.text, timestamp: new Date(c.created_at).getTime(), likes: c.comment_likes.map(l => l.user_id) },
+    ]);
+  }
+  return {
+    id: row.id,
+    userId: row.user_id,
+    text: row.text,
+    media: row.media_url && row.media_type
+      ? { type: row.media_type, url: row.media_url, name: row.media_name ?? undefined, size: row.media_size ?? undefined }
+      : undefined,
+    isReel: row.is_reel,
+    isVideo: row.is_video,
+    title: row.title ?? undefined,
+    coverUrl: row.cover_url ?? undefined,
+    cursor: row.created_at,
+    timestamp: new Date(row.created_at).getTime(),
+    likes: row.post_likes.map(l => l.user_id),
+    bookmarks: row.bookmarks.map(b => b.user_id),
+    comments: row.comments
+      .filter(c => !c.parent_id)
+      .map(c => ({
+        id: c.id,
+        userId: c.user_id,
+        text: c.text,
+        timestamp: new Date(c.created_at).getTime(),
+        likes: c.comment_likes.map(l => l.user_id),
+        replies: repliesByParent.get(c.id) ?? [],
+      })),
+  };
+}
+
+interface FetchPostsOptions {
+  before?: string;           // only posts older than this created_at (for "load more")
+  limit?: number;
+  ids?: string[];
+  userId?: string;
+  kind?: 'reels' | 'videos'; // reels = every short video, videos = long videos with a title
+  search?: string;
+}
+
+// Posts are loaded a page at a time, newest first.
+async function fetchPosts(opts: FetchPostsOptions = {}): Promise<Post[]> {
+  // Filters first, then ordering and the page size.
+  let query = supabase.from('posts').select(POST_SELECT);
+  if (opts.before) query = query.lt('created_at', opts.before);
+  if (opts.ids) query = query.in('id', opts.ids);
+  if (opts.userId) query = query.eq('user_id', opts.userId);
+  if (opts.kind === 'videos') query = query.eq('is_video', true);
+  if (opts.kind === 'reels') query = query.eq('media_type', 'video').eq('is_video', false);
+  if (opts.search) {
+    const term = opts.search.replace(/[%_,()*\\]/g, ' ').trim();
+    if (term) query = query.or(`title.ilike.%${term}%,text.ilike.%${term}%`);
+  }
+  const { data, error } = await query
     .order('created_at', { ascending: false })
     .order('created_at', { referencedTable: 'comments', ascending: true })
-    .limit(100);
+    .limit(opts.limit ?? 12);
   if (error) throw error;
-  return ((data ?? []) as unknown as PostRow[]).map(row => {
-    const repliesByParent = new Map<string, Reply[]>();
-    for (const c of row.comments) {
-      if (!c.parent_id) continue;
-      repliesByParent.set(c.parent_id, [
-        ...(repliesByParent.get(c.parent_id) ?? []),
-        { id: c.id, userId: c.user_id, text: c.text, timestamp: new Date(c.created_at).getTime(), likes: c.comment_likes.map(l => l.user_id) },
-      ]);
-    }
-    return {
-      id: row.id,
-      userId: row.user_id,
-      text: row.text,
-      media: row.media_url && row.media_type
-        ? { type: row.media_type, url: row.media_url, name: row.media_name ?? undefined, size: row.media_size ?? undefined }
-        : undefined,
-      isReel: row.is_reel,
-      timestamp: new Date(row.created_at).getTime(),
-      likes: row.post_likes.map(l => l.user_id),
-      bookmarks: row.bookmarks.map(b => b.user_id),
-      comments: row.comments
-        .filter(c => !c.parent_id)
-        .map(c => ({
-          id: c.id,
-          userId: c.user_id,
-          text: c.text,
-          timestamp: new Date(c.created_at).getTime(),
-          likes: c.comment_likes.map(l => l.user_id),
-          replies: repliesByParent.get(c.id) ?? [],
-        })),
-    };
-  });
+  return ((data ?? []) as unknown as PostRow[]).map(rowToPost);
 }
+
+function mergePosts(prev: Post[], incoming: Post[]): Post[] {
+  const byId = new Map(prev.map(p => [p.id, p] as const));
+  for (const p of incoming) byId.set(p.id, p);
+  return [...byId.values()].sort((a, b) => b.timestamp - a.timestamp);
+}
+
+const FEED_PAGE = 12;
 
 const CHAT_MEDIA_BUCKET = 'chat-media';
 const SIGNED_URL_SECONDS = 60 * 60 * 12;
@@ -573,6 +615,72 @@ async function detachPush(): Promise<void> {
 
 const LOGO_URL = `${import.meta.env.BASE_URL as string}icon-192.png`;
 
+// ============ Video player (with a fallback when the device cannot play the file) ============
+function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
+  src: string;
+  poster?: string;
+  className?: string;
+  autoPlay?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className={`flex flex-col items-center justify-center gap-3 bg-gray-900 border border-gray-800 rounded-xl p-6 text-center ${className}`}>
+        <Film size={32} className="text-gray-500" />
+        <p className="text-sm text-gray-300">لا يمكن تشغيل هذا الفيديو على هذا الجهاز. قد يكون بصيغة لا يدعمها المتصفح (مثل تسجيلات الآيفون HEVC).</p>
+        <button onClick={() => { void downloadFile(src, 'video.mp4'); }} className="px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-sm flex items-center gap-2">
+          <Download size={14} /> تحميل الفيديو
+        </button>
+      </div>
+    );
+  }
+  return (
+    <video
+      src={poster ? src : `${src}#t=0.1`}
+      poster={poster}
+      controls
+      playsInline
+      autoPlay={autoPlay}
+      preload="metadata"
+      className={`bg-black rounded-xl ${className}`}
+      onClick={e => e.stopPropagation()}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+// ============ Full-screen image viewer ============
+function ImageViewer({ src, name, onClose }: { src: string; name?: string; onClose: () => void }) {
+  const [zoomed, setZoomed] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return createPortal(
+    <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col" onClick={onClose}>
+      <div className="flex items-center justify-between p-3" onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} className="p-2 rounded-full bg-white/10 text-white hover:bg-white/20" aria-label="إغلاق"><X size={20} /></button>
+        <button
+          onClick={() => { void downloadFile(src, name || 'image.jpg'); }}
+          className="px-4 py-2 rounded-full bg-white/10 text-white hover:bg-white/20 text-sm flex items-center gap-2"
+        >
+          <Download size={16} /> تحميل
+        </button>
+      </div>
+      <div className={`flex-1 overflow-auto flex ${zoomed ? 'items-start justify-start' : 'items-center justify-center'}`}>
+        <img
+          src={src}
+          alt=""
+          onClick={e => { e.stopPropagation(); setZoomed(z => !z); }}
+          className={zoomed ? 'max-w-none cursor-zoom-out m-auto' : 'max-w-full max-h-full object-contain cursor-zoom-in'}
+        />
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ============ Emoji ============
 const MAX_FILE_MB = 50;
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
@@ -624,6 +732,52 @@ function CoinBurst({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
       </div>
     </motion.div>
   );
+}
+
+// Grabs a frame of a video file to use as its cover (null when the browser cannot decode the file).
+function captureVideoFrame(file: File): Promise<Blob | null> {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+    video.src = url;
+    const finish = (blob: Blob | null) => { URL.revokeObjectURL(url); resolve(blob); };
+    const timeout = window.setTimeout(() => finish(null), 8000);
+    video.onerror = () => { window.clearTimeout(timeout); finish(null); };
+    video.onloadedmetadata = () => { video.currentTime = Math.min(1, (video.duration || 2) / 3); };
+    video.onseeked = () => {
+      window.clearTimeout(timeout);
+      const scale = Math.min(1, 1280 / Math.max(video.videoWidth, 1));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { finish(null); return; }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(b => finish(b), 'image/jpeg', 0.82);
+    };
+  });
+}
+
+// The visible area of the screen (shrinks when the on-screen keyboard is open).
+function useVisualViewport() {
+  const read = () => ({ height: window.visualViewport?.height ?? window.innerHeight, top: window.visualViewport?.offsetTop ?? 0 });
+  const [vp, setVp] = useState(read);
+  useEffect(() => {
+    const update = () => setVp(read());
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', update);
+    vv?.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    return () => {
+      vv?.removeEventListener('resize', update);
+      vv?.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+  return vp;
 }
 
 // ============ Chat helpers ============
@@ -749,9 +903,17 @@ function StatusScreen({ text, actions }: { text: string; actions?: { label: stri
 export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [feedFrontier, setFeedFrontier] = useState(0);
+  const [feedHasMore, setFeedHasMore] = useState(true);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [newPostsCount, setNewPostsCount] = useState(0);
+  const postsRef = useRef<Post[]>([]);
+  postsRef.current = posts;
+  const feedBusy = useRef(false);
+  const feedCursor = useRef<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'feed' | 'reels' | 'search' | 'create' | 'profile' | 'settings' | 'messages'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'reels' | 'videos' | 'search' | 'create' | 'profile' | 'settings' | 'messages'>('feed');
   const [showLogin, setShowLogin] = useState(true);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
 
@@ -799,27 +961,87 @@ export default function App() {
     refreshUsers().finally(() => setLoadedFor(currentUserId));
   }, [currentUserId]);
 
-  const refreshPosts = async () => {
+  // Feed: first page, then more as you scroll. New posts from other people wait behind a
+  // "new posts" button until you refresh.
+  const loadFeedFirst = async () => {
+    if (feedBusy.current) return;
+    feedBusy.current = true;
+    setFeedLoading(true);
     try {
-      setPosts(await loadPosts());
+      const page = await fetchPosts({ limit: FEED_PAGE });
+      setPosts(page);
+      const last = page[page.length - 1];
+      feedCursor.current = last ? last.cursor : null;
+      setFeedFrontier(last ? last.timestamp : 0);
+      setFeedHasMore(page.length === FEED_PAGE);
+      setNewPostsCount(0);
     } catch (e) {
       console.error(e);
+    } finally {
+      feedBusy.current = false;
+      setFeedLoading(false);
     }
   };
 
-  // Load posts and keep them live (Realtime + refresh when the tab becomes visible).
+  const loadFeedMore = async () => {
+    if (feedBusy.current || !feedHasMore || !feedCursor.current) return;
+    feedBusy.current = true;
+    setFeedLoading(true);
+    try {
+      const page = await fetchPosts({ before: feedCursor.current, limit: FEED_PAGE });
+      setPosts(prev => mergePosts(prev, page));
+      const last = page[page.length - 1];
+      if (last) {
+        feedCursor.current = last.cursor;
+        setFeedFrontier(last.timestamp);
+      }
+      setFeedHasMore(page.length === FEED_PAGE);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      feedBusy.current = false;
+      setFeedLoading(false);
+    }
+  };
+
+  // Used by the Reels / Videos tabs and profiles to load their own pages into the cache.
+  const loadPostsPage = async (opts: FetchPostsOptions): Promise<Post[]> => {
+    const page = await fetchPosts(opts);
+    setPosts(prev => mergePosts(prev, page));
+    return page;
+  };
+
   useEffect(() => {
     if (!currentUserId) { setPosts([]); return; }
-    void refreshPosts();
+    void loadFeedFirst();
     let timer: number | undefined;
+    // Likes and comments on posts you already see update live; new posts do not jump in.
+    const refreshExisting = async () => {
+      const ids = postsRef.current.slice(0, 60).map(p => p.id);
+      if (ids.length === 0) return;
+      try {
+        const fresh = await fetchPosts({ ids, limit: 60 });
+        const byId = new Map(fresh.map(p => [p.id, p] as const));
+        setPosts(prev => prev.map(p => byId.get(p.id) ?? p));
+      } catch (e) {
+        console.error(e);
+      }
+    };
     const schedule = () => {
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => { void refreshPosts(); void refreshUsers(); }, 600);
+      timer = window.setTimeout(() => { void refreshExisting(); void refreshUsers(); }, 800);
     };
     const channel = supabase.channel('kan-live');
-    for (const table of ['profiles', 'follows', 'posts', 'comments', 'post_likes', 'comment_likes']) {
+    for (const table of ['profiles', 'follows', 'comments', 'post_likes', 'comment_likes']) {
       channel.on('postgres_changes', { event: '*', schema: 'public', table }, schedule);
     }
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, payload => {
+      if ((payload.new as { user_id?: string }).user_id !== currentUserId) setNewPostsCount(n => n + 1);
+    });
+    channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'posts' }, payload => {
+      const id = (payload.old as { id?: string }).id;
+      if (id) setPosts(prev => prev.filter(p => p.id !== id));
+    });
     channel.subscribe();
     const onVisible = () => { if (document.visibilityState === 'visible') schedule(); };
     document.addEventListener('visibilitychange', onVisible);
@@ -1038,7 +1260,7 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <main className="pt-16 pb-20 max-w-2xl mx-auto min-h-screen">
+      <main className={`pt-16 pb-20 mx-auto min-h-screen ${activeTab === 'videos' && !viewedUserId ? 'max-w-5xl' : 'max-w-2xl'}`}>
         <InstallBanner />
         <AnimatePresence mode="wait">
           {viewedUserId && (
@@ -1051,6 +1273,7 @@ export default function App() {
                 setUsers={setUsers}
                 setPosts={setPosts}
                 onOpenProfile={openProfile}
+                onLoadPage={loadPostsPage}
                 onStartChat={(otherUserId) => {
                   setSelectedChat(otherUserId);
                   goTab('messages');
@@ -1061,7 +1284,7 @@ export default function App() {
           )}
           {!viewedUserId && activeTab === 'feed' && (
             <motion.div key="feed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <Feed posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} />
+              <Feed posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} frontier={feedFrontier} hasMore={feedHasMore} loading={feedLoading} newCount={newPostsCount} onRefresh={loadFeedFirst} onLoadMore={loadFeedMore} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'search' && (
@@ -1080,7 +1303,12 @@ export default function App() {
           )}
           {!viewedUserId && activeTab === 'reels' && (
             <motion.div key="reels" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <ReelsTab posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} />
+              <ReelsTab posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} />
+            </motion.div>
+          )}
+          {!viewedUserId && activeTab === 'videos' && (
+            <motion.div key="videos" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <VideosTab posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} setUsers={setUsers} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'create' && (
@@ -1090,7 +1318,7 @@ export default function App() {
           )}
           {!viewedUserId && activeTab === 'profile' && (
             <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <ProfileTab currentUser={currentUser} users={users} posts={posts} setUsers={setUsers} setPosts={setPosts} onOpenProfile={openProfile} />
+              <ProfileTab currentUser={currentUser} users={users} posts={posts} setUsers={setUsers} setPosts={setPosts} onOpenProfile={openProfile} onLoadPage={loadPostsPage} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'settings' && (
@@ -1120,16 +1348,17 @@ export default function App() {
             const tabs = {
               feed: { icon: Home, label: 'الرئيسية' },
               reels: { icon: Film, label: 'ريلز' },
+              videos: { icon: PlayCircle, label: 'فيديوهات' },
               profile: { icon: User, label: 'حسابي' },
             };
-            const tabButton = (tab: 'feed' | 'reels' | 'profile') => {
+            const tabButton = (tab: 'feed' | 'reels' | 'videos' | 'profile') => {
               const { icon: Icon, label } = tabs[tab];
               const active = activeTab === tab && !viewedUserId;
               return (
                 <button
                   key={tab}
                   onClick={() => goTab(tab)}
-                  className={`relative flex flex-col items-center gap-0.5 px-4 py-2 transition-colors ${active ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                  className={`relative flex flex-col items-center gap-0.5 px-3 sm:px-4 py-2 transition-colors ${active ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 >
                   <Icon size={22} className={active ? 'text-cyan-300' : ''} />
                   <span className="text-[10px]">{label}</span>
@@ -1151,6 +1380,7 @@ export default function App() {
                   <span className="mt-1 text-[10px] font-semibold kan-gradient-text">نشر</span>
                 </button>
                 <div className="flex items-end justify-around">
+                  {tabButton('videos')}
                   {tabButton('profile')}
                 </div>
               </>
@@ -1414,31 +1644,82 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
 }
 
 // ============ Feed ============
-function Feed({ posts, setPosts, users, currentUser, onOpenProfile }: {
+function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, hasMore, loading, newCount, onRefresh, onLoadMore }: {
   posts: Post[];
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
   users: User[];
   currentUser: User;
   onOpenProfile: (id: string) => void;
+  frontier: number;
+  hasMore: boolean;
+  loading: boolean;
+  newCount: number;
+  onRefresh: () => void;
+  onLoadMore: () => void;
 }) {
   const [mode, setMode] = useState<'all' | 'following' | 'files'>('all');
-  const sorted = posts.filter(p => !p.isReel).sort((a, b) => b.timestamp - a.timestamp);
+  const sentinel = useRef<HTMLDivElement>(null);
+  const sorted = posts.filter(p => p.timestamp >= frontier).sort((a, b) => b.timestamp - a.timestamp);
   const displayPosts = mode === 'all'
     ? sorted
     : mode === 'files'
       ? sorted.filter(p => p.media?.type === 'file')
       : sorted.filter(p => p.userId === currentUser.id || currentUser.following.includes(p.userId));
 
+  // Load the next page just before you reach the end.
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || !hasMore || loading) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) onLoadMore();
+    }, { rootMargin: '700px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, displayPosts.length]);
+
+  // Pull down at the top of the page to refresh.
+  useEffect(() => {
+    let startY = 0;
+    let pulling = false;
+    const onStart = (e: TouchEvent) => {
+      pulling = window.scrollY <= 0;
+      startY = e.touches[0].clientY;
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (pulling && e.changedTouches[0].clientY - startY > 90) onRefresh();
+      pulling = false;
+    };
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchend', onEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchend', onEnd);
+    };
+  }, []);
+
   return (
     <div className="px-4 py-4 space-y-4">
-      <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
-        {[{ key: 'all' as const, label: 'الكل' }, { key: 'following' as const, label: 'المتابَعون' }, { key: 'files' as const, label: 'الملفات' }].map(t => (
-          <button key={t.key} onClick={() => setMode(t.key)} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${mode === t.key ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
-            {t.label}
-          </button>
-        ))}
+      {newCount > 0 && (
+        <button
+          onClick={() => { window.scrollTo({ top: 0 }); onRefresh(); }}
+          className="sticky top-[4.5rem] z-30 mx-auto flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-medium shadow-lg shadow-violet-500/30"
+        >
+          <RefreshCw size={14} /> {newCount === 1 ? 'منشور جديد' : `${newCount} منشورات جديدة`} · اضغط للتحديث
+        </button>
+      )}
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
+          {[{ key: 'all' as const, label: 'الكل' }, { key: 'following' as const, label: 'المتابَعون' }, { key: 'files' as const, label: 'الملفات' }].map(t => (
+            <button key={t.key} onClick={() => setMode(t.key)} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${mode === t.key ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button onClick={onRefresh} disabled={loading} className="p-2.5 rounded-xl bg-gray-900 border border-gray-800 text-gray-300 hover:text-white disabled:opacity-60" aria-label="تحديث">
+          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+        </button>
       </div>
-      {displayPosts.length === 0 && (
+      {displayPosts.length === 0 && !loading && (
         <div className="text-center py-12">
           <div className="text-4xl mb-4">📭</div>
           <p className="text-gray-400 mb-2">لا توجد منشورات بعد</p>
@@ -1450,6 +1731,9 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile }: {
       {displayPosts.map(post => (
         <PostCard key={post.id} post={post} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={onOpenProfile} />
       ))}
+      <div ref={sentinel} className="h-8 flex items-center justify-center text-xs text-gray-500">
+        {loading ? 'جارٍ التحميل...' : !hasMore && displayPosts.length > 0 ? 'وصلت لنهاية المنشورات' : ''}
+      </div>
     </div>
   );
 }
@@ -1464,7 +1748,9 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
 }) {
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const [coinId, setCoinId] = useState(0);
+  const [viewer, setViewer] = useState<{ src: string; name?: string } | null>(null);
   const coinTimer = useRef<number | undefined>(undefined);
+  const tapTimer = useRef<number | undefined>(undefined);
   const lastTap = useRef(0);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -1575,8 +1861,9 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
   };
 
   // Double tap anywhere on the post content: like it and show the KAN coin.
-  const handleContentTap = () => {
+  const handleContentTap = (onSingle?: () => void) => {
     const now = Date.now();
+    window.clearTimeout(tapTimer.current);
     if (now - lastTap.current < 350) {
       lastTap.current = 0;
       setCoinId(n => n + 1);
@@ -1585,6 +1872,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
       if (!isLiked) void toggleLike();
     } else {
       lastTap.current = now;
+      if (onSingle) tapTimer.current = window.setTimeout(onSingle, 350);
     }
   };
 
@@ -1618,8 +1906,14 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
         )}
       </div>
 
-      <div onClick={handleContentTap} className="relative select-none touch-manipulation">
+      <div onClick={() => handleContentTap()} className="relative select-none touch-manipulation">
         {coinId > 0 && <CoinBurst key={coinId} />}
+        {(post.title || post.isReel) && (
+          <div className="px-4 pb-2 flex items-center gap-2">
+            {post.isReel && <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-[11px] font-medium">🎬 ريل</span>}
+            {post.title && <h3 className="text-white font-bold leading-snug">{post.title}</h3>}
+          </div>
+        )}
         {post.text && (
           <div className="px-4 pb-3">
             <p className="text-gray-200 leading-relaxed whitespace-pre-wrap">{post.text}</p>
@@ -1630,7 +1924,12 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
           <div className="px-4 pb-3">
             {post.media.type === 'image' ? (
               <div className="relative">
-                <img src={post.media.url} alt="" className="w-full rounded-xl max-h-96 object-cover" />
+                <img
+                  src={post.media.url}
+                  alt=""
+                  onClick={e => { e.stopPropagation(); handleContentTap(() => setViewer({ src: post.media!.url, name: post.media!.name })); }}
+                  className="w-full rounded-xl max-h-96 object-cover cursor-zoom-in"
+                />
                 <button
                   onClick={e => { e.stopPropagation(); void downloadFile(post.media!.url, post.media!.name || 'image.jpg'); }}
                   className="absolute bottom-2 left-2 p-1.5 bg-black/60 hover:bg-black/80 rounded-full text-white"
@@ -1640,7 +1939,11 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
                 </button>
               </div>
             ) : post.media.type === 'video' ? (
-              <video src={post.media.url} controls className="w-full rounded-xl max-h-96" onClick={e => e.stopPropagation()} />
+              <VideoPlayer
+                src={post.media.url}
+                poster={post.coverUrl}
+                className={post.isReel ? 'max-h-[75vh] mx-auto w-auto max-w-full' : 'w-full max-h-[28rem]'}
+              />
             ) : (
               <div className="flex items-center gap-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl">
                 <FileText size={32} className="shrink-0 text-cyan-400" />
@@ -1773,6 +2076,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
       {listModal && (
         <UserListModal title={listModal.title} userIds={listModal.ids} users={users} onOpenProfile={onOpenProfile} onClose={() => setListModal(null)} />
       )}
+      {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}
     </motion.div>
   );
 }
@@ -1807,6 +2111,7 @@ function ReelItem({ post, author, currentUser, muted, onToggleMute, setPosts, on
   const boxRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [coinId, setCoinId] = useState(0);
   const coinTimer = useRef<number | undefined>(undefined);
   const lastTap = useRef(0);
@@ -1864,7 +2169,17 @@ function ReelItem({ post, author, currentUser, muted, onToggleMute, setPosts, on
         muted={muted}
         playsInline
         preload="metadata"
+        onError={() => setFailed(true)}
       />
+      {failed && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 p-6 text-center bg-gray-900">
+          <Film size={34} className="text-gray-500" />
+          <p className="text-sm text-gray-300">لا يمكن تشغيل هذا الفيديو على هذا الجهاز (صيغة غير مدعومة).</p>
+          <button onClick={e => { e.stopPropagation(); void downloadFile(post.media!.url, 'video.mp4'); }} className="px-4 py-2 rounded-full bg-violet-600 text-white text-sm flex items-center gap-2">
+            <Download size={14} /> تحميل
+          </button>
+        </div>
+      )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/30 pointer-events-none" />
       {coinId > 0 && <CoinBurst key={coinId} />}
       {paused && (
@@ -2002,19 +2317,43 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
   );
 }
 
-function ReelsTab({ posts, setPosts, users, currentUser, onOpenProfile, onCreate }: {
+function ReelsTab({ posts, setPosts, users, currentUser, onOpenProfile, onCreate, onLoadPage }: {
   posts: Post[];
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
   users: User[];
   currentUser: User;
   onOpenProfile: (id: string) => void;
   onCreate: () => void;
+  onLoadPage: (opts: FetchPostsOptions) => Promise<Post[]>;
 }) {
   const [muted, setMuted] = useState(true);
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
-  const reels = posts.filter(p => p.media?.type === 'video').sort((a, b) => b.timestamp - a.timestamp);
+  const reels = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
   const commentPost = commentsFor ? posts.find(p => p.id === commentsFor) : undefined;
+
+  const [hasMore, setHasMore] = useState(true);
+  const loadingRef = useRef(false);
+  const loadMore = async () => {
+    if (loadingRef.current || !hasMore) return;
+    loadingRef.current = true;
+    try {
+      const oldest = reels[reels.length - 1];
+      const page = await onLoadPage({ kind: 'reels', before: oldest?.cursor, limit: 8 });
+      if (page.length < 8) setHasMore(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      loadingRef.current = false;
+    }
+  };
+  useEffect(() => {
+    if (reels.length < 5) void loadMore();
+  }, []);
+
+  if (reels.length === 0 && hasMore) {
+    return <div className="py-20 text-center text-gray-500 text-sm">جارٍ التحميل...</div>;
+  }
 
   if (reels.length === 0) {
     return (
@@ -2029,7 +2368,13 @@ function ReelsTab({ posts, setPosts, users, currentUser, onOpenProfile, onCreate
 
   return (
     <div className="max-w-md mx-auto">
-      <div className="h-[calc(100dvh-9rem)] overflow-y-scroll snap-y snap-mandatory no-scrollbar rounded-2xl">
+      <div
+        className="h-[calc(100dvh-9rem)] overflow-y-scroll snap-y snap-mandatory no-scrollbar rounded-2xl"
+        onScroll={e => {
+          const el = e.currentTarget;
+          if (el.scrollTop + el.clientHeight * 2.5 >= el.scrollHeight) void loadMore();
+        }}
+      >
         {reels.map(post => {
           const author = users.find(u => u.id === post.userId);
           if (!author) return null;
@@ -2060,19 +2405,284 @@ function ReelsTab({ posts, setPosts, users, currentUser, onOpenProfile, onCreate
   );
 }
 
+// ============ Videos (YouTube style) ============
+function VideoThumb({ post }: { post: Post }) {
+  return post.coverUrl ? (
+    <img src={post.coverUrl} alt="" loading="lazy" className="w-full h-full object-cover" />
+  ) : (
+    <video src={`${post.media?.url}#t=0.5`} preload="metadata" muted playsInline className="w-full h-full object-cover bg-black" />
+  );
+}
+
+function VideoCard({ post, author, onOpen }: { post: Post; author: User; onOpen: () => void }) {
+  return (
+    <button onClick={onOpen} className="text-right group block w-full">
+      <div className="relative aspect-video rounded-xl overflow-hidden bg-gray-900">
+        <VideoThumb post={post} />
+        <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/25 transition-colors">
+          <div className="w-12 h-12 rounded-full bg-black/55 flex items-center justify-center">
+            <Play size={22} className="text-white" />
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-2.5 mt-2">
+        <Avatar src={author.avatar} name={author.displayName} size="sm" />
+        <div className="min-w-0 flex-1">
+          <div className="text-white font-semibold text-sm leading-snug line-clamp-2">{post.title || post.text || 'فيديو'}</div>
+          <div className="text-xs text-gray-400 mt-0.5">{author.displayName}</div>
+          <div className="text-xs text-gray-500">{post.likes.length} إعجاب · {formatTime(post.timestamp)}</div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onOpenProfile, onOpenRelated, onBack }: {
+  post: Post;
+  users: User[];
+  currentUser: User;
+  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
+  setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
+  related: Post[];
+  onOpenProfile: (id: string) => void;
+  onOpenRelated: (id: string) => void;
+  onBack: () => void;
+}) {
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
+  const author = users.find(u => u.id === post.userId);
+  const toggleFollow = makeToggleFollow(currentUser, setUsers);
+  const isLiked = post.likes.includes(currentUser.id);
+  const isFollowing = author ? currentUser.following.includes(author.id) : false;
+  const commentCount = post.comments.reduce((n, c) => n + 1 + c.replies.length, 0);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [post.id]);
+
+  return (
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-6 sm:px-4 pb-6">
+      <div>
+        <button onClick={onBack} className="flex items-center gap-1 text-gray-400 hover:text-white text-sm px-4 sm:px-0 py-3">
+          <ChevronRight size={18} /> رجوع
+        </button>
+        <div className="aspect-video w-full bg-black sm:rounded-xl overflow-hidden">
+          <VideoPlayer key={post.id} src={post.media!.url} poster={post.coverUrl} autoPlay className="w-full h-full object-contain" />
+        </div>
+        <div className="px-4 sm:px-0 mt-3">
+          <h1 className="text-lg font-bold text-white leading-snug">{post.title || 'فيديو'}</h1>
+          <div className="text-xs text-gray-500 mt-1">{formatTime(post.timestamp)}</div>
+          {author && (
+            <div className="flex items-center gap-3 mt-3">
+              <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2.5 min-w-0">
+                <Avatar src={author.avatar} name={author.displayName} size="md" />
+                <div className="text-right min-w-0">
+                  <div className="text-white font-semibold text-sm truncate">{author.displayName}</div>
+                  <div className="text-xs text-gray-500">{author.followers.length} متابِع</div>
+                </div>
+              </button>
+              {author.id !== currentUser.id && (
+                <button
+                  onClick={() => toggleFollow(author.id)}
+                  className={`mr-auto px-4 py-1.5 rounded-full text-sm font-medium ${isFollowing ? 'bg-gray-800 text-gray-300' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}
+                >
+                  {isFollowing ? 'متابَع' : 'متابعة'}
+                </button>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            <div className="flex items-center bg-gray-900 border border-gray-800 rounded-full">
+              <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`pl-2 pr-4 py-2 flex items-center gap-2 ${isLiked ? 'text-red-400' : 'text-gray-300'}`}>
+                <Heart size={18} className={isLiked ? 'fill-red-400' : ''} />
+              </button>
+              <button onClick={() => post.likes.length > 0 && setListModal({ title: 'الإعجابات', ids: post.likes })} className="pl-4 pr-1 py-2 text-sm text-gray-300">
+                {post.likes.length}
+              </button>
+            </div>
+            <button onClick={() => setCommentsOpen(true)} className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-full text-sm text-gray-300 flex items-center gap-2">
+              <MessageCircle size={18} /> {commentCount > 0 ? commentCount : 'تعليق'}
+            </button>
+            <button onClick={() => { void downloadFile(post.media!.url, post.media!.name || 'video.mp4'); }} className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-full text-sm text-gray-300 flex items-center gap-2">
+              <Download size={16} /> تحميل
+            </button>
+          </div>
+          {post.text && (
+            <div className="mt-3 bg-gray-900 border border-gray-800 rounded-xl p-3 text-sm text-gray-200 whitespace-pre-wrap">{post.text}</div>
+          )}
+        </div>
+      </div>
+
+      {related.length > 0 && (
+        <aside className="px-4 sm:px-0 mt-6 lg:mt-12 space-y-4">
+          <h2 className="text-white font-bold text-sm">المزيد من الفيديوهات</h2>
+          {related.map(v => {
+            const a = users.find(u => u.id === v.userId);
+            return a ? <VideoCard key={v.id} post={v} author={a} onOpen={() => onOpenRelated(v.id)} /> : null;
+          })}
+        </aside>
+      )}
+
+      {commentsOpen && (
+        <ReelComments post={post} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} onClose={() => setCommentsOpen(false)} />
+      )}
+      {listModal && (
+        <UserListModal title={listModal.title} userIds={listModal.ids} users={users} onOpenProfile={onOpenProfile} onClose={() => setListModal(null)} />
+      )}
+    </div>
+  );
+}
+
+function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfile, onCreate, onLoadPage }: {
+  posts: Post[];
+  setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
+  users: User[];
+  currentUser: User;
+  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
+  onOpenProfile: (id: string) => void;
+  onCreate: () => void;
+  onLoadPage: (opts: FetchPostsOptions) => Promise<Post[]>;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Post[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [watchId, setWatchId] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const sentinel = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
+  const videos = posts.filter(p => p.isVideo && p.media?.type === 'video').sort((a, b) => b.timestamp - a.timestamp);
+
+  const loadMore = async () => {
+    if (loadingRef.current || !hasMore) return;
+    loadingRef.current = true;
+    setLoading(true);
+    try {
+      const oldest = videos[videos.length - 1];
+      const page = await onLoadPage({ kind: 'videos', before: oldest?.cursor, limit: 12 });
+      if (page.length < 12) setHasMore(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (videos.length < 8) void loadMore();
+  }, []);
+
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || !hasMore || loading || query.trim()) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) void loadMore();
+    }, { rootMargin: '600px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, videos.length, query]);
+
+  // Search the titles and descriptions of every video, not only the ones already loaded.
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) { setResults(null); setSearching(false); return; }
+    setSearching(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        setResults(await onLoadPage({ kind: 'videos', search: q, limit: 30 }));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const fresh = (list: Post[]) => list.map(r => posts.find(p => p.id === r.id) ?? r);
+  const shown = fresh(results ?? videos);
+  const watching = watchId ? posts.find(p => p.id === watchId) : undefined;
+
+  if (watching && watching.media) {
+    return (
+      <VideoWatch
+        post={watching}
+        users={users}
+        currentUser={currentUser}
+        setUsers={setUsers}
+        setPosts={setPosts}
+        related={videos.filter(v => v.id !== watching.id).slice(0, 10)}
+        onOpenProfile={onOpenProfile}
+        onOpenRelated={id => setWatchId(id)}
+        onBack={() => setWatchId(null)}
+      />
+    );
+  }
+
+  return (
+    <div className="px-4 py-4">
+      <div className="relative mb-5 max-w-xl mx-auto">
+        <Search size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500" />
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="ابحث في الفيديوهات..."
+          className="w-full pr-11 pl-10 py-3 bg-gray-900 border border-gray-800 rounded-full text-white placeholder-gray-500 focus:outline-none focus:border-violet-500"
+        />
+        {query && (
+          <button onClick={() => setQuery('')} className="absolute left-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-white" aria-label="مسح">
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
+      {shown.length === 0 && !loading && !searching && (
+        <div className="text-center py-14">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl kan-fab flex items-center justify-center"><PlayCircle size={30} className="text-white" /></div>
+          <p className="text-white font-semibold mb-1">{query ? 'لا توجد نتائج' : 'لا توجد فيديوهات بعد'}</p>
+          {!query && <button onClick={onCreate} className="mt-4 px-6 py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white font-medium">انشر فيديو</button>}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
+        {shown.map(v => {
+          const author = users.find(u => u.id === v.userId);
+          return author ? <VideoCard key={v.id} post={v} author={author} onOpen={() => setWatchId(v.id)} /> : null;
+        })}
+      </div>
+      <div ref={sentinel} className="h-10 flex items-center justify-center text-xs text-gray-500 mt-4">
+        {loading || searching ? 'جارٍ التحميل...' : ''}
+      </div>
+    </div>
+  );
+}
+
 // ============ Create Post ============
 function CreatePost({ currentUser, setPosts, setActiveTab }: {
   currentUser: User;
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
-  setActiveTab: (tab: 'feed' | 'reels' | 'search' | 'create' | 'profile' | 'settings' | 'messages') => void;
+  setActiveTab: (tab: 'feed' | 'reels' | 'videos' | 'search' | 'create' | 'profile' | 'settings' | 'messages') => void;
 }) {
   const [text, setText] = useState('');
+  const [title, setTitle] = useState('');
   const [media, setMedia] = useState<{ type: 'image' | 'video' | 'file'; url: string; file: File } | null>(null);
+  const [cover, setCover] = useState<{ blob: Blob; url: string; custom: boolean } | null>(null);
+  const [coverBusy, setCoverBusy] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [kind, setKind] = useState<'post' | 'reel'>('post');
+  const [kind, setKind] = useState<'post' | 'reel' | 'video'>('post');
   const [error, setError] = useState('');
   const [posting, setPosting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const coverRef = useRef<HTMLInputElement>(null);
+  const videoOnly = kind !== 'post';
+
+  const clearCover = () => {
+    setCover(prev => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+  };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2087,31 +2697,72 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       /^image\/(jpeg|png|webp|gif)$/.test(file.type) ? 'image'
       : /^video\/(mp4|webm|quicktime)$/.test(file.type) ? 'video'
       : 'file';
-    if (kind === 'reel' && fileKind !== 'video') {
-      setError('الريل يجب أن يكون فيديو (MP4 أو WebM أو MOV)');
+    if (videoOnly && fileKind !== 'video') {
+      setError('اختر فيديو (MP4 أو WebM أو MOV)');
       return;
     }
     if (media && media.url) URL.revokeObjectURL(media.url);
     setMedia({ type: fileKind, url: fileKind === 'file' ? '' : URL.createObjectURL(file), file });
+    if (kind === 'video') {
+      // Use a frame of the video as the cover until you pick your own image.
+      setCoverBusy(true);
+      void captureVideoFrame(file).then(blob => {
+        setCoverBusy(false);
+        if (!blob) return;
+        setCover(prev => (prev?.custom ? prev : { blob, url: URL.createObjectURL(blob), custom: false }));
+      });
+    }
+  };
+
+  const handleCover = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { setError('الغلاف يجب أن يكون صورة JPG أو PNG أو WebP'); return; }
+    if (file.size > 5 * 1024 * 1024) { setError('حجم الغلاف يجب أن لا يتجاوز 5 ميجابايت'); return; }
+    setError('');
+    clearCover();
+    setCover({ blob: file, url: URL.createObjectURL(file), custom: true });
+  };
+
+  const switchKind = (next: 'post' | 'reel' | 'video') => {
+    setKind(next);
+    setError('');
+    if (next !== 'post' && media && media.type !== 'video') {
+      if (media.url) URL.revokeObjectURL(media.url);
+      setMedia(null);
+    }
+    if (next !== 'video') { clearCover(); setTitle(''); }
   };
 
   const handlePost = async () => {
     if (posting) return;
-    if (kind === 'reel' && media?.type !== 'video') { setError('اختر فيديو لنشره كريل'); return; }
+    if (videoOnly && media?.type !== 'video') { setError(kind === 'reel' ? 'اختر فيديو لنشره كريل' : 'اختر الفيديو أولاً'); return; }
+    if (kind === 'video' && !title.trim()) { setError('اكتب عنواناً للفيديو'); return; }
     if (!text.trim() && !media) { setError('اكتب شيئاً أو أضف صورة أو فيديو أو ملف'); return; }
     setPosting(true);
     setError('');
-    let uploadedPath: string | null = null;
+    const uploaded: string[] = [];
     try {
       let mediaUrl: string | null = null;
+      let coverUrl: string | null = null;
       if (media) {
         const path = `${currentUser.id}/${crypto.randomUUID()}.${MEDIA_EXT[media.file.type] ?? safeExt(media.file.name)}`;
         const { error: upErr } = await supabase.storage
           .from(POST_MEDIA_BUCKET)
           .upload(path, media.file, { contentType: media.file.type || 'application/octet-stream', cacheControl: '31536000' });
         if (upErr) throw upErr;
-        uploadedPath = path;
+        uploaded.push(path);
         mediaUrl = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+      }
+      if (kind === 'video' && cover) {
+        const coverPath = `${currentUser.id}/${crypto.randomUUID()}-cover.${cover.blob.type === 'image/png' ? 'png' : cover.blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
+        const { error: coverErr } = await supabase.storage
+          .from(POST_MEDIA_BUCKET)
+          .upload(coverPath, cover.blob, { contentType: cover.blob.type || 'image/jpeg', cacheControl: '31536000' });
+        if (coverErr) throw coverErr;
+        uploaded.push(coverPath);
+        coverUrl = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(coverPath).data.publicUrl;
       }
       const id = crypto.randomUUID();
       const { error: insErr } = await supabase.from('posts').insert({
@@ -2123,43 +2774,48 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         media_name: media ? media.file.name.slice(0, 200) : null,
         media_size: media ? media.file.size : null,
         is_reel: kind === 'reel',
+        is_video: kind === 'video',
+        title: kind === 'video' ? title.trim().slice(0, 120) : null,
+        cover_url: coverUrl,
       });
       if (insErr) throw insErr;
       const newPost: Post = {
         id, userId: currentUser.id, text: text.trim(),
         media: mediaUrl && media ? { type: media.type, url: mediaUrl, name: media.file.name, size: media.file.size } : undefined,
         isReel: kind === 'reel',
+        isVideo: kind === 'video',
+        title: kind === 'video' ? title.trim().slice(0, 120) : undefined,
+        coverUrl: coverUrl ?? undefined,
+        cursor: new Date().toISOString(),
         timestamp: Date.now(), likes: [], comments: [], bookmarks: [],
       };
       setPosts(prev => [newPost, ...prev.filter(p => p.id !== id)]);
       if (media && media.url) URL.revokeObjectURL(media.url);
+      clearCover();
       setText('');
+      setTitle('');
       setMedia(null);
-      setActiveTab(kind === 'reel' ? 'reels' : 'feed');
+      // Everything you publish shows up on the home feed first.
+      setActiveTab('feed');
     } catch (e) {
       console.error(e);
-      if (uploadedPath) void supabase.storage.from(POST_MEDIA_BUCKET).remove([uploadedPath]);
-      setError('تعذّر نشر المنشور، حاول مرة أخرى');
+      if (uploaded.length > 0) void supabase.storage.from(POST_MEDIA_BUCKET).remove(uploaded);
+      setError('تعذّر النشر، حاول مرة أخرى');
     } finally {
       setPosting(false);
     }
   };
 
+  const heading = kind === 'reel' ? 'ريل جديد' : kind === 'video' ? 'فيديو جديد' : 'منشور جديد';
+
   return (
     <div className="px-4 py-4">
-      <h2 className="text-xl font-bold text-white mb-4">{kind === 'reel' ? 'ريل جديد' : 'منشور جديد'}</h2>
+      <h2 className="text-xl font-bold text-white mb-4">{heading}</h2>
       <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800 mb-4">
-        {([{ key: 'post' as const, label: 'منشور' }, { key: 'reel' as const, label: 'ريل 🎬' }]).map(t => (
+        {([{ key: 'post' as const, label: 'منشور' }, { key: 'reel' as const, label: 'ريل 🎬' }, { key: 'video' as const, label: 'فيديو ▶️' }]).map(t => (
           <button
             key={t.key}
-            onClick={() => {
-              setKind(t.key);
-              setError('');
-              if (t.key === 'reel' && media && media.type !== 'video') {
-                if (media.url) URL.revokeObjectURL(media.url);
-                setMedia(null);
-              }
-            }}
+            onClick={() => switchKind(t.key)}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${kind === t.key ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-400 hover:text-white'}`}
           >
             {t.label}
@@ -2167,11 +2823,19 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         ))}
       </div>
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+        {kind === 'video' && (
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value.slice(0, 120))}
+            placeholder="عنوان الفيديو"
+            className="w-full px-4 py-3 mb-3 bg-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          />
+        )}
         <div className="flex gap-3 mb-4">
           <Avatar src={currentUser.avatar} name={currentUser.displayName} size="md" />
           <textarea
             value={text} onChange={e => setText(e.target.value)}
-            placeholder={kind === 'reel' ? 'اكتب وصفاً للريل...' : 'ماذا يدور في ذهنك؟'} rows={4}
+            placeholder={kind === 'reel' ? 'اكتب وصفاً للريل...' : kind === 'video' ? 'وصف الفيديو (اختياري)...' : 'ماذا يدور في ذهنك؟'} rows={4}
             className="flex-1 bg-transparent text-white placeholder-gray-500 focus:outline-none resize-none text-lg"
           />
         </div>
@@ -2180,7 +2844,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
             {media.type === 'image' ? (
               <img src={media.url} alt="" className="w-full rounded-xl max-h-64 object-cover" />
             ) : media.type === 'video' ? (
-              <video src={media.url} controls className="w-full rounded-xl max-h-64" />
+              <video src={media.url} controls playsInline className="w-full rounded-xl max-h-64" />
             ) : (
               <div className="flex items-center gap-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl">
                 <FileText size={32} className="shrink-0 text-cyan-400" />
@@ -2190,24 +2854,40 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
                 </div>
               </div>
             )}
-            <button onClick={() => setMedia(null)} className="absolute top-2 left-2 p-1.5 bg-gray-900/80 rounded-full text-white hover:bg-red-500">
+            <button onClick={() => { if (media.url) URL.revokeObjectURL(media.url); setMedia(null); clearCover(); }} className="absolute top-2 left-2 p-1.5 bg-gray-900/80 rounded-full text-white hover:bg-red-500">
               <X size={14} />
             </button>
+          </div>
+        )}
+        {kind === 'video' && media && (
+          <div className="mb-4">
+            <div className="text-sm text-gray-400 mb-2">صورة الغلاف</div>
+            <div className="flex items-center gap-3">
+              <div className="w-40 aspect-video rounded-lg overflow-hidden bg-gray-800 flex items-center justify-center">
+                {cover
+                  ? <img src={cover.url} alt="" className="w-full h-full object-cover" />
+                  : <span className="text-xs text-gray-500">{coverBusy ? 'جارٍ الالتقاط...' : 'بدون غلاف'}</span>}
+              </div>
+              <button onClick={() => coverRef.current?.click()} className="px-4 py-2 rounded-full bg-gray-800 text-sm text-gray-200 hover:bg-gray-700 flex items-center gap-2">
+                <ImageIcon size={16} /> اختيار غلاف
+              </button>
+              <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleCover} className="hidden" />
+            </div>
           </div>
         )}
         {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
         <div className="flex items-center justify-between border-t border-gray-800 pt-3">
           <div className="flex items-center gap-2">
-            <input ref={fileRef} type="file" accept={kind === 'reel' ? 'video/mp4,video/webm,video/quicktime' : undefined} onChange={handleFile} className="hidden" />
-            {kind === 'post' && (
-              <button onClick={() => fileRef.current?.click()} className="p-2 text-cyan-400 hover:bg-gray-800 rounded-full transition-colors">
+            <input ref={fileRef} type="file" accept={videoOnly ? 'video/mp4,video/webm,video/quicktime' : undefined} onChange={handleFile} className="hidden" />
+            {!videoOnly && (
+              <button onClick={() => fileRef.current?.click()} className="p-2 text-cyan-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="صورة">
                 <ImageIcon size={20} />
               </button>
             )}
-            <button onClick={() => fileRef.current?.click()} className="p-2 text-green-400 hover:bg-gray-800 rounded-full transition-colors">
+            <button onClick={() => fileRef.current?.click()} className="p-2 text-green-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="فيديو">
               <Video size={20} />
             </button>
-            {kind === 'post' && (
+            {!videoOnly && (
               <button onClick={() => fileRef.current?.click()} className="p-2 text-amber-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="ملف">
                 <Paperclip size={20} />
               </button>
@@ -2220,7 +2900,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
             </div>
           </div>
           <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handlePost} disabled={posting} className="px-6 py-2 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-medium disabled:opacity-60">
-            {posting ? 'جارٍ النشر...' : kind === 'reel' ? 'نشر الريل' : 'نشر'}
+            {posting ? 'جارٍ النشر...' : kind === 'reel' ? 'نشر الريل' : kind === 'video' ? 'نشر الفيديو' : 'نشر'}
           </motion.button>
         </div>
       </div>
@@ -2286,14 +2966,33 @@ function SearchTab({ users, currentUser, setUsers, onStartChat, onOpenProfile }:
 }
 
 // ============ Profile Tab ============
-function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile }: {
+function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoadPage }: {
   currentUser: User; users: User[]; posts: Post[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
   onOpenProfile: (id: string) => void;
+  onLoadPage: (opts: FetchPostsOptions) => Promise<Post[]>;
 }) {
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const [tab, setTab] = useState<'posts' | 'likes' | 'bookmarks'>('posts');
+
+  // The feed only holds the newest posts, so fetch what this profile needs.
+  useEffect(() => {
+    void (async () => {
+      try {
+        if (tab === 'posts') {
+          await onLoadPage({ userId: currentUser.id, limit: 40 });
+          return;
+        }
+        const table = tab === 'likes' ? 'post_likes' : 'bookmarks';
+        const { data } = await supabase.from(table).select('post_id').eq('user_id', currentUser.id).order('created_at', { ascending: false }).limit(40);
+        const ids = ((data ?? []) as { post_id: string }[]).map(r => r.post_id);
+        if (ids.length > 0) await onLoadPage({ ids, limit: 40 });
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [tab]);
   const myPosts = posts.filter(p => p.userId === currentUser.id).sort((a, b) => b.timestamp - a.timestamp);
   const likedPosts = posts.filter(p => p.likes.includes(currentUser.id)).sort((a, b) => b.timestamp - a.timestamp);
   const bookmarkedPosts = posts.filter(p => p.bookmarks.includes(currentUser.id)).sort((a, b) => b.timestamp - a.timestamp);
@@ -2404,7 +3103,7 @@ function UserListModal({ title, userIds, users, onOpenProfile, onClose }: {
 }
 
 // ============ Another person's profile ============
-function UserProfile({ userId, currentUser, users, posts, setUsers, setPosts, onOpenProfile, onStartChat, onBack }: {
+function UserProfile({ userId, currentUser, users, posts, setUsers, setPosts, onOpenProfile, onStartChat, onBack, onLoadPage }: {
   userId: string;
   currentUser: User;
   users: User[];
@@ -2414,8 +3113,12 @@ function UserProfile({ userId, currentUser, users, posts, setUsers, setPosts, on
   onOpenProfile: (id: string) => void;
   onStartChat: (id: string) => void;
   onBack: () => void;
+  onLoadPage: (opts: FetchPostsOptions) => Promise<Post[]>;
 }) {
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
+  useEffect(() => {
+    void onLoadPage({ userId, limit: 40 }).catch(e => console.error(e));
+  }, [userId]);
   const user = users.find(u => u.id === userId);
   const toggleFollow = makeToggleFollow(currentUser, setUsers);
 
@@ -3186,9 +3889,32 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     return `bg-gradient-to-b ${bg.value}`;
   };
 
+  const vp = useVisualViewport();
+  const [viewer, setViewer] = useState<{ src: string; name?: string } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickUntil = useRef(Date.now() + 2500);
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+  // Always land on the latest message: when the chat opens, and whenever one arrives or is sent
+  // (even if you had scrolled up). Pictures that finish loading keep it pinned for a moment.
+  const keepAtBottom = () => {
+    stickUntil.current = Date.now() + 2500;
+    scrollToBottom();
+    window.requestAnimationFrame(scrollToBottom);
+    window.setTimeout(scrollToBottom, 150);
+    window.setTimeout(scrollToBottom, 600);
+  };
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    keepAtBottom();
+  }, [convId, messages.length]);
+  useEffect(() => {
+    keepAtBottom();
+  }, [vp.height]);
+  useEffect(() => {
+    if (peerTyping) scrollToBottom();
+  }, [peerTyping]);
 
   // Returns the conversation id, creating the conversation on the first message.
   const ensureConversation = async (): Promise<string> => {
@@ -3265,6 +3991,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       setMedia(null);
       setReplyingTo(null);
     }
+    inputRef.current?.focus();
   };
 
   const sendVoice = async (dataUrl: string, duration: number) => {
@@ -3416,7 +4143,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   };
 
   return (
-    <div className={`flex flex-col h-[calc(100vh-9rem)] ${getBgClass()}`} style={!bg || bg.type !== 'gradient' ? getBgStyle() : {}}>
+    <div className="fixed left-0 right-0 z-[70] flex justify-center bg-gray-950" style={{ top: vp.top, height: vp.height }}>
+    <div className={`flex flex-col h-full w-full max-w-2xl md:border-x md:border-gray-800 ${getBgClass()}`} style={!bg || bg.type !== 'gradient' ? getBgStyle() : {}}>
       {/* Chat Header */}
       <div className="flex items-center gap-3 p-4 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 relative z-10">
         <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors">
@@ -3450,7 +4178,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3">
         {messages.length === 0 && (
           <div className="text-center py-12">
             <div className="text-4xl mb-3">👋</div>
@@ -3498,7 +4226,13 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   })()}
                   {msg.media?.type === 'image' && (
                     <div className="mb-2 relative">
-                      <img src={msg.media.url} alt="" className="rounded-xl max-w-full max-h-48 object-cover" />
+                      <img
+                        src={msg.media.url}
+                        alt=""
+                        onLoad={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }}
+                        onClick={e => { e.stopPropagation(); setViewer({ src: msg.media!.url, name: msg.media!.name }); }}
+                        className="rounded-xl max-w-full max-h-48 object-cover cursor-zoom-in"
+                      />
                       <button
                         onClick={e => { e.stopPropagation(); void downloadFile(msg.media!.url, msg.media!.name || 'image.jpg'); }}
                         className="absolute bottom-2 left-2 p-1.5 bg-black/60 hover:bg-black/80 rounded-full text-white"
@@ -3510,7 +4244,14 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   )}
                   {msg.media?.type === 'video' && (
                     <div className="mb-2" onClick={e => e.stopPropagation()}>
-                      <video src={msg.media.url} controls className="rounded-xl max-w-full max-h-48" />
+                      <video
+                        src={`${msg.media.url}#t=0.1`}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        onLoadedMetadata={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }}
+                        className="rounded-xl max-w-full max-h-48 bg-black"
+                      />
                     </div>
                   )}
                   {msg.media?.type === 'voice' && (
@@ -3675,20 +4416,22 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               <Paperclip size={20} />
             </button>
             <div className="relative">
-              <button onClick={() => setEmojiOpen(o => !o)} className="p-2.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-800 rounded-full transition-all" aria-label="إيموجي">
+              <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setEmojiOpen(o => !o)} className="p-2.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-800 rounded-full transition-all" aria-label="إيموجي">
                 <Smile size={20} />
               </button>
               {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
             </div>
             <input
               ref={inputRef}
+              enterKeyHint="send"
+              autoComplete="off"
               value={text} onChange={e => { setText(e.target.value); if (e.target.value) notifyTyping(); }}
               placeholder="اكتب رسالة..."
               className="flex-1 px-4 py-2.5 bg-gray-800 rounded-full text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             />
             {text.trim() || media ? (
-              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={sendMessage} disabled={sending} className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full disabled:opacity-60">
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={sendMessage} disabled={sending} className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full disabled:opacity-60">
                 <Send size={18} />
               </motion.button>
             ) : (
@@ -3704,6 +4447,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           </div>
         </div>
       )}
+      {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}
+    </div>
     </div>
   );
 }
