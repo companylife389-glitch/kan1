@@ -682,13 +682,13 @@ function ImageViewer({ src, name, onClose }: { src: string; name?: string; onClo
 }
 
 // ============ KAN AI ============
-const AI_CHAT_WORDS = ['اقرأ الشات', 'اقرا الشات', 'ملخص', 'لخص', 'اقترح', 'حلل', 'read chat', 'summar', 'suggest', 'analy'];
-const AI_QUICK = [
-  { label: '📖 اقرأ الشات', query: 'اقرأ الشات ولخّص ما دار فيها باختصار' },
-  { label: '📝 ملخص', query: 'اعمل ملخص قصير للمحادثة' },
-  { label: '💡 اقترح رد', query: 'اقترح رد مناسب على آخر رسالة' },
-  { label: '🔍 حلل', query: 'حلل المحادثة وقل لي ما المطلوب مني' },
+type AIMode = 'summary' | 'reply' | 'analyze';
+const AI_QUICK: { label: string; query: string; mode: AIMode }[] = [
+  { label: '📝 لخّص الشات', query: 'لخّص المحادثة باختصار', mode: 'summary' },
+  { label: '💡 اقترح رد', query: 'اقترح رد مناسب على آخر رسالة', mode: 'reply' },
+  { label: '🔍 المطلوب مني؟', query: 'حلل المحادثة وقل لي ما المطلوب مني', mode: 'analyze' },
 ];
+interface AISource { title: string; url: string }
 
 function aiErrorMessage(code: string): string {
   switch (code) {
@@ -711,6 +711,9 @@ function KanAIModal({ messages, me, other, onClose, onUseReply }: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [sources, setSources] = useState<AISource[]>([]);
+  // Earlier questions and answers of this session, so follow-ups ("and tomorrow?") make sense.
+  const historyRef = useRef<{ q: string; a: string }[]>([]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -718,26 +721,29 @@ function KanAIModal({ messages, me, other, onClose, onUseReply }: {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const ask = async (text: string) => {
+  const ask = async (text: string, mode?: AIMode) => {
     const q = text.trim();
     if (!q || loading) return;
     setQuery(q);
     setLoading(true);
     setError('');
     setResponse('');
+    setSources([]);
     setCopied(false);
-    const lower = q.toLowerCase();
-    const readChat = AI_CHAT_WORDS.some(w => lower.includes(w));
-    // The last 30 messages, oldest first: the chat list is already in that order,
-    // so the AI reads the conversation the way it happened.
-    const context = readChat
-      ? messages.slice(-30)
-          .map(m => ({ sender: m.senderId === me.id ? me.displayName : other.displayName, text: describeMessage(m) }))
-          .filter(m => m.text)
-      : undefined;
+    // The last 30 messages, oldest first. The server decides whether the question is about the chat.
+    const context = messages.slice(-30)
+      .map(m => ({ sender: m.senderId === me.id ? me.displayName : other.displayName, text: describeMessage(m) }))
+      .filter(m => m.text);
     try {
       const { data, error: fnError } = await supabase.functions.invoke('kan-ai', {
-        body: { query: q, action: readChat ? 'read_chat' : 'general', context },
+        body: {
+          query: q,
+          mode,
+          context,
+          history: historyRef.current.slice(-4),
+          me: me.displayName,
+          other: other.displayName,
+        },
       });
       if (fnError) {
         let code = '';
@@ -747,7 +753,11 @@ function KanAIModal({ messages, me, other, onClose, onUseReply }: {
         }
         setError(aiErrorMessage(code));
       } else {
-        setResponse(((data as { response?: string } | null)?.response ?? '').trim() || '—');
+        const d = data as { response?: string; sources?: AISource[] } | null;
+        const answer = (d?.response ?? '').trim() || '—';
+        setResponse(answer);
+        setSources(Array.isArray(d?.sources) ? d!.sources!.filter(x => /^https?:\/\//.test(x.url)).slice(0, 4) : []);
+        historyRef.current = [...historyRef.current, { q, a: answer }].slice(-4);
       }
     } catch {
       setError(aiErrorMessage(''));
@@ -775,7 +785,7 @@ function KanAIModal({ messages, me, other, onClose, onUseReply }: {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && void ask(query)}
-              placeholder="اسأل KAN..."
+              placeholder="اسأل KAN أي سؤال أو اطلب منه يقرأ الشات..."
               className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 min-w-0"
               autoFocus
             />
@@ -791,6 +801,16 @@ function KanAIModal({ messages, me, other, onClose, onUseReply }: {
           <div className="px-4 pb-4">
             <div className="bg-gray-800/70 rounded-xl p-4 border border-white/10">
               <p className="text-gray-100 whitespace-pre-wrap leading-relaxed">{response}</p>
+              {sources.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-white/10 flex flex-wrap gap-1.5">
+                  {sources.map(src => (
+                    <a key={src.url} href={src.url} target="_blank" rel="noopener noreferrer"
+                      className="max-w-full truncate px-2.5 py-1 rounded-full bg-gray-700/70 hover:bg-gray-600 text-[11px] text-cyan-300">
+                      🔗 {src.title}
+                    </a>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/10">
                 <button
                   onClick={() => { void navigator.clipboard?.writeText(response); setCopied(true); }}
@@ -813,7 +833,7 @@ function KanAIModal({ messages, me, other, onClose, onUseReply }: {
           {AI_QUICK.map(a => (
             <button
               key={a.label}
-              onClick={() => void ask(a.query)}
+              onClick={() => void ask(a.query, a.mode)}
               disabled={loading}
               className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-white/5 rounded-full text-sm text-gray-200 disabled:opacity-60"
             >
@@ -1314,6 +1334,22 @@ export default function App() {
     setViewedUserId(null);
     setActiveTab(tab);
   };
+  // Home button: already on the feed -> one tap scrolls to the top, a quick second tap refreshes it.
+  const lastHomeTap = useRef(0);
+  const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const onHomeTap = () => {
+    if (activeTab !== 'feed' || viewedUserId) { goTab('feed'); return; }
+    const now = Date.now();
+    if (now - lastHomeTap.current < 500) {
+      lastHomeTap.current = 0;
+      setHomeRefreshing(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      void loadFeedFirst().finally(() => window.setTimeout(() => setHomeRefreshing(false), 400));
+      return;
+    }
+    lastHomeTap.current = now;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const openProfile = (id: string) => {
     if (id === currentUserId) {
       goTab('profile');
@@ -1373,32 +1409,33 @@ export default function App() {
               KAN
             </h1>
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => goTab('messages')}
-              className="relative p-2 hover:bg-gray-800 rounded-full transition-colors"
-            >
-              <MessageSquare size={20} />
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => goTab('search')}
-              className="p-2 hover:bg-gray-800 rounded-full transition-colors"
-              aria-label="بحث"
-            >
-              <Search size={20} />
-            </button>
-            <button
-              onClick={() => goTab('settings')}
-              className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${activeTab === 'settings' && !viewedUserId ? 'text-violet-300' : ''}`}
-              aria-label="الإعدادات"
-            >
-              <Settings size={20} />
-            </button>
+          <div className="flex items-center gap-1.5">
+            {(() => {
+              const btn = (active: boolean) =>
+                `relative w-10 h-10 rounded-full flex items-center justify-center border active:scale-90 transition-all ${
+                  active
+                    ? 'bg-gradient-to-br from-violet-600 to-cyan-500 border-transparent text-white shadow-lg shadow-violet-500/30'
+                    : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white hover:border-violet-400/40'
+                }`;
+              return (
+                <>
+                  <button onClick={() => goTab('messages')} className={btn(activeTab === 'messages' && !viewedUserId)} aria-label="الرسائل">
+                    <MessageSquare size={19} />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-500 ring-2 ring-gray-950 rounded-full text-[11px] flex items-center justify-center font-bold text-white">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  <button onClick={() => goTab('search')} className={btn(activeTab === 'search' && !viewedUserId)} aria-label="بحث">
+                    <Search size={19} />
+                  </button>
+                  <button onClick={() => goTab('settings')} className={btn(activeTab === 'settings' && !viewedUserId)} aria-label="الإعدادات">
+                    <Settings size={19} />
+                  </button>
+                </>
+              );
+            })()}
           </div>
         </div>
       </header>
@@ -1510,10 +1547,10 @@ export default function App() {
               return (
                 <button
                   key={tab}
-                  onClick={() => goTab(tab)}
+                  onClick={() => (tab === 'feed' ? onHomeTap() : goTab(tab))}
                   className={`relative flex flex-col items-center gap-0.5 px-1.5 min-[400px]:px-3 sm:px-4 py-2 transition-colors ${active ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 >
-                  <Icon size={22} className={active ? 'text-cyan-300' : ''} />
+                  <Icon size={22} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'animate-spin' : ''}`} />
                   <span className="text-[9px] min-[400px]:text-[10px]">{label}</span>
                   <span className={`h-0.5 w-5 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
                 </button>
@@ -1909,11 +1946,27 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
   const [commentText, setCommentText] = useState('');
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [shareDone, setShareDone] = useState(false);
   const author = users.find(u => u.id === post.userId);
   const isLiked = post.likes.includes(currentUser.id);
   const isBookmarked = post.bookmarks.includes(currentUser.id);
 
   if (!author) return null;
+
+  const sharePost = async () => {
+    const url = `${window.location.origin}${import.meta.env.BASE_URL as string}`;
+    const snippet = post.text.trim().slice(0, 140);
+    const text = `${author.displayName} على KAN${snippet ? `: ${snippet}` : ''}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'KAN', text, url });
+        return;
+      }
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      setShareDone(true);
+      window.setTimeout(() => setShareDone(false), 1800);
+    } catch { /* the person closed the share sheet */ }
+  };
 
   const mutatePost = (fn: (p: Post) => Post) =>
     setPosts(prev => prev.map(p => (p.id === post.id ? fn(p) : p)));
@@ -2134,8 +2187,9 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
         <button onClick={toggleBookmark} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${isBookmarked ? 'text-yellow-400' : 'text-gray-500 hover:text-yellow-400'}`}>
           <Bookmark size={18} className={isBookmarked ? 'fill-yellow-400' : ''} />
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-gray-500 hover:text-cyan-400 transition-all mr-auto">
-          <Share2 size={18} />
+        <button onClick={() => void sharePost()} aria-label="مشاركة" className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all mr-auto ${shareDone ? 'text-cyan-400' : 'text-gray-500 hover:text-cyan-400'}`}>
+          {shareDone ? <Check size={18} /> : <Share2 size={18} />}
+          {shareDone && <span className="text-xs">تم النسخ</span>}
         </button>
       </div>
 
@@ -2462,7 +2516,7 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
             onChange={e => setText(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && add()}
             placeholder="اكتب تعليقاً..."
-            className="flex-1 px-4 py-2.5 bg-gray-800 rounded-full text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            className="flex-1 min-w-0 w-full px-3 min-[400px]:px-4 py-2.5 bg-gray-800 rounded-full text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
           <button onClick={add} className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white" aria-label="إرسال"><Send size={18} /></button>
         </div>
@@ -4568,14 +4622,14 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
       {/* Input */}
       {!recording && (
-        <div className="p-3 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
+        <div className="p-2 min-[400px]:p-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
           <input ref={fileRef} type="file" onChange={handleFile} className="hidden" />
-          <div className="flex items-center gap-2">
-            <button onClick={() => fileRef.current?.click()} className="p-2.5 text-gray-400 hover:text-cyan-400 hover:bg-gray-800 rounded-full transition-all">
+          <div className="flex items-center gap-0.5 min-[400px]:gap-2">
+            <button onClick={() => fileRef.current?.click()} className="shrink-0 p-2 min-[400px]:p-2.5 text-gray-400 hover:text-cyan-400 hover:bg-gray-800 rounded-full transition-all" aria-label="إرفاق ملف">
               <Paperclip size={20} />
             </button>
-            <div className="relative">
-              <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setEmojiOpen(o => !o)} className="p-2.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-800 rounded-full transition-all" aria-label="إيموجي">
+            <div className="relative shrink-0">
+              <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setEmojiOpen(o => !o)} className="p-2 min-[400px]:p-2.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-800 rounded-full transition-all" aria-label="إيموجي">
                 <Smile size={20} />
               </button>
               {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
@@ -4584,7 +4638,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               onPointerDown={e => e.preventDefault()}
               onMouseDown={e => e.preventDefault()}
               onClick={() => setAiOpen(true)}
-              className="p-2.5 text-violet-300 hover:text-white hover:bg-gray-800 rounded-full transition-all"
+              className="shrink-0 p-2 min-[400px]:p-2.5 text-violet-300 hover:text-white hover:bg-gray-800 rounded-full transition-all"
               aria-label="KAN AI"
               title="اسأل KAN AI"
             >
@@ -4600,7 +4654,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             />
             {text.trim() || media ? (
-              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={sendMessage} disabled={sending} className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full disabled:opacity-60">
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={sendMessage} disabled={sending} aria-label="إرسال" className="shrink-0 p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full disabled:opacity-60">
                 <Send size={18} />
               </motion.button>
             ) : (
@@ -4608,7 +4662,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={() => setRecording(true)}
-                className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full"
+                aria-label="تسجيل صوتي"
+                className="shrink-0 p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full"
               >
                 <Mic size={18} />
               </motion.button>
