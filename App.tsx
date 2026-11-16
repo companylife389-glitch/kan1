@@ -9,7 +9,7 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -642,7 +642,7 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
       playsInline
       autoPlay={autoPlay}
       preload="metadata"
-      className={`bg-black rounded-xl ${className}`}
+      className={`bg-black rounded-xl object-contain ${className}`}
       onClick={e => e.stopPropagation()}
       onError={() => setFailed(true)}
     />
@@ -675,6 +675,152 @@ function ImageViewer({ src, name, onClose }: { src: string; name?: string; onClo
           onClick={e => { e.stopPropagation(); setZoomed(z => !z); }}
           className={zoomed ? 'max-w-none cursor-zoom-out m-auto' : 'max-w-full max-h-full object-contain cursor-zoom-in'}
         />
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ============ KAN AI ============
+const AI_CHAT_WORDS = ['اقرأ الشات', 'اقرا الشات', 'ملخص', 'لخص', 'اقترح', 'حلل', 'read chat', 'summar', 'suggest', 'analy'];
+const AI_QUICK = [
+  { label: '📖 اقرأ الشات', query: 'اقرأ الشات ولخّص ما دار فيها باختصار' },
+  { label: '📝 ملخص', query: 'اعمل ملخص قصير للمحادثة' },
+  { label: '💡 اقترح رد', query: 'اقترح رد مناسب على آخر رسالة' },
+  { label: '🔍 حلل', query: 'حلل المحادثة وقل لي ما المطلوب مني' },
+];
+
+function aiErrorMessage(code: string): string {
+  switch (code) {
+    case 'rate_limited': return 'استنى دقيقة وحاول تاني.';
+    case 'daily_limit': return 'وصلت للحد اليومي لـ KAN AI. جرّب بكرة.';
+    case 'unauthorized': return 'سجّل الدخول من جديد وحاول تاني.';
+    default: return 'KAN AI غير متاح الآن، حاول بعد شوية.';
+  }
+}
+
+function KanAIModal({ messages, me, other, onClose, onUseReply }: {
+  messages: Message[];
+  me: User;
+  other: User;
+  onClose: () => void;
+  onUseReply: (text: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [response, setResponse] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const ask = async (text: string) => {
+    const q = text.trim();
+    if (!q || loading) return;
+    setQuery(q);
+    setLoading(true);
+    setError('');
+    setResponse('');
+    setCopied(false);
+    const lower = q.toLowerCase();
+    const readChat = AI_CHAT_WORDS.some(w => lower.includes(w));
+    // The last 30 messages, oldest first: the chat list is already in that order,
+    // so the AI reads the conversation the way it happened.
+    const context = readChat
+      ? messages.slice(-30)
+          .map(m => ({ sender: m.senderId === me.id ? me.displayName : other.displayName, text: describeMessage(m) }))
+          .filter(m => m.text)
+      : undefined;
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('kan-ai', {
+        body: { query: q, action: readChat ? 'read_chat' : 'general', context },
+      });
+      if (fnError) {
+        let code = '';
+        const res = (fnError as { context?: Response }).context;
+        if (res && typeof res.json === 'function') {
+          try { code = ((await res.json()) as { error?: string }).error ?? ''; } catch { /* ignore */ }
+        }
+        setError(aiErrorMessage(code));
+      } else {
+        setResponse(((data as { response?: string } | null)?.response ?? '').trim() || '—');
+      }
+    } catch {
+      setError(aiErrorMessage(''));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return createPortal(
+    <div dir="rtl" className="fixed inset-0 z-[120] flex items-start justify-center pt-10 sm:pt-24 px-3">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl max-h-[85dvh] overflow-y-auto bg-gray-900 border border-white/10 rounded-2xl shadow-2xl shadow-violet-500/10">
+        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-t-2xl">
+          <div className="flex items-center gap-3">
+            <img src={LOGO_URL} alt="" className="w-10 h-10 rounded-full bg-white/10" />
+            <h2 className="text-white font-bold">KAN AI</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full text-white" aria-label="إغلاق"><X size={20} /></button>
+        </div>
+
+        <div className="p-4">
+          <div className="flex items-center gap-3 bg-gray-800 rounded-full px-5 py-3 border border-gray-700 focus-within:border-violet-500">
+            <Search size={18} className="text-gray-500 shrink-0" />
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && void ask(query)}
+              placeholder="اسأل KAN..."
+              className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 min-w-0"
+              autoFocus
+            />
+            {loading
+              ? <div className="w-5 h-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin shrink-0" />
+              : <button onClick={() => void ask(query)} className="p-1.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white shrink-0" aria-label="إرسال"><Send size={14} /></button>}
+          </div>
+        </div>
+
+        {error && <div className="px-4 pb-4"><div className="rounded-xl p-3 bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</div></div>}
+
+        {response && (
+          <div className="px-4 pb-4">
+            <div className="bg-gray-800/70 rounded-xl p-4 border border-white/10">
+              <p className="text-gray-100 whitespace-pre-wrap leading-relaxed">{response}</p>
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/10">
+                <button
+                  onClick={() => { void navigator.clipboard?.writeText(response); setCopied(true); }}
+                  className="px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-xs text-gray-100 flex items-center gap-1.5"
+                >
+                  <Copy size={13} /> {copied ? 'تم النسخ' : 'نسخ'}
+                </button>
+                <button
+                  onClick={() => onUseReply(response)}
+                  className="px-3 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-xs text-white flex items-center gap-1.5"
+                >
+                  <Send size={13} /> استخدمه كرسالة
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="px-4 pb-4 flex gap-2 flex-wrap">
+          {AI_QUICK.map(a => (
+            <button
+              key={a.label}
+              onClick={() => void ask(a.query)}
+              disabled={loading}
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-white/5 rounded-full text-sm text-gray-200 disabled:opacity-60"
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>,
     document.body
@@ -778,6 +924,13 @@ function useVisualViewport() {
     };
   }, []);
   return vp;
+}
+
+// Any video file counts as a video (mp4, mov, mkv, avi, 3gp ...); a device that cannot play it gets a download button.
+function detectMediaKind(file: File): 'image' | 'video' | 'file' {
+  if (/^image\/(jpeg|png|webp|gif)$/.test(file.type)) return 'image';
+  if (file.type.startsWith('video/') || /\.(mp4|m4v|mov|webm|mkv|avi|3gp|3g2|wmv|flv|mpg|mpeg|ogv)$/i.test(file.name)) return 'video';
+  return 'file';
 }
 
 // ============ Chat helpers ============
@@ -1213,7 +1366,7 @@ export default function App() {
     <div dir="rtl" className="min-h-screen bg-gray-950 text-white font-sans">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/70 backdrop-blur-xl border-b border-white/5">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-2xl xl:max-w-3xl mx-auto px-3 min-[400px]:px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src={LOGO_URL} alt="" className="w-8 h-8 rounded-lg" />
             <h1 className="text-xl font-bold kan-gradient-text">
@@ -1260,7 +1413,7 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <main className={`pt-16 pb-20 mx-auto min-h-screen ${activeTab === 'videos' && !viewedUserId ? 'max-w-5xl' : 'max-w-2xl'}`}>
+      <main className={`pt-16 pb-20 mx-auto min-h-screen ${activeTab === 'videos' && !viewedUserId ? 'max-w-5xl xl:max-w-7xl' : 'max-w-2xl xl:max-w-3xl'}`}>
         <InstallBanner />
         <AnimatePresence mode="wait">
           {viewedUserId && (
@@ -1343,7 +1496,7 @@ export default function App() {
 
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-xl border-t border-white/5">
-        <div className="max-w-2xl mx-auto grid grid-cols-[1fr_auto_1fr] items-end px-1 pb-[env(safe-area-inset-bottom)]">
+        <div className="max-w-2xl xl:max-w-3xl mx-auto grid grid-cols-[1fr_auto_1fr] items-end px-1 pb-[env(safe-area-inset-bottom)]">
           {(() => {
             const tabs = {
               feed: { icon: Home, label: 'الرئيسية' },
@@ -1358,10 +1511,10 @@ export default function App() {
                 <button
                   key={tab}
                   onClick={() => goTab(tab)}
-                  className={`relative flex flex-col items-center gap-0.5 px-3 sm:px-4 py-2 transition-colors ${active ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                  className={`relative flex flex-col items-center gap-0.5 px-1.5 min-[400px]:px-3 sm:px-4 py-2 transition-colors ${active ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 >
                   <Icon size={22} className={active ? 'text-cyan-300' : ''} />
-                  <span className="text-[10px]">{label}</span>
+                  <span className="text-[9px] min-[400px]:text-[10px]">{label}</span>
                   <span className={`h-0.5 w-5 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
                 </button>
               );
@@ -1374,7 +1527,7 @@ export default function App() {
                   {tabButton('reels')}
                 </div>
                 <button onClick={() => goTab('create')} className="relative flex flex-col items-center -mt-6 px-3 pb-1.5" aria-label="نشر">
-                  <span className={`kan-fab w-14 h-14 rounded-full flex items-center justify-center ring-4 ring-gray-950 ${createActive ? 'scale-105' : ''}`}>
+                  <span className={`kan-fab w-12 h-12 min-[400px]:w-14 min-[400px]:h-14 rounded-full flex items-center justify-center ring-4 ring-gray-950 ${createActive ? 'scale-105' : ''}`}>
                     <Plus size={28} strokeWidth={2.6} className="text-white" />
                   </span>
                   <span className="mt-1 text-[10px] font-semibold kan-gradient-text">نشر</span>
@@ -1942,7 +2095,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
               <VideoPlayer
                 src={post.media.url}
                 poster={post.coverUrl}
-                className={post.isReel ? 'max-h-[75vh] mx-auto w-auto max-w-full' : 'w-full max-h-[28rem]'}
+                className={post.isReel ? 'max-h-[75vh] mx-auto w-auto max-w-full' : 'w-full max-h-[75vh]'}
               />
             ) : (
               <div className="flex items-center gap-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl">
@@ -2112,6 +2265,7 @@ function ReelItem({ post, author, currentUser, muted, onToggleMute, setPosts, on
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [landscape, setLandscape] = useState(false);
   const [coinId, setCoinId] = useState(0);
   const coinTimer = useRef<number | undefined>(undefined);
   const lastTap = useRef(0);
@@ -2164,7 +2318,8 @@ function ReelItem({ post, author, currentUser, muted, onToggleMute, setPosts, on
       <video
         ref={videoRef}
         src={post.media?.url}
-        className="absolute inset-0 w-full h-full object-cover"
+        className={`absolute inset-0 w-full h-full ${landscape ? 'object-contain' : 'object-cover'}`}
+        onLoadedMetadata={e => setLandscape(e.currentTarget.videoWidth > e.currentTarget.videoHeight)}
         loop
         muted={muted}
         playsInline
@@ -2645,7 +2800,7 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
+      <div className="grid grid-cols-1 min-[560px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-6">
         {shown.map(v => {
           const author = users.find(u => u.id === v.userId);
           return author ? <VideoCard key={v.id} post={v} author={author} onOpen={() => setWatchId(v.id)} /> : null;
@@ -2693,12 +2848,9 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       setError(`حجم الملف يجب أن لا يتجاوز ${MAX_FILE_MB} ميجابايت`);
       return;
     }
-    const fileKind: 'image' | 'video' | 'file' =
-      /^image\/(jpeg|png|webp|gif)$/.test(file.type) ? 'image'
-      : /^video\/(mp4|webm|quicktime)$/.test(file.type) ? 'video'
-      : 'file';
+    const fileKind = detectMediaKind(file);
     if (videoOnly && fileKind !== 'video') {
-      setError('اختر فيديو (MP4 أو WebM أو MOV)');
+      setError('اختر ملف فيديو');
       return;
     }
     if (media && media.url) URL.revokeObjectURL(media.url);
@@ -2878,7 +3030,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
         <div className="flex items-center justify-between border-t border-gray-800 pt-3">
           <div className="flex items-center gap-2">
-            <input ref={fileRef} type="file" accept={videoOnly ? 'video/mp4,video/webm,video/quicktime' : undefined} onChange={handleFile} className="hidden" />
+            <input ref={fileRef} type="file" accept={videoOnly ? 'video/*' : undefined} onChange={handleFile} className="hidden" />
             {!videoOnly && (
               <button onClick={() => fileRef.current?.click()} className="p-2 text-cyan-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="صورة">
                 <ImageIcon size={20} />
@@ -3827,6 +3979,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [reactingTo, setReactingTo] = useState<string | null>(null);
   const [coinMsgId, setCoinMsgId] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const lastTap = useRef<{ id: string; t: number }>({ id: '', t: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
   const [recording, setRecording] = useState(false);
@@ -4007,10 +4160,19 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   };
 
   const saveBackground = async (convId: string, type: ChatBackground['type'], value: string) => {
-    const { error: bgErr } = await supabase
+    const { data: updated, error: updErr } = await supabase
       .from('chat_backgrounds')
-      .upsert({ conversation_id: convId, user_id: currentUser.id, type, value }, { onConflict: 'conversation_id,user_id' });
-    if (bgErr) throw bgErr;
+      .update({ type, value })
+      .eq('conversation_id', convId)
+      .eq('user_id', currentUser.id)
+      .select('conversation_id');
+    if (updErr) throw updErr;
+    if (!updated || updated.length === 0) {
+      const { error: insErr } = await supabase
+        .from('chat_backgrounds')
+        .insert({ conversation_id: convId, user_id: currentUser.id, type, value });
+      if (insErr) throw insErr;
+    }
   };
 
   const changeBackground = async (newBg: ChatBackground) => {
@@ -4049,10 +4211,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     e.target.value = '';
     if (!file) return;
     setError('');
-    const kind: 'image' | 'video' | 'file' =
-      /^image\/(jpeg|png|webp|gif)$/.test(file.type) ? 'image'
-      : /^video\/(mp4|webm|quicktime)$/.test(file.type) ? 'video'
-      : 'file';
+    const kind = detectMediaKind(file);
     const limitMb = MAX_FILE_MB;
     if (file.size > limitMb * 1024 * 1024) {
       setError(`حجم الملف يجب أن لا يتجاوز ${limitMb} ميجابايت`);
@@ -4144,7 +4303,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
   return (
     <div className="fixed left-0 right-0 z-[70] flex justify-center bg-gray-950" style={{ top: vp.top, height: vp.height }}>
-    <div className={`flex flex-col h-full w-full max-w-2xl md:border-x md:border-gray-800 ${getBgClass()}`} style={!bg || bg.type !== 'gradient' ? getBgStyle() : {}}>
+    <div className={`flex flex-col h-full w-full max-w-2xl xl:max-w-3xl md:border-x md:border-gray-800 ${getBgClass()}`} style={!bg || bg.type !== 'gradient' ? getBgStyle() : {}}>
       {/* Chat Header */}
       <div className="flex items-center gap-3 p-4 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 relative z-10">
         <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors">
@@ -4200,7 +4359,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                 <Avatar src={chatUser.avatar} name={chatUser.displayName} size="sm" />
               ) : !isMine ? <div className="w-7" /> : null}
 
-              <div className={`max-w-[75%] ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
+              <div className={`max-w-[88%] sm:max-w-[75%] ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
                 <div
                   onClick={() => handleBubbleTap(msg)}
                   className={`relative select-none touch-manipulation px-4 py-2.5 rounded-2xl cursor-pointer transition-shadow ${highlightId === msg.id ? 'ring-2 ring-cyan-400' : ''} ${
@@ -4421,6 +4580,16 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               </button>
               {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
             </div>
+            <button
+              onPointerDown={e => e.preventDefault()}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => setAiOpen(true)}
+              className="p-2.5 text-violet-300 hover:text-white hover:bg-gray-800 rounded-full transition-all"
+              aria-label="KAN AI"
+              title="اسأل KAN AI"
+            >
+              <Sparkles size={20} />
+            </button>
             <input
               ref={inputRef}
               enterKeyHint="send"
@@ -4448,6 +4617,15 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
         </div>
       )}
       {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}
+      {aiOpen && (
+        <KanAIModal
+          messages={messages}
+          me={currentUser}
+          other={chatUser}
+          onClose={() => setAiOpen(false)}
+          onUseReply={t => { setText(t); setAiOpen(false); window.setTimeout(() => inputRef.current?.focus(), 50); }}
+        />
+      )}
     </div>
     </div>
   );
