@@ -71,9 +71,28 @@ interface Message {
   text: string;
   timestamp: number;
   read: boolean;
+  delivered?: boolean;
   replyToId?: string;
   reactions?: { userId: string; emoji: string }[];
   media?: { type: 'image' | 'video' | 'voice' | 'file'; url: string; duration?: number; name?: string; size?: number; path?: string };
+}
+
+
+interface GroupMessage {
+  id: string;
+  senderId: string;
+  text: string;
+  timestamp: number;
+  isSystem: boolean;
+  readBy: string[];
+}
+interface Group {
+  id: string;
+  name: string;
+  createdBy: string;
+  lastActivity: number;
+  members: { userId: string; role: 'admin' | 'member' }[];
+  messages: GroupMessage[];
 }
 
 interface Conversation {
@@ -380,6 +399,7 @@ interface MessageRow {
   reply_to_id: string | null;
   message_reactions?: { user_id: string; emoji: string }[];
   read_at: string | null;
+  delivered_at?: string | null;
   created_at: string;
 }
 
@@ -407,6 +427,7 @@ function rowToMessage(r: MessageRow, urls: Map<string, string>): Message {
     text: r.text,
     timestamp: new Date(r.created_at).getTime(),
     read: r.read_at !== null,
+    delivered: r.read_at !== null || (r.delivered_at ?? null) !== null,
     replyToId: r.reply_to_id ?? undefined,
     reactions: (r.message_reactions ?? []).map(x => ({ userId: x.user_id, emoji: x.emoji })),
     media: r.media_type && url
@@ -415,12 +436,19 @@ function rowToMessage(r: MessageRow, urls: Map<string, string>): Message {
   };
 }
 
+// The recipient's app has the message: stamp it so the sender sees the second tick.
+function markDelivered(me: string) {
+  void supabase.from('messages').update({ delivered_at: new Date().toISOString() }).neq('sender_id', me).is('delivered_at', null).then(({ error }) => {
+    if (error) console.error(error);
+  });
+}
+
 async function loadConversations(me: string): Promise<Conversation[]> {
   const [convs, msgs, bgs] = await Promise.all([
     supabase.from('conversations').select('id, user_a, user_b, last_activity'),
     supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, text, media_path, media_type, media_duration, media_name, media_size, reply_to_id, read_at, created_at, message_reactions(user_id, emoji)')
+      .select('id, conversation_id, sender_id, text, media_path, media_type, media_duration, media_name, media_size, reply_to_id, read_at, delivered_at, created_at, message_reactions(user_id, emoji)')
       .order('created_at', { ascending: false })
       .limit(500),
     supabase.from('chat_backgrounds').select('conversation_id, type, value').eq('user_id', me),
@@ -446,6 +474,7 @@ async function loadConversations(me: string): Promise<Conversation[]> {
   for (const r of rows) {
     byConversation.set(r.conversation_id, [...(byConversation.get(r.conversation_id) ?? []), rowToMessage(r, urls)]);
   }
+  markDelivered(me);
   return ((convs.data ?? []) as { id: string; user_a: string; user_b: string; last_activity: string }[]).map(c => ({
     id: c.id,
     participants: [c.user_a, c.user_b],
@@ -667,6 +696,18 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, scrubbing, speedMenu]);
   useEffect(() => () => { window.clearTimeout(tapTimer.current); window.clearTimeout(flashTimer.current); }, []);
+  // Scrolling the video out of view stops it (feed, profile, lists).
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting || entry.intersectionRatio < 0.35) {
+        if (document.fullscreenElement !== wrap) videoRef.current?.pause();
+      }
+    }, { threshold: [0, 0.35, 1] });
+    observer.observe(wrap);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const onFs = () => setFs(document.fullscreenElement === wrapRef.current);
     document.addEventListener('fullscreenchange', onFs);
@@ -776,9 +817,11 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
 
       {/* Skip ripple */}
       {flash && (
-        <div key={flash.n} className={`absolute top-0 bottom-0 z-20 w-1/3 flex items-center justify-center pointer-events-none ${flash.side === 'back' ? 'left-0 rounded-r-[100%]' : 'right-0 rounded-l-[100%]'} bg-white/15 animate-pulse`}>
+        <div key={flash.n} className={`absolute top-0 bottom-0 z-20 w-1/3 flex items-center justify-center pointer-events-none animate-pulse ${flash.side === 'back' ? 'left-0 rounded-r-[100%] bg-gradient-to-l from-violet-600/45 to-transparent' : 'right-0 rounded-l-[100%] bg-gradient-to-r from-cyan-500/45 to-transparent'}`}>
           <div className="flex flex-col items-center text-white text-xs font-semibold">
-            <span className="text-2xl leading-none">{flash.side === 'back' ? '⏪' : '⏩'}</span>
+            <span className="w-11 h-11 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-violet-500/40 mb-1">
+              <span className="text-lg leading-none">{flash.side === 'back' ? '⏪' : '⏩'}</span>
+            </span>
             10 ث
           </div>
         </div>
@@ -1236,6 +1279,404 @@ function ShareSheet({ post, author, users, currentUser, onClose }: {
   );
 }
 
+
+async function loadGroups(): Promise<Group[]> {
+  const [g, mem, msgs] = await Promise.all([
+    supabase.from('chat_groups').select('id, name, created_by, last_activity'),
+    supabase.from('chat_group_members').select('group_id, user_id, role'),
+    supabase
+      .from('group_messages')
+      .select('id, group_id, sender_id, text, is_system, created_at, group_message_reads(user_id)')
+      .order('created_at', { ascending: false })
+      .limit(600),
+  ]);
+  if (g.error) throw g.error;
+  if (mem.error) throw mem.error;
+  if (msgs.error) throw msgs.error;
+  type MsgRow = { id: string; group_id: string; sender_id: string; text: string; is_system: boolean; created_at: string; group_message_reads?: { user_id: string }[] };
+  const byGroup = new Map<string, GroupMessage[]>();
+  for (const r of ((msgs.data ?? []) as unknown as MsgRow[]).slice().reverse()) {
+    const list = byGroup.get(r.group_id) ?? [];
+    list.push({
+      id: r.id,
+      senderId: r.sender_id,
+      text: r.text,
+      timestamp: new Date(r.created_at).getTime(),
+      isSystem: r.is_system,
+      readBy: (r.group_message_reads ?? []).map(x => x.user_id),
+    });
+    byGroup.set(r.group_id, list);
+  }
+  const members = (mem.data ?? []) as { group_id: string; user_id: string; role: 'admin' | 'member' }[];
+  return ((g.data ?? []) as { id: string; name: string; created_by: string; last_activity: string }[]).map(row => ({
+    id: row.id,
+    name: row.name,
+    createdBy: row.created_by,
+    lastActivity: new Date(row.last_activity).getTime(),
+    members: members.filter(m => m.group_id === row.id).map(m => ({ userId: m.user_id, role: m.role })),
+    messages: byGroup.get(row.id) ?? [],
+  }));
+}
+
+const groupUnread = (g: Group, me: string) => g.messages.filter(m => !m.isSystem && m.senderId !== me && !m.readBy.includes(me)).length;
+
+function GroupAvatar({ name, size = 'lg' }: { name: string; size?: 'sm' | 'md' | 'lg' | 'xl' }) {
+  const sizes = { sm: 'w-7 h-7 text-xs', md: 'w-10 h-10 text-base', lg: 'w-12 h-12 text-lg', xl: 'w-20 h-20 text-3xl' };
+  return (
+    <div className={`${sizes[size]} rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center flex-shrink-0 font-bold text-white shadow-md shadow-violet-500/20`}>
+      {name.trim().charAt(0).toUpperCase() || <Users size={18} />}
+    </div>
+  );
+}
+
+// People picker used by "new group" and "add members".
+function MemberPicker({ users, exclude, selected, onToggle, me }: {
+  users: User[]; exclude: string[]; selected: string[]; onToggle: (id: string) => void; me: User;
+}) {
+  const [q, setQ] = useState('');
+  const list = users
+    .filter(u => u.id !== me.id && !exclude.includes(u.id) && (u.displayName + ' ' + u.username).toLowerCase().includes(q.trim().toLowerCase()))
+    .sort((a, b) => Number(me.following.includes(b.id)) - Number(me.following.includes(a.id)))
+    .slice(0, 60);
+  return (
+    <div>
+      <div className="relative mb-2">
+        <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="ابحث عن شخص..." className="w-full pr-9 pl-3 py-2.5 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+      </div>
+      <div className="max-h-64 overflow-y-auto overscroll-contain -mx-1 px-1">
+        {list.length === 0 && <p className="text-center text-sm text-gray-500 py-6">لا يوجد أحد</p>}
+        {list.map(u => {
+          const on = selected.includes(u.id);
+          return (
+            <button key={u.id} onClick={() => onToggle(u.id)} className="w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 text-right">
+              <Avatar src={u.avatar} name={u.displayName} size="md" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-white truncate">{u.displayName}</div>
+                <div className="text-xs text-gray-500 truncate">@{u.username}</div>
+              </div>
+              <span className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${on ? 'bg-gradient-to-br from-violet-600 to-cyan-500 border-transparent' : 'border-gray-600'}`}>
+                {on && <Check size={14} className="text-white" />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SheetShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return createPortal(
+    <div dir="rtl" className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center" onClick={onClose}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <motion.div
+        initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', damping: 26, stiffness: 300 }}
+        className="relative w-full sm:max-w-md max-h-[88dvh] flex flex-col bg-gray-900 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl shadow-violet-900/30 overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="h-1 w-10 rounded-full bg-white/20 mx-auto mt-2.5 sm:hidden" />
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+          <h3 className="font-bold kan-gradient-text">{title}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 text-gray-400" aria-label="إغلاق"><X size={18} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">{children}</div>
+      </motion.div>
+    </div>,
+    document.body,
+  );
+}
+
+function CreateGroupSheet({ users, me, onClose, onCreated }: {
+  users: User[]; me: User; onClose: () => void; onCreated: (id: string) => void;
+}) {
+  const [name, setName] = useState('');
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const create = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    setError('');
+    const { data, error: err } = await supabase.rpc('create_chat_group', { p_name: name.trim(), p_members: picked });
+    setBusy(false);
+    if (err || !data) { console.error(err); setError('تعذّر إنشاء المجموعة، حاول مرة أخرى'); return; }
+    onCreated(data as string);
+  };
+  return (
+    <SheetShell title="مجموعة جديدة" onClose={onClose}>
+      <div className="flex items-center gap-3 mb-3">
+        <GroupAvatar name={name || '؟'} size="lg" />
+        <input value={name} maxLength={60} onChange={e => setName(e.target.value)} placeholder="اسم المجموعة" className="flex-1 min-w-0 px-4 py-2.5 bg-gray-800 rounded-xl text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+      </div>
+      <p className="text-xs text-gray-400 mb-2">اختر الأعضاء ({picked.length})</p>
+      <MemberPicker users={users} exclude={[]} selected={picked} me={me} onToggle={id => setPicked(p => (p.includes(id) ? p.filter(x => x !== id) : p.length >= 49 ? p : [...p, id]))} />
+      {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+      <button onClick={() => void create()} disabled={!name.trim() || busy} className="w-full mt-4 py-3 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform">
+        {busy ? 'جارٍ الإنشاء...' : 'إنشاء المجموعة'}
+      </button>
+    </SheetShell>
+  );
+}
+
+function GroupInfoSheet({ group, users, me, reload, onClose, onLeft }: {
+  group: Group; users: User[]; me: User; reload: () => Promise<void>; onClose: () => void; onLeft: () => void;
+}) {
+  const iAmAdmin = group.members.some(m => m.userId === me.id && m.role === 'admin');
+  const admins = group.members.filter(m => m.role === 'admin').length;
+  const [adding, setAdding] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(group.name);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const run = async (fn: () => PromiseLike<{ error: unknown }>, fail = 'تعذّر تنفيذ العملية') => {
+    setBusy(true);
+    setNote('');
+    const { error } = await fn();
+    if (error) { console.error(error); setNote(fail); }
+    await reload();
+    setBusy(false);
+    return !error;
+  };
+  const addPicked = async () => {
+    if (picked.length === 0) return;
+    const ok = await run(() => supabase.from('chat_group_members').insert(picked.map(id => ({ group_id: group.id, user_id: id }))), 'تعذّرت الإضافة');
+    if (ok) { setPicked([]); setAdding(false); }
+  };
+  const saveName = async () => {
+    if (!name.trim() || name.trim() === group.name) { setRenaming(false); return; }
+    const ok = await run(() => supabase.from('chat_groups').update({ name: name.trim().slice(0, 60) }).eq('id', group.id), 'تعذّر تغيير الاسم');
+    if (ok) setRenaming(false);
+  };
+  const leave = async () => {
+    if (iAmAdmin && admins === 1 && group.members.length > 1) { setNote('عيّن مشرفاً آخر قبل المغادرة'); return; }
+    const ok = await run(() => supabase.from('chat_group_members').delete().eq('group_id', group.id).eq('user_id', me.id), 'تعذّرت المغادرة');
+    if (ok) onLeft();
+  };
+
+  return (
+    <SheetShell title="معلومات المجموعة" onClose={onClose}>
+      <div className="flex flex-col items-center gap-2 mb-4">
+        <GroupAvatar name={group.name} size="xl" />
+        {renaming ? (
+          <div className="flex items-center gap-2 w-full">
+            <input value={name} maxLength={60} onChange={e => setName(e.target.value)} className="flex-1 min-w-0 px-3 py-2 bg-gray-800 rounded-xl text-[16px] text-white focus:outline-none focus:ring-1 focus:ring-violet-500" />
+            <button onClick={() => void saveName()} disabled={busy} className="px-4 py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm">حفظ</button>
+          </div>
+        ) : (
+          <button onClick={() => iAmAdmin && setRenaming(true)} className="text-lg font-bold text-white">{group.name}</button>
+        )}
+        <p className="text-xs text-gray-400">{group.members.length} عضو</p>
+      </div>
+
+      {iAmAdmin && !adding && (
+        <button onClick={() => setAdding(true)} className="w-full mb-3 py-2.5 rounded-full bg-gradient-to-r from-violet-600/25 to-cyan-500/20 border border-violet-400/30 text-white text-sm font-medium active:scale-[0.98]">
+          + إضافة أعضاء
+        </button>
+      )}
+      {adding && (
+        <div className="mb-4 p-3 rounded-2xl bg-white/5 border border-white/10">
+          <MemberPicker users={users} exclude={group.members.map(m => m.userId)} selected={picked} me={me} onToggle={id => setPicked(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id]))} />
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => void addPicked()} disabled={busy || picked.length === 0} className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold disabled:opacity-50">إضافة ({picked.length})</button>
+            <button onClick={() => { setAdding(false); setPicked([]); }} className="px-4 py-2.5 rounded-full bg-gray-800 text-gray-300 text-sm">إلغاء</button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1">
+        {group.members.map(m => {
+          const u = users.find(x => x.id === m.userId);
+          if (!u) return null;
+          return (
+            <div key={m.userId} className="flex items-center gap-3 px-1 py-2">
+              <Avatar src={u.avatar} name={u.displayName} size="md" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-white truncate">{u.displayName}{u.id === me.id ? ' (أنت)' : ''}</div>
+                <div className="text-xs text-gray-500 truncate">@{u.username}</div>
+              </div>
+              {m.role === 'admin' && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-500/20 text-violet-300">مشرف</span>}
+              {iAmAdmin && u.id !== me.id && (
+                <div className="flex items-center gap-1">
+                  {m.role !== 'admin' && (
+                    <button disabled={busy} onClick={() => void run(() => supabase.from('chat_group_members').update({ role: 'admin' }).eq('group_id', group.id).eq('user_id', u.id))} className="px-2 py-1 rounded-full text-[11px] bg-gray-800 text-cyan-300">ترقية</button>
+                  )}
+                  <button disabled={busy} onClick={() => void run(() => supabase.from('chat_group_members').delete().eq('group_id', group.id).eq('user_id', u.id), 'تعذّرت الإزالة')} className="px-2 py-1 rounded-full text-[11px] bg-gray-800 text-red-400">إزالة</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {note && <p className="text-xs text-amber-300 mt-3 text-center">{note}</p>}
+      <button onClick={() => void leave()} disabled={busy} className="w-full mt-4 py-2.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-medium">مغادرة المجموعة</button>
+    </SheetShell>
+  );
+}
+
+function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }: {
+  currentUser: User; group: Group; users: User[];
+  setGroups: React.Dispatch<React.SetStateAction<Group[]>>;
+  reload: () => Promise<void>;
+  onBack: () => void;
+}) {
+  const vp = useVisualViewport();
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [seenFor, setSeenFor] = useState<string | null>(null);
+  const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const memberIds = group.members.map(m => m.userId);
+  const others = memberIds.filter(id => id !== currentUser.id);
+  const person = (id: string) => users.find(u => u.id === id);
+  const nameColors = ['text-violet-300', 'text-cyan-300', 'text-emerald-300', 'text-rose-300', 'text-amber-300', 'text-pink-300', 'text-teal-300'];
+
+  useEffect(() => {
+    const onVis = () => setVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
+  // Real read receipts: a message counts as seen only once it was on this person's screen.
+  useEffect(() => {
+    if (!visible) return;
+    const ids = group.messages.filter(m => !m.isSystem && m.senderId !== currentUser.id && !m.readBy.includes(currentUser.id)).map(m => m.id);
+    if (ids.length === 0) return;
+    setGroups(prev => prev.map(g => g.id !== group.id ? g : { ...g, messages: g.messages.map(m => ids.includes(m.id) ? { ...m, readBy: [...m.readBy, currentUser.id] } : m) }));
+    void supabase.from('group_message_reads').upsert(ids.map(id => ({ message_id: id, user_id: currentUser.id })), { onConflict: 'message_id,user_id', ignoreDuplicates: true }).then(({ error: err }) => {
+      if (err) console.error(err);
+    });
+  }, [group.messages.length, group.id, visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [group.messages.length]);
+
+  const send = async () => {
+    const body = text.trim();
+    if (!body || sending) return;
+    setSending(true);
+    setError('');
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    setGroups(prev => prev.map(g => g.id !== group.id ? g : { ...g, lastActivity: now, messages: [...g.messages, { id, senderId: currentUser.id, text: body, timestamp: now, isSystem: false, readBy: [currentUser.id] }] }));
+    setText('');
+    const { error: err } = await supabase.from('group_messages').insert({ id, group_id: group.id, sender_id: currentUser.id, text: body });
+    if (err) {
+      console.error(err);
+      setGroups(prev => prev.map(g => g.id !== group.id ? g : { ...g, messages: g.messages.filter(m => m.id !== id) }));
+      setText(body);
+      setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
+    } else {
+      playSound('send');
+    }
+    setSending(false);
+    inputRef.current?.focus();
+  };
+
+  const seenBy = (m: GroupMessage) => m.readBy.filter(id => id !== m.senderId && memberIds.includes(id));
+
+  return (
+    <div className="fixed left-0 right-0 z-[70] flex justify-center bg-gray-950" style={{ top: vp.top, height: vp.height }}>
+      <div className="flex flex-col h-full w-full max-w-2xl xl:max-w-3xl md:border-x md:border-gray-800 bg-gray-950">
+        <div className="flex items-center gap-3 px-3 py-3 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 relative z-10">
+          <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors" aria-label="رجوع"><ChevronRight size={20} /></button>
+          <button onClick={() => setInfoOpen(true)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
+            <GroupAvatar name={group.name} size="md" />
+            <div className="min-w-0">
+              <div className="font-medium text-white truncate">{group.name}</div>
+              <div className="text-xs text-gray-500 truncate">{group.members.map(m => person(m.userId)?.displayName ?? '').filter(Boolean).slice(0, 4).join('، ')}{group.members.length > 4 ? '...' : ''}</div>
+            </div>
+          </button>
+          <button onClick={() => setInfoOpen(true)} className="p-2 hover:bg-gray-800 rounded-full text-gray-400" aria-label="معلومات المجموعة"><Users size={18} /></button>
+        </div>
+
+        <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2">
+          {group.messages.length === 0 && <p className="text-center text-gray-500 text-sm py-12">ابدأ المحادثة في المجموعة 👋</p>}
+          {group.messages.map((m, i) => {
+            if (m.isSystem) {
+              return <div key={m.id} className="text-center"><span className="inline-block px-3 py-1 rounded-full bg-gray-800/80 text-[11px] text-gray-400">{person(m.senderId)?.displayName ?? 'مستخدم'} {m.text}</span></div>;
+            }
+            const mine = m.senderId === currentUser.id;
+            const prev = group.messages[i - 1];
+            const showName = !mine && (!prev || prev.senderId !== m.senderId || prev.isSystem);
+            const sender = person(m.senderId);
+            const seen = seenBy(m);
+            const everyone = others.length > 0 && seen.length >= others.length;
+            return (
+              <div key={m.id} className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
+                {!mine && (showName && sender ? <Avatar src={sender.avatar} name={sender.displayName} size="sm" /> : <div className="w-7 shrink-0" />)}
+                <div className={`max-w-[85%] sm:max-w-[75%] flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+                  {showName && sender && <span className={`text-[11px] font-semibold mb-0.5 px-1 ${nameColors[sender.displayName.charCodeAt(0) % nameColors.length]}`}>{sender.displayName}</span>}
+                  <div className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`} dir="auto">
+                    {m.text}
+                  </div>
+                  <button
+                    onClick={() => mine && setSeenFor(seenFor === m.id ? null : m.id)}
+                    className={`text-[10px] text-gray-500 mt-1 flex items-center gap-1 ${mine ? '' : 'cursor-default'}`}
+                  >
+                    {formatTime(m.timestamp)}
+                    {mine && (seen.length === 0
+                      ? <Check size={14} className="text-gray-500" aria-label="تم الإرسال" />
+                      : <><CheckCheck size={14} className={everyone ? 'text-cyan-400' : 'text-gray-400'} aria-label="شوهدت" />
+                          <span className={everyone ? 'text-cyan-400' : 'text-gray-400'}>{everyone ? 'شاهدها الكل' : `${seen.length}/${others.length}`}</span></>)}
+                  </button>
+                  {mine && seenFor === m.id && (
+                    <div className="mt-1 w-56 max-w-full p-2.5 rounded-2xl bg-gray-900 border border-white/10 text-right">
+                      <div className="text-[11px] font-semibold text-cyan-300 mb-1.5">شاهدها ({seen.length})</div>
+                      {seen.length === 0 && <div className="text-[11px] text-gray-500">لم يشاهدها أحد بعد</div>}
+                      {seen.map(id => (
+                        <div key={id} className="flex items-center gap-2 py-0.5">
+                          <Avatar src={person(id)?.avatar ?? ''} name={person(id)?.displayName ?? '؟'} size="sm" />
+                          <span className="text-xs text-gray-200 truncate">{person(id)?.displayName ?? 'مستخدم'}</span>
+                        </div>
+                      ))}
+                      {others.filter(id => !seen.includes(id)).length > 0 && (
+                        <div className="text-[11px] text-gray-500 mt-1.5">لم يشاهدها: {others.filter(id => !seen.includes(id)).map(id => person(id)?.displayName ?? '').filter(Boolean).join('، ')}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
+          {error && <p className="text-xs text-red-400 pb-1.5 px-1">{error}</p>}
+          <div className="flex items-center gap-1.5">
+            <div className="relative shrink-0">
+              <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setEmojiOpen(o => !o)} className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-gray-300 hover:text-yellow-300" aria-label="إيموجي">
+                <Smile size={19} />
+              </button>
+              {emojiOpen && <EmojiPicker onPick={e => setText(t => t + e)} onClose={() => setEmojiOpen(false)} />}
+            </div>
+            <input
+              ref={inputRef}
+              enterKeyHint="send"
+              autoComplete="off"
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="اكتب رسالة للمجموعة..."
+              className="flex-1 min-w-0 h-10 px-4 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && void send()}
+            />
+            <motion.button whileTap={{ scale: 0.9 }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => void send()} disabled={!text.trim() || sending} aria-label="إرسال" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30 disabled:opacity-40">
+              <Send size={18} className="text-white" />
+            </motion.button>
+          </div>
+        </div>
+        {infoOpen && <GroupInfoSheet group={group} users={users} me={currentUser} reload={reload} onClose={() => setInfoOpen(false)} onLeft={() => { setInfoOpen(false); void reload(); onBack(); }} />}
+      </div>
+    </div>
+  );
+}
+
 function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
   const [group, setGroup] = useState(0);
   return (
@@ -1461,6 +1902,7 @@ export default function App() {
   const feedBusy = useRef(false);
   const feedCursor = useRef<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'feed' | 'reels' | 'videos' | 'search' | 'create' | 'profile' | 'settings' | 'messages'>('feed');
   const [showLogin, setShowLogin] = useState(true);
@@ -1604,6 +2046,57 @@ export default function App() {
   const conversationsRef = useRef<Conversation[]>([]);
   conversationsRef.current = conversations;
 
+  // Groups: load, then apply new messages, read receipts and membership changes live.
+  const reloadGroups = async () => {
+    if (!currentUserId) return;
+    try {
+      setGroups(await loadGroups());
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  const reloadGroupsRef = useRef(reloadGroups);
+  reloadGroupsRef.current = reloadGroups;
+  useEffect(() => {
+    if (!currentUserId) { setGroups([]); return; }
+    void reloadGroupsRef.current();
+    let timer: number | undefined;
+    const soon = () => { window.clearTimeout(timer); timer = window.setTimeout(() => void reloadGroupsRef.current(), 300); };
+    const channel = supabase
+      .channel('kan-groups')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, payload => {
+        const row = payload.new as { id: string; group_id: string; sender_id: string; text: string; is_system: boolean; created_at: string };
+        if (row.sender_id !== currentUserId && !row.is_system) playSound('receive');
+        setGroups(prev => {
+          const g = prev.find(x => x.id === row.group_id);
+          if (!g) { soon(); return prev; }
+          if (g.messages.some(m => m.id === row.id)) return prev;
+          const at = new Date(row.created_at).getTime();
+          return prev.map(x => x.id !== row.group_id ? x : {
+            ...x,
+            lastActivity: at,
+            messages: [...x.messages, { id: row.id, senderId: row.sender_id, text: row.text, timestamp: at, isSystem: row.is_system, readBy: [] }],
+          });
+        });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_message_reads' }, payload => {
+        const row = payload.new as { message_id: string; user_id: string };
+        setGroups(prev => prev.map(g => g.messages.some(m => m.id === row.message_id)
+          ? { ...g, messages: g.messages.map(m => m.id === row.message_id && !m.readBy.includes(row.user_id) ? { ...m, readBy: [...m.readBy, row.user_id] } : m) }
+          : g));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_group_members' }, soon)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_groups' }, soon)
+      .subscribe();
+    const onVisible = () => { if (document.visibilityState === 'visible') soon(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
+
   const refreshConversations = async () => {
     if (!currentUserId) return;
     try {
@@ -1621,7 +2114,7 @@ export default function App() {
       .channel('kan-chat')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async payload => {
         const row = payload.new as unknown as MessageRow;
-        if (row.sender_id !== currentUserId) playSound('receive');
+        if (row.sender_id !== currentUserId) { playSound('receive'); markDelivered(currentUserId); }
         if (!conversationsRef.current.some(c => c.id === row.conversation_id)) {
           await refreshConversations();
           return;
@@ -1639,7 +2132,7 @@ export default function App() {
         setConversations(prev => prev.map(c =>
           c.id !== row.conversation_id
             ? c
-            : { ...c, messages: c.messages.map(m => (m.id === row.id ? { ...m, read: row.read_at !== null } : m)) }
+            : { ...c, messages: c.messages.map(m => (m.id === row.id ? { ...m, read: row.read_at !== null, delivered: row.read_at !== null || (row.delivered_at ?? null) !== null } : m)) }
         ));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions' }, payload => {
@@ -1739,6 +2232,7 @@ export default function App() {
     ? conversations
         .filter(c => c.participants.includes(currentUser.id))
         .reduce((sum, c) => sum + c.messages.filter(m => m.senderId !== currentUser.id && !m.read).length, 0)
+      + groups.reduce((sum, g) => sum + groupUnread(g, currentUser.id), 0)
     : 0;
 
   const baseTitleRef = useRef(document.title);
@@ -1899,6 +2393,9 @@ export default function App() {
                 users={users}
                 conversations={conversations}
                 setConversations={setConversations}
+                groups={groups}
+                setGroups={setGroups}
+                reloadGroups={reloadGroups}
                 selectedChat={selectedChat}
                 setSelectedChat={setSelectedChat}
               />
@@ -4050,16 +4547,26 @@ function SettingsTab({ currentUser, setUsers }: {
 }
 
 // ============ Messages Tab ============
-function MessagesTab({ currentUser, users, conversations, setConversations, selectedChat, setSelectedChat }: {
+function MessagesTab({ currentUser, users, conversations, setConversations, groups, setGroups, reloadGroups, selectedChat, setSelectedChat }: {
   currentUser: User; users: User[];
   conversations: Conversation[];
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
+  groups: Group[];
+  setGroups: React.Dispatch<React.SetStateAction<Group[]>>;
+  reloadGroups: () => Promise<void>;
   selectedChat: string | null;
   setSelectedChat: (id: string | null) => void;
 }) {
   const myConversations = conversations
     .filter(c => c.participants.includes(currentUser.id))
     .sort((a, b) => b.lastActivity - a.lastActivity);
+  const [section, setSection] = useState<'direct' | 'groups'>('direct');
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const myGroups = groups.slice().sort((a, b) => b.lastActivity - a.lastActivity);
+  const directUnread = myConversations.reduce((n, c) => n + c.messages.filter(m => m.senderId !== currentUser.id && !m.read).length, 0);
+  const groupsUnread = myGroups.reduce((n, g) => n + groupUnread(g, currentUser.id), 0);
+  const activeGroup = selectedGroup ? groups.find(g => g.id === selectedGroup) : undefined;
 
   const chatUser = selectedChat ? users.find(u => u.id === selectedChat) : null;
   const activeConversation = selectedChat
@@ -4070,9 +4577,16 @@ function MessagesTab({ currentUser, users, conversations, setConversations, sele
     ? activeConversation.messages.filter(m => m.senderId !== currentUser.id && !m.read).length
     : 0;
 
-  // Mark the other person's messages as read while this chat is open.
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState === 'visible');
   useEffect(() => {
-    if (!activeConversation || unreadInActive === 0) return;
+    const onVis = () => setPageVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
+  // Mark the other person's messages as read only while this chat is open AND the app is on screen.
+  useEffect(() => {
+    if (!activeConversation || unreadInActive === 0 || !pageVisible) return;
     const cid = activeConversation.id;
     setConversations(prev => prev.map(c =>
       c.id === cid
@@ -4085,7 +4599,20 @@ function MessagesTab({ currentUser, users, conversations, setConversations, sele
       .eq('conversation_id', cid)
       .neq('sender_id', currentUser.id)
       .is('read_at', null);
-  }, [activeConversation?.id, unreadInActive]);
+  }, [activeConversation?.id, unreadInActive, pageVisible]);
+
+  if (activeGroup) {
+    return (
+      <GroupChatView
+        currentUser={currentUser}
+        group={activeGroup}
+        users={users}
+        setGroups={setGroups}
+        reload={reloadGroups}
+        onBack={() => setSelectedGroup(null)}
+      />
+    );
+  }
 
   if (selectedChat && chatUser) {
     return (
@@ -4101,8 +4628,54 @@ function MessagesTab({ currentUser, users, conversations, setConversations, sele
 
   return (
     <div className="px-4 py-4">
-      <h2 className="text-xl font-bold text-white mb-4">المراسلة</h2>
-      {myConversations.length === 0 ? (
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-white">المراسلة</h2>
+        <button onClick={() => setCreatingGroup(true)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-xs font-semibold shadow-lg shadow-violet-500/25 active:scale-95 transition-transform">
+          <Plus size={15} /> مجموعة جديدة
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-1 p-1 mb-4 rounded-full bg-gray-900 border border-gray-800">
+        {([['direct', 'الرسائل', directUnread], ['groups', 'المجموعات', groupsUnread]] as const).map(([key, label, count]) => (
+          <button key={key} onClick={() => setSection(key)} className={`relative py-2 rounded-full text-sm font-medium transition-all ${section === key ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-md shadow-violet-500/25' : 'text-gray-400 hover:text-white'}`}>
+            {label}
+            {count > 0 && <span className={`mr-1.5 inline-flex min-w-[18px] h-[18px] px-1 items-center justify-center rounded-full text-[10px] font-bold ${section === key ? 'bg-white/25 text-white' : 'bg-violet-500 text-white'}`}>{count > 9 ? '9+' : count}</span>}
+          </button>
+        ))}
+      </div>
+      {section === 'groups' ? (
+        myGroups.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-5xl mb-4">👥</div>
+            <p className="text-gray-400 mb-2">لا توجد مجموعات بعد</p>
+            <p className="text-gray-500 text-sm">أنشئ مجموعة وأضف أصدقاءك</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {myGroups.map(g => {
+              const last = [...g.messages].reverse()[0];
+              const unread = groupUnread(g, currentUser.id);
+              const lastName = last ? (last.senderId === currentUser.id ? 'أنت' : users.find(u => u.id === last.senderId)?.displayName ?? '') : '';
+              return (
+                <motion.button key={g.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} onClick={() => setSelectedGroup(g.id)} className="w-full flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl hover:border-gray-700 transition-all text-right">
+                  <div className="relative">
+                    <GroupAvatar name={g.name} size="lg" />
+                    {unread > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-violet-500 rounded-full text-xs flex items-center justify-center font-bold">{unread > 9 ? '9+' : unread}</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-white truncate">{g.name}</span>
+                      {last && <span className="text-xs text-gray-500">{formatTime(last.timestamp)}</span>}
+                    </div>
+                    <p className={`text-sm truncate mt-0.5 ${unread > 0 ? 'text-white font-medium' : 'text-gray-500'}`}>
+                      {last ? (last.isSystem ? `${lastName} ${last.text}` : `${lastName}: ${last.text}`) : `${g.members.length} عضو`}
+                    </p>
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+        )
+      ) : myConversations.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-4">💬</div>
           <p className="text-gray-400 mb-2">لا توجد محادثات بعد</p>
@@ -4142,6 +4715,14 @@ function MessagesTab({ currentUser, users, conversations, setConversations, sele
             );
           })}
         </div>
+      )}
+      {creatingGroup && (
+        <CreateGroupSheet
+          users={users}
+          me={currentUser}
+          onClose={() => setCreatingGroup(false)}
+          onCreated={async id => { setCreatingGroup(false); await reloadGroups(); setSection('groups'); setSelectedGroup(id); }}
+        />
       )}
     </div>
   );
@@ -4884,7 +5465,11 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                 </div>
                 <span className={`text-[10px] text-gray-500 mt-1 ${isMine ? 'text-left' : 'text-right'}`}>
                   {formatTime(msg.timestamp)}
-                  {isMine && (msg.read ? <CheckCheck size={13} className="inline mr-1 text-cyan-400" aria-label="تمت المشاهدة" /> : <Check size={13} className="inline mr-1 text-gray-500" aria-label="تم الإرسال" />)}
+                  {isMine && (msg.read
+                    ? <CheckCheck size={14} className="inline mr-1 text-cyan-400" aria-label="تمت المشاهدة" />
+                    : msg.delivered
+                      ? <CheckCheck size={14} className="inline mr-1 text-gray-400" aria-label="وصلت" />
+                      : <Check size={14} className="inline mr-1 text-gray-500" aria-label="تم الإرسال" />)}
                   {isMine && msg.id === lastSeenId && <span className="mr-1 text-cyan-400">تمت المشاهدة</span>}
                 </span>
                 {msg.reactions && msg.reactions.length > 0 && (() => {
