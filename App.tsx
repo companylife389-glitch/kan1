@@ -9,7 +9,7 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -85,6 +85,9 @@ interface GroupMessage {
   timestamp: number;
   isSystem: boolean;
   readBy: string[];
+  replyToId?: string;
+  media?: { type: 'image' | 'video' | 'voice' | 'file'; url: string; duration?: number; name?: string; size?: number; path?: string };
+  reactions: { userId: string; emoji: string }[];
 }
 interface Group {
   id: string;
@@ -163,7 +166,8 @@ function saveData(key: string, data: unknown): boolean {
 }
 
 // ============ Avatar Component ============
-function Avatar({ src, name, size = 'md' }: { src: string; name: string; size?: 'sm' | 'md' | 'lg' | 'xl' }) {
+function Avatar({ src, name, size = 'md', zoom = false }: { src: string; name: string; size?: 'sm' | 'md' | 'lg' | 'xl'; zoom?: boolean }) {
+  const [open, setOpen] = useState(false);
   const sizes = {
     sm: 'w-7 h-7 text-xs',
     md: 'w-10 h-10 text-base',
@@ -179,10 +183,19 @@ function Avatar({ src, name, size = 'md' }: { src: string; name: string; size?: 
   const colorIndex = name.charCodeAt(0) % bgColors.length;
 
   if (src) {
-    return (
+    const picture = (
       <div className={`${sizes[size]} rounded-full overflow-hidden flex-shrink-0 border-2 border-gray-700`}>
         <img src={src} alt={name} className="w-full h-full object-cover" />
       </div>
+    );
+    if (!zoom) return picture;
+    return (
+      <>
+        <button type="button" onClick={e => { e.stopPropagation(); setOpen(true); }} className="rounded-full flex-shrink-0 cursor-zoom-in active:scale-95 transition-transform" aria-label={`عرض صورة ${name}`}>
+          {picture}
+        </button>
+        {open && <ImageViewer src={src} name={name} onClose={() => setOpen(false)} />}
+      </>
     );
   }
 
@@ -1351,31 +1364,59 @@ function ShareSheet({ post, author, users, currentUser, onClose }: {
 }
 
 
+type GroupMsgRow = {
+  id: string; group_id: string; sender_id: string; text: string; is_system: boolean; created_at: string;
+  reply_to_id?: string | null;
+  media_path?: string | null; media_type?: 'image' | 'video' | 'voice' | 'file' | null;
+  media_name?: string | null; media_size?: number | null; media_duration?: number | null;
+  group_message_reads?: { user_id: string }[];
+  group_message_reactions?: { user_id: string; emoji: string }[];
+};
+
+function groupRowToMessage(r: GroupMsgRow, urls: Map<string, string>): GroupMessage {
+  const url = r.media_path ? urls.get(r.media_path) : undefined;
+  return {
+    id: r.id,
+    senderId: r.sender_id,
+    text: r.text,
+    timestamp: new Date(r.created_at).getTime(),
+    isSystem: r.is_system,
+    readBy: (r.group_message_reads ?? []).map(x => x.user_id),
+    replyToId: r.reply_to_id ?? undefined,
+    reactions: (r.group_message_reactions ?? []).map(x => ({ userId: x.user_id, emoji: x.emoji })),
+    media: r.media_type && url
+      ? { type: r.media_type, url, duration: r.media_duration ?? undefined, name: r.media_name ?? undefined, size: r.media_size ?? undefined, path: r.media_path ?? undefined }
+      : undefined,
+  };
+}
+
+function groupMsgPreview(m: GroupMessage): string {
+  if (m.media) {
+    const label = { image: '📷 صورة', video: '🎥 فيديو', voice: '🎤 رسالة صوتية', file: `📎 ${m.media.name || 'ملف'}` }[m.media.type];
+    return m.text ? `${label} ${m.text}` : label;
+  }
+  return m.text;
+}
+
 async function loadGroups(): Promise<Group[]> {
   const [g, mem, msgs] = await Promise.all([
     supabase.from('chat_groups').select('id, name, created_by, last_activity'),
     supabase.from('chat_group_members').select('group_id, user_id, role'),
     supabase
       .from('group_messages')
-      .select('id, group_id, sender_id, text, is_system, created_at, group_message_reads(user_id)')
+      .select('id, group_id, sender_id, text, is_system, created_at, reply_to_id, media_path, media_type, media_name, media_size, media_duration, group_message_reads(user_id), group_message_reactions(user_id, emoji)')
       .order('created_at', { ascending: false })
       .limit(600),
   ]);
   if (g.error) throw g.error;
   if (mem.error) throw mem.error;
   if (msgs.error) throw msgs.error;
-  type MsgRow = { id: string; group_id: string; sender_id: string; text: string; is_system: boolean; created_at: string; group_message_reads?: { user_id: string }[] };
+  const rows = ((msgs.data ?? []) as unknown as GroupMsgRow[]).slice().reverse();
+  const urls = await signPaths(rows.flatMap(r => (r.media_path ? [r.media_path] : [])));
   const byGroup = new Map<string, GroupMessage[]>();
-  for (const r of ((msgs.data ?? []) as unknown as MsgRow[]).slice().reverse()) {
+  for (const r of rows) {
     const list = byGroup.get(r.group_id) ?? [];
-    list.push({
-      id: r.id,
-      senderId: r.sender_id,
-      text: r.text,
-      timestamp: new Date(r.created_at).getTime(),
-      isSystem: r.is_system,
-      readBy: (r.group_message_reads ?? []).map(x => x.user_id),
-    });
+    list.push(groupRowToMessage(r, urls));
     byGroup.set(r.group_id, list);
   }
   const members = (mem.data ?? []) as { group_id: string; user_id: string; role: 'admin' | 'member' }[];
@@ -1563,7 +1604,7 @@ function GroupInfoSheet({ group, users, me, reload, onClose, onLeft }: {
           if (!u) return null;
           return (
             <div key={m.userId} className="flex items-center gap-3 px-1 py-2">
-              <Avatar src={u.avatar} name={u.displayName} size="md" />
+              <Avatar src={u.avatar} name={u.displayName} size="md" zoom />
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-white truncate">{u.displayName}{u.id === me.id ? ' (أنت)' : ''}</div>
                 <div className="text-xs text-gray-500 truncate">@{u.username}</div>
@@ -1598,15 +1639,27 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [media, setMedia] = useState<{ type: 'image' | 'video' | 'file'; url: string; file: File } | null>(null);
+  const [replyingTo, setReplyingTo] = useState<GroupMessage | null>(null);
+  const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
+  const [reactingTo, setReactingTo] = useState<string | null>(null);
   const [seenFor, setSeenFor] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<{ src: string; name?: string } | null>(null);
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const memberIds = group.members.map(m => m.userId);
   const others = memberIds.filter(id => id !== currentUser.id);
   const person = (id: string) => users.find(u => u.id === id);
+  const nameOf = (id: string) => (id === currentUser.id ? 'أنت' : person(id)?.displayName ?? 'مستخدم');
   const nameColors = ['text-violet-300', 'text-cyan-300', 'text-emerald-300', 'text-rose-300', 'text-amber-300', 'text-pink-300', 'text-teal-300'];
+  const patchMsgs = (fn: (list: GroupMessage[]) => GroupMessage[]) =>
+    setGroups(prev => prev.map(g => g.id !== group.id ? g : { ...g, messages: fn(g.messages) }));
 
   useEffect(() => {
     const onVis = () => setVisible(document.visibilityState === 'visible');
@@ -1619,7 +1672,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
     if (!visible) return;
     const ids = group.messages.filter(m => !m.isSystem && m.senderId !== currentUser.id && !m.readBy.includes(currentUser.id)).map(m => m.id);
     if (ids.length === 0) return;
-    setGroups(prev => prev.map(g => g.id !== group.id ? g : { ...g, messages: g.messages.map(m => ids.includes(m.id) ? { ...m, readBy: [...m.readBy, currentUser.id] } : m) }));
+    patchMsgs(list => list.map(m => ids.includes(m.id) ? { ...m, readBy: [...m.readBy, currentUser.id] } : m));
     void supabase.from('group_message_reads').upsert(ids.map(id => ({ message_id: id, user_id: currentUser.id })), { onConflict: 'message_id,user_id', ignoreDuplicates: true }).then(({ error: err }) => {
       if (err) console.error(err);
     });
@@ -1629,26 +1682,108 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [group.messages.length]);
 
-  const send = async () => {
-    const body = text.trim();
-    if (!body || sending) return;
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError('');
+    if (file.size > MAX_FILE_MB * 1024 * 1024) { setError(`حجم الملف يجب أن لا يتجاوز ${MAX_FILE_MB} ميجابايت`); return; }
+    const kind = detectMediaKind(file);
+    if (media?.url) URL.revokeObjectURL(media.url);
+    setMedia({ type: kind, url: kind === 'file' ? '' : URL.createObjectURL(file), file });
+  };
+
+  const send = async (opts: { text?: string; file?: Blob; mediaType?: 'image' | 'video' | 'voice' | 'file'; fileName?: string; duration?: number }): Promise<boolean> => {
+    const body = (opts.text ?? '').trim();
+    if (!body && !opts.file) return false;
     setSending(true);
     setError('');
     const id = crypto.randomUUID();
-    const now = Date.now();
-    setGroups(prev => prev.map(g => g.id !== group.id ? g : { ...g, lastActivity: now, messages: [...g.messages, { id, senderId: currentUser.id, text: body, timestamp: now, isSystem: false, readBy: [currentUser.id] }] }));
-    setText('');
-    const { error: err } = await supabase.from('group_messages').insert({ id, group_id: group.id, sender_id: currentUser.id, text: body });
-    if (err) {
-      console.error(err);
-      setGroups(prev => prev.map(g => g.id !== group.id ? g : { ...g, messages: g.messages.filter(m => m.id !== id) }));
-      setText(body);
-      setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
-    } else {
+    let path: string | null = null;
+    try {
+      if (opts.file) {
+        const mime = (opts.file.type || '').split(';')[0];
+        const ext = CHAT_EXT[mime] ?? (opts.fileName ? safeExt(opts.fileName) : opts.mediaType === 'voice' ? 'webm' : 'bin');
+        path = `${group.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from(CHAT_MEDIA_BUCKET).upload(path, opts.file, { contentType: mime || 'application/octet-stream', cacheControl: '3600' });
+        if (upErr) throw upErr;
+      }
+      const { error: insErr } = await supabase.from('group_messages').insert({
+        id,
+        group_id: group.id,
+        sender_id: currentUser.id,
+        text: body,
+        media_path: path,
+        media_type: path ? opts.mediaType ?? null : null,
+        media_duration: opts.mediaType === 'voice' ? Math.round(opts.duration ?? 0) : null,
+        media_name: path && opts.fileName ? opts.fileName.slice(0, 200) : null,
+        media_size: opts.file ? opts.file.size : null,
+        reply_to_id: replyingTo?.id ?? null,
+      });
+      if (insErr) throw insErr;
+      const at = Date.now();
+      const msg: GroupMessage = {
+        id, senderId: currentUser.id, text: body, timestamp: at, isSystem: false, readBy: [currentUser.id], reactions: [],
+        replyToId: replyingTo?.id,
+        media: opts.file && opts.mediaType ? { type: opts.mediaType, url: URL.createObjectURL(opts.file), duration: opts.duration, name: opts.fileName, size: opts.file.size, path: path ?? undefined } : undefined,
+      };
+      setGroups(prev => prev.map(g => g.id !== group.id ? g : { ...g, lastActivity: at, messages: g.messages.some(m => m.id === id) ? g.messages : [...g.messages, msg] }));
       playSound('send');
+      return true;
+    } catch (e) {
+      console.error(e);
+      if (path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([path]);
+      setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
+      return false;
+    } finally {
+      setSending(false);
     }
-    setSending(false);
+  };
+
+  const sendMessage = async () => {
+    if ((!text.trim() && !media) || sending) return;
+    const ok = await send({ text, file: media?.file, mediaType: media?.type, fileName: media?.file.name });
+    if (ok) { setText(''); setMedia(null); setReplyingTo(null); }
     inputRef.current?.focus();
+  };
+  const sendVoice = async (dataUrl: string, duration: number) => {
+    setRecording(false);
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      if (await send({ file: blob, mediaType: 'voice', duration })) setReplyingTo(null);
+    } catch (e) {
+      console.error(e);
+      setError('تعذّر إرسال الرسالة الصوتية');
+    }
+  };
+
+  const deleteMessage = async (m: GroupMessage) => {
+    setActiveMsgId(null);
+    patchMsgs(list => list.filter(x => x.id !== m.id));
+    const { error: err } = await supabase.from('group_messages').delete().eq('id', m.id);
+    if (err) { console.error(err); setError('تعذّر حذف الرسالة'); void reload(); return; }
+    if (m.media?.path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([m.media.path]);
+  };
+
+  const react = async (m: GroupMessage, emoji: string) => {
+    const mine = m.reactions.find(r => r.userId === currentUser.id);
+    if (mine?.emoji === emoji) {
+      patchMsgs(list => list.map(x => x.id === m.id ? { ...x, reactions: x.reactions.filter(r => r.userId !== currentUser.id) } : x));
+      const { error: err } = await supabase.from('group_message_reactions').delete().eq('message_id', m.id).eq('user_id', currentUser.id);
+      if (err) { console.error(err); void reload(); }
+      return;
+    }
+    patchMsgs(list => list.map(x => x.id === m.id ? { ...x, reactions: [...x.reactions.filter(r => r.userId !== currentUser.id), { userId: currentUser.id, emoji }] } : x));
+    const { error: err } = mine
+      ? await supabase.from('group_message_reactions').update({ emoji }).eq('message_id', m.id).eq('user_id', currentUser.id)
+      : await supabase.from('group_message_reactions').insert({ message_id: m.id, user_id: currentUser.id, emoji });
+    if (err) { console.error(err); void reload(); }
+  };
+
+  const jumpTo = (id: string) => {
+    document.getElementById(`gmsg-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightId(id);
+    window.setTimeout(() => setHighlightId(null), 1400);
   };
 
   const seenBy = (m: GroupMessage) => m.readBy.filter(id => id !== m.senderId && memberIds.includes(id));
@@ -1668,7 +1803,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
           <button onClick={() => setInfoOpen(true)} className="p-2 hover:bg-gray-800 rounded-full text-gray-400" aria-label="معلومات المجموعة"><Users size={18} /></button>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" onClick={() => { setActiveMsgId(null); setReactingTo(null); }}>
           {group.messages.length === 0 && <p className="text-center text-gray-500 text-sm py-12">ابدأ المحادثة في المجموعة 👋</p>}
           {group.messages.map((m, i) => {
             if (m.isSystem) {
@@ -1680,26 +1815,89 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             const sender = person(m.senderId);
             const seen = seenBy(m);
             const everyone = others.length > 0 && seen.length >= others.length;
+            const replied = m.replyToId ? group.messages.find(x => x.id === m.replyToId) : undefined;
+            const active = activeMsgId === m.id;
+            const reactionGroups = new Map<string, string[]>();
+            for (const r of m.reactions) reactionGroups.set(r.emoji, [...(reactionGroups.get(r.emoji) ?? []), r.userId]);
             return (
-              <div key={m.id} className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
-                {!mine && (showName && sender ? <Avatar src={sender.avatar} name={sender.displayName} size="sm" /> : <div className="w-7 shrink-0" />)}
+              <motion.div key={m.id} id={`gmsg-${m.id}`} initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.18 }} className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
+                {!mine && (showName && sender ? <Avatar src={sender.avatar} name={sender.displayName} size="sm" zoom /> : <div className="w-7 shrink-0" />)}
                 <div className={`max-w-[85%] sm:max-w-[75%] flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
                   {showName && sender && <span className={`text-[11px] font-semibold mb-0.5 px-1 ${nameColors[sender.displayName.charCodeAt(0) % nameColors.length]}`}>{sender.displayName}</span>}
-                  <div className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`} dir="auto">
-                    {m.text}
-                  </div>
-                  <button
-                    onClick={() => mine && setSeenFor(seenFor === m.id ? null : m.id)}
-                    className={`text-[10px] text-gray-500 mt-1 flex items-center gap-1 ${mine ? '' : 'cursor-default'}`}
+                  <div
+                    onClick={e => { e.stopPropagation(); setActiveMsgId(active ? null : m.id); setReactingTo(null); }}
+                    className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words cursor-pointer select-none touch-manipulation transition-shadow ${highlightId === m.id ? 'ring-2 ring-cyan-400' : ''} ${mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`}
                   >
+                    {m.replyToId && (
+                      <button
+                        onClick={e => { e.stopPropagation(); if (replied) jumpTo(replied.id); }}
+                        className={`block w-full text-right mb-2 px-2.5 py-1.5 rounded-lg border-r-2 text-xs ${mine ? 'bg-white/15 border-white/60' : 'bg-black/25 border-cyan-400'}`}
+                      >
+                        <div className="font-medium opacity-90">{replied ? nameOf(replied.senderId) : 'رسالة'}</div>
+                        <div className="opacity-80 truncate">{replied ? groupMsgPreview(replied) : 'رسالة غير متاحة'}</div>
+                      </button>
+                    )}
+                    {m.media?.type === 'image' && (
+                      <div className="mb-2 relative">
+                        <img src={m.media.url} alt="" onClick={e => { e.stopPropagation(); setViewer({ src: m.media!.url, name: m.media!.name }); }} className="rounded-xl max-w-full max-h-56 object-cover cursor-zoom-in" />
+                      </div>
+                    )}
+                    {m.media?.type === 'video' && (
+                      <div className="mb-2 w-60 max-w-full" onClick={e => e.stopPropagation()}>
+                        <VideoPlayer src={m.media.url} className="max-h-64" />
+                      </div>
+                    )}
+                    {m.media?.type === 'voice' && (
+                      <div onClick={e => e.stopPropagation()}><VoicePlayer url={m.media.url} knownDuration={m.media.duration} /></div>
+                    )}
+                    {m.media?.type === 'file' && (
+                      <button onClick={e => { e.stopPropagation(); void downloadFile(m.media!.url, m.media!.name || 'file'); }} className={`mb-2 w-full flex items-center gap-3 p-2.5 rounded-xl text-right ${mine ? 'bg-white/15 hover:bg-white/25' : 'bg-black/25 hover:bg-black/40'}`}>
+                        <FileText size={26} className="shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium truncate" dir="auto">{m.media.name || 'ملف'}</div>
+                          <div className="text-[11px] opacity-70">{formatBytes(m.media.size)}</div>
+                        </div>
+                        <Download size={16} className="shrink-0" />
+                      </button>
+                    )}
+                    {m.text && <p className="whitespace-pre-wrap" dir="auto">{m.text}</p>}
+                  </div>
+                  <span className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
                     {formatTime(m.timestamp)}
                     {mine && (seen.length === 0
                       ? <Check size={14} className="text-gray-500" aria-label="تم الإرسال" />
                       : <><CheckCheck size={14} className={everyone ? 'text-cyan-400' : 'text-gray-400'} aria-label="شوهدت" />
                           <span className={everyone ? 'text-cyan-400' : 'text-gray-400'}>{everyone ? 'شاهدها الكل' : `${seen.length}/${others.length}`}</span></>)}
-                  </button>
+                  </span>
+                  {reactionGroups.size > 0 && (
+                    <div className={`flex flex-wrap gap-1 mt-1 ${mine ? 'justify-end' : ''}`}>
+                      {[...reactionGroups.entries()].map(([emoji, ids]) => (
+                        <button key={emoji} onClick={e => { e.stopPropagation(); void react(m, emoji); }} className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 border ${ids.includes(currentUser.id) ? 'bg-violet-600/30 border-violet-500/50 text-white' : 'bg-gray-800 border-gray-700 text-gray-300'}`}>
+                          <span>{emoji}</span>{ids.length > 1 && <span>{ids.length}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {active && reactingTo === m.id && (
+                    <div className={`flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
+                      {QUICK_REACTIONS.map(em => (
+                        <button key={em} onClick={() => { void react(m, em); setReactingTo(null); setActiveMsgId(null); }} className="w-8 h-8 text-lg rounded-full hover:bg-gray-700 hover:scale-110 transition-transform">{em}</button>
+                      ))}
+                    </div>
+                  )}
+                  {active && (
+                    <div className={`flex flex-wrap items-center gap-1.5 mt-1 ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
+                      <button onClick={() => setReactingTo(p => (p === m.id ? null : m.id))} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Smile size={12} /> تفاعل</button>
+                      <button onClick={() => { setReplyingTo(m); setActiveMsgId(null); inputRef.current?.focus(); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Reply size={12} /> رد</button>
+                      {m.media && m.media.type !== 'voice' && (
+                        <button onClick={() => { void downloadFile(m.media!.url, m.media!.name || (m.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Download size={12} /> تحميل</button>
+                      )}
+                      {mine && <button onClick={() => setSeenFor(seenFor === m.id ? null : m.id)} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-cyan-300 text-xs flex items-center gap-1"><Eye size={12} /> من شاهدها</button>}
+                      {mine && <button onClick={() => void deleteMessage(m)} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-red-400 text-xs flex items-center gap-1"><Trash2 size={12} /> حذف</button>}
+                    </div>
+                  )}
                   {mine && seenFor === m.id && (
-                    <div className="mt-1 w-56 max-w-full p-2.5 rounded-2xl bg-gray-900 border border-white/10 text-right">
+                    <div className="mt-1 w-56 max-w-full p-2.5 rounded-2xl bg-gray-900 border border-white/10 text-right" onClick={e => e.stopPropagation()}>
                       <div className="text-[11px] font-semibold text-cyan-300 mb-1.5">شاهدها ({seen.length})</div>
                       {seen.length === 0 && <div className="text-[11px] text-gray-500">لم يشاهدها أحد بعد</div>}
                       {seen.map(id => (
@@ -1714,37 +1912,338 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     </div>
                   )}
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
 
-        <div className="px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
-          {error && <p className="text-xs text-red-400 pb-1.5 px-1">{error}</p>}
-          <div className="flex items-center gap-1.5">
-            <div className="relative shrink-0">
-              <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setEmojiOpen(o => !o)} className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-gray-300 hover:text-yellow-300" aria-label="إيموجي">
-                <Smile size={19} />
-              </button>
-              {emojiOpen && <EmojiPicker onPick={e => setText(t => t + e)} onClose={() => setEmojiOpen(false)} />}
+        {!recording && (
+          <div className="px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
+            <input ref={fileRef} type="file" onChange={handleFile} className="hidden" />
+            {error && <p className="text-xs text-red-400 pb-1.5 px-1">{error}</p>}
+            {replyingTo && (
+              <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl bg-gray-800 border-r-2 border-cyan-400 text-xs">
+                <div className="min-w-0 flex-1">
+                  <div className="text-cyan-300 font-medium">رد على {nameOf(replyingTo.senderId)}</div>
+                  <div className="truncate text-gray-400">{groupMsgPreview(replyingTo)}</div>
+                </div>
+                <button onClick={() => setReplyingTo(null)} className="p-1 text-gray-400 hover:text-white" aria-label="إلغاء الرد"><X size={16} /></button>
+              </div>
+            )}
+            {media && (
+              <div className="flex items-center gap-3 mb-2 p-2 rounded-xl bg-gray-800">
+                {media.type === 'image' && <img src={media.url} alt="" className="w-12 h-12 rounded-lg object-cover" />}
+                {media.type === 'video' && <div className="w-12 h-12 rounded-lg bg-black flex items-center justify-center"><Play size={18} className="text-white" fill="white" /></div>}
+                {media.type === 'file' && <div className="w-12 h-12 rounded-lg bg-gray-700 flex items-center justify-center"><FileText size={20} /></div>}
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-white truncate" dir="auto">{media.file.name}</div>
+                  <div className="text-[11px] text-gray-400">{formatBytes(media.file.size)}</div>
+                </div>
+                <button onClick={() => { if (media.url) URL.revokeObjectURL(media.url); setMedia(null); }} className="p-1.5 text-gray-400 hover:text-white" aria-label="إزالة"><X size={16} /></button>
+              </div>
+            )}
+            <AnimatePresence>
+              {toolsOpen && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-2 pb-2">
+                  <button onClick={() => { fileRef.current?.click(); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95"><Paperclip size={16} /> صورة / فيديو / ملف</button>
+                  <div className="relative">
+                    <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setEmojiOpen(o => !o)} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-yellow-300 active:scale-95" aria-label="إيموجي"><Smile size={16} /> إيموجي</button>
+                    {emojiOpen && <EmojiPicker onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} />}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div className="flex items-center gap-1.5">
+              <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setToolsOpen(o => !o)} className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${toolsOpen ? 'bg-violet-600 text-white rotate-45' : 'bg-gray-800 text-gray-300 hover:text-white'}`} aria-label="المزيد"><Plus size={20} /></button>
+              <input
+                ref={inputRef}
+                enterKeyHint="send"
+                autoComplete="off"
+                value={text}
+                onChange={e => setText(e.target.value)}
+                onFocus={() => setToolsOpen(false)}
+                placeholder="اكتب رسالة للمجموعة..."
+                className="flex-1 min-w-0 h-10 px-4 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && void sendMessage()}
+              />
+              {text.trim() || media ? (
+                <motion.button whileTap={{ scale: 0.9 }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => void sendMessage()} disabled={sending} aria-label="إرسال" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30 disabled:opacity-60">
+                  <Send size={18} className="text-white" />
+                </motion.button>
+              ) : (
+                <motion.button whileTap={{ scale: 0.9 }} onClick={() => setRecording(true)} aria-label="تسجيل صوتي" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30">
+                  <Mic size={18} className="text-white" />
+                </motion.button>
+              )}
             </div>
-            <input
-              ref={inputRef}
-              enterKeyHint="send"
-              autoComplete="off"
-              value={text}
-              onChange={e => setText(e.target.value)}
-              placeholder="اكتب رسالة للمجموعة..."
-              className="flex-1 min-w-0 h-10 px-4 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && void send()}
-            />
-            <motion.button whileTap={{ scale: 0.9 }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => void send()} disabled={!text.trim() || sending} aria-label="إرسال" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30 disabled:opacity-40">
-              <Send size={18} className="text-white" />
-            </motion.button>
           </div>
-        </div>
+        )}
+        {recording && (
+          <div className="px-3 py-2 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
+            <VoiceRecorder onSend={sendVoice} onCancel={() => setRecording(false)} />
+          </div>
+        )}
+        {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}
         {infoOpen && <GroupInfoSheet group={group} users={users} me={currentUser} reload={reload} onClose={() => setInfoOpen(false)} onLeft={() => { setInfoOpen(false); void reload(); onBack(); }} />}
       </div>
+    </div>
+  );
+}
+
+// ============ Notifications ============
+type NotifType = 'like' | 'comment' | 'reply' | 'follow' | 'group_add';
+interface AppNotification {
+  id: string; type: NotifType; actorId: string | null; postId: string | null; groupId: string | null;
+  snippet: string; createdAt: number; read: boolean;
+}
+type NotificationRow = {
+  id: string; type: NotifType; actor_id: string | null; post_id: string | null; group_id: string | null;
+  snippet: string; created_at: string; read_at: string | null;
+};
+function rowToNotification(r: NotificationRow): AppNotification {
+  return { id: r.id, type: r.type, actorId: r.actor_id, postId: r.post_id, groupId: r.group_id, snippet: r.snippet, createdAt: new Date(r.created_at).getTime(), read: r.read_at !== null };
+}
+async function loadNotifications(): Promise<AppNotification[]> {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id, type, actor_id, post_id, group_id, snippet, created_at, read_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  return ((data ?? []) as unknown as NotificationRow[]).map(rowToNotification);
+}
+
+type PrefKey = 'like' | 'comment' | 'follow' | 'group' | 'message' | 'group_message';
+type NotifPrefs = Partial<Record<PrefKey, { in_app?: boolean; push?: boolean }>>;
+const PREF_ROWS: { key: PrefKey; label: string; hint: string; inApp: boolean }[] = [
+  { key: 'like', label: 'الإعجابات', hint: 'عندما يعجب أحد بمنشورك', inApp: true },
+  { key: 'comment', label: 'التعليقات والردود', hint: 'تعليق على منشورك أو رد على تعليقك', inApp: true },
+  { key: 'follow', label: 'المتابعون الجدد', hint: 'عندما يتابعك شخص', inApp: true },
+  { key: 'group', label: 'دعوات المجموعات', hint: 'عندما يضيفك أحد إلى مجموعة', inApp: true },
+  { key: 'message', label: 'الرسائل الخاصة', hint: 'رسائل المحادثات العادية', inApp: false },
+  { key: 'group_message', label: 'رسائل المجموعات', hint: 'رسائل جديدة في مجموعاتك', inApp: false },
+];
+
+function timeAgo(ts: number): string {
+  const sec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (sec < 60) return 'الآن';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `منذ ${min} د`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `منذ ${hr} س`;
+  const day = Math.floor(hr / 24);
+  return day < 7 ? `منذ ${day} يوم` : new Date(ts).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
+}
+
+function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={() => onChange(!on)}
+      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${on ? 'bg-gradient-to-r from-violet-600 to-cyan-500' : 'bg-gray-700'}`}
+    >
+      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'right-0.5' : 'right-[1.375rem]'}`} />
+    </button>
+  );
+}
+
+function NotificationsTab({ currentUser, users, notifications, setNotifications, onOpenProfile, onOpenMine, onOpenGroup }: {
+  currentUser: User; users: User[];
+  notifications: AppNotification[];
+  setNotifications: React.Dispatch<React.SetStateAction<AppNotification[]>>;
+  onOpenProfile: (id: string) => void;
+  onOpenMine: () => void;
+  onOpenGroup: (id: string) => void;
+}) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [prefs, setPrefs] = useState<NotifPrefs>({});
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [saveNote, setSaveNote] = useState('');
+  const unread = notifications.filter(n => !n.read).length;
+
+  useEffect(() => {
+    let cancelled = false;
+    void supabase.from('notification_prefs').select('prefs').eq('user_id', currentUser.id).maybeSingle().then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) console.error(error);
+      setPrefs(((data?.prefs ?? {}) as NotifPrefs));
+      setPrefsLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [currentUser.id]);
+
+  const markAllRead = async () => {
+    if (unread === 0) return;
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('user_id', currentUser.id).is('read_at', null);
+    if (error) console.error(error);
+  };
+  const markOne = (id: string) => {
+    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
+    void supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', id).is('read_at', null).then(({ error }) => { if (error) console.error(error); });
+  };
+  const clearAll = async () => {
+    setNotifications([]);
+    const { error } = await supabase.from('notifications').delete().eq('user_id', currentUser.id);
+    if (error) console.error(error);
+  };
+
+  const setPref = async (key: PrefKey, field: 'in_app' | 'push', value: boolean) => {
+    const next: NotifPrefs = { ...prefs, [key]: { ...prefs[key], [field]: value } };
+    setPrefs(next);
+    const { error } = await supabase.from('notification_prefs').upsert({ user_id: currentUser.id, prefs: next, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    setSaveNote(error ? 'تعذّر حفظ الإعداد' : 'تم الحفظ');
+    window.setTimeout(() => setSaveNote(''), 1400);
+    if (error) console.error(error);
+  };
+  const isOn = (key: PrefKey, field: 'in_app' | 'push') => prefs[key]?.[field] !== false;
+
+  const open = (n: AppNotification) => {
+    markOne(n.id);
+    if (n.type === 'group_add' && n.groupId) onOpenGroup(n.groupId);
+    else if (n.type === 'follow' && n.actorId) onOpenProfile(n.actorId);
+    else onOpenMine();
+  };
+
+  const meta: Record<NotifType, { icon: React.ReactNode; tint: string; text: (n: AppNotification) => string }> = {
+    like: { icon: <Heart size={12} fill="currentColor" />, tint: 'bg-rose-500', text: () => 'أعجب بمنشورك' },
+    comment: { icon: <MessageCircle size={12} />, tint: 'bg-cyan-500', text: n => `علّق على منشورك${n.snippet ? `: ${n.snippet}` : ''}` },
+    reply: { icon: <Reply size={12} />, tint: 'bg-violet-500', text: n => `ردّ على تعليقك${n.snippet ? `: ${n.snippet}` : ''}` },
+    follow: { icon: <User size={12} />, tint: 'bg-emerald-500', text: () => 'بدأ بمتابعتك' },
+    group_add: { icon: <Users size={12} />, tint: 'bg-amber-500', text: n => `أضافك إلى مجموعة ${n.snippet}` },
+  };
+
+  const fresh = notifications.filter(n => !n.read);
+  const older = notifications.filter(n => n.read);
+  const renderItem = (n: AppNotification, i: number) => {
+    const actor = n.actorId ? users.find(u => u.id === n.actorId) : undefined;
+    const m = meta[n.type];
+    return (
+      <motion.button
+        key={n.id}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: Math.min(i, 8) * 0.03 }}
+        onClick={() => open(n)}
+        className={`w-full flex items-center gap-3 p-3 rounded-2xl border text-right transition-colors ${n.read ? 'bg-gray-900/60 border-white/5 hover:border-white/10' : 'bg-violet-500/10 border-violet-400/25 hover:border-violet-400/40'}`}
+      >
+        <div className="relative shrink-0">
+          <Avatar src={actor?.avatar ?? ''} name={actor?.displayName ?? '؟'} size="md" />
+          <span className={`absolute -bottom-1 -left-1 w-5 h-5 rounded-full ${m.tint} text-white flex items-center justify-center ring-2 ring-gray-950`}>{m.icon}</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-gray-200 leading-snug line-clamp-2" dir="auto"><span className="font-semibold text-white">{actor?.displayName ?? 'مستخدم'}</span> {m.text(n)}</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">{timeAgo(n.createdAt)}</p>
+        </div>
+        {!n.read && <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 shrink-0" />}
+      </motion.button>
+    );
+  };
+
+  return (
+    <div className="px-4 py-4">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2"><Bell size={20} className="text-violet-300" /> الإشعارات</h2>
+        <div className="flex items-center gap-1.5">
+          {unread > 0 && <button onClick={() => void markAllRead()} className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-gray-300 hover:text-white">تحديد الكل كمقروء</button>}
+          <button onClick={() => setSettingsOpen(o => !o)} aria-label="إعدادات الإشعارات" className={`w-9 h-9 rounded-full flex items-center justify-center border transition-colors ${settingsOpen ? 'bg-violet-500/15 border-violet-400/30 text-violet-200' : 'bg-white/5 border-white/10 text-gray-300 hover:text-white'}`}>
+            <Settings size={17} />
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {settingsOpen && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden mb-4">
+            <div className="rounded-2xl bg-gray-900/70 border border-white/10 p-3">
+              <div className="flex items-center justify-between px-1 pb-2 text-[11px] text-gray-500">
+                <span>اختر ما يصلك وما لا يصلك</span>
+                <span className="flex items-center gap-5 pl-1"><span>في التطبيق</span><span>إشعار الهاتف</span></span>
+              </div>
+              {!prefsLoaded && <p className="text-xs text-gray-500 py-3 text-center">جارٍ التحميل...</p>}
+              {prefsLoaded && PREF_ROWS.map(row => (
+                <div key={row.key} className="flex items-center gap-3 py-2.5 border-t border-white/5 first:border-t-0">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-white">{row.label}</div>
+                    <div className="text-[11px] text-gray-500">{row.hint}</div>
+                  </div>
+                  <div className="flex items-center gap-4 shrink-0">
+                    {row.inApp ? <Toggle on={isOn(row.key, 'in_app')} onChange={v => void setPref(row.key, 'in_app', v)} label={`${row.label} داخل التطبيق`} /> : <span className="w-11" />}
+                    <Toggle on={isOn(row.key, 'push')} onChange={v => void setPref(row.key, 'push', v)} label={`${row.label} على الهاتف`} />
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-2 text-[11px] text-gray-500">
+                <span className="flex items-center gap-1"><BellOff size={12} /> لتصلك إشعارات الهاتف اسمح بالإشعارات في المتصفح</span>
+                {saveNote && <span className="text-cyan-300">{saveNote}</span>}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {notifications.length === 0 ? (
+        <div className="text-center py-14">
+          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-violet-600/20 to-cyan-500/10 border border-white/10 flex items-center justify-center"><Bell size={32} className="text-violet-300" /></div>
+          <p className="text-gray-300 mb-1">لا توجد إشعارات بعد</p>
+          <p className="text-gray-500 text-sm">الإعجابات والتعليقات والمتابعون الجدد ستظهر هنا</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {fresh.length > 0 && <p className="text-xs font-semibold text-violet-300 px-1">جديد</p>}
+          {fresh.map(renderItem)}
+          {older.length > 0 && <p className="text-xs font-semibold text-gray-500 px-1 pt-2">سابقاً</p>}
+          {older.map((n, i) => renderItem(n, i + fresh.length))}
+          <button onClick={() => void clearAll()} className="w-full mt-2 py-2.5 rounded-full text-xs text-gray-500 hover:text-red-400">مسح كل الإشعارات</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ Stories strip (design only, not wired up yet) ============
+function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }) {
+  const [hint, setHint] = useState(false);
+  const people = users.filter(u => currentUser.following.includes(u.id)).slice(0, 14);
+  const soon = () => { setHint(true); window.setTimeout(() => setHint(false), 1600); };
+  return (
+    <div className="relative">
+      <div className="flex items-center justify-between px-1 mb-2">
+        <h3 className="text-sm font-semibold text-gray-200">القصص</h3>
+        <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-200 text-[10px] font-semibold ring-1 ring-violet-400/25">قريباً</span>
+      </div>
+      <div className="flex gap-3.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+        <button onClick={soon} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
+          <div className="relative">
+            <div className="w-[62px] h-[62px] rounded-full p-[2px] border-2 border-dashed border-violet-400/40">
+              <div className="w-full h-full rounded-full overflow-hidden"><Avatar src={currentUser.avatar} name={currentUser.displayName} size="lg" /></div>
+            </div>
+            <span className="absolute -bottom-0.5 -left-0.5 w-6 h-6 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 text-white flex items-center justify-center ring-2 ring-gray-950 shadow-md"><Plus size={14} /></span>
+          </div>
+          <span className="text-[11px] text-gray-300 truncate w-full text-center">قصتك</span>
+        </button>
+        {people.map(u => (
+          <button key={u.id} onClick={soon} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
+            <div className="w-[62px] h-[62px] rounded-full p-[2.5px] bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400">
+              <div className="w-full h-full rounded-full bg-gray-950 p-[2px]"><div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"><Avatar src={u.avatar} name={u.displayName} size="lg" /></div></div>
+            </div>
+            <span className="text-[11px] text-gray-400 truncate w-full text-center">{u.displayName}</span>
+          </button>
+        ))}
+        {people.length === 0 && [0, 1, 2, 3].map(i => (
+          <div key={i} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] opacity-60">
+            <div className="w-[62px] h-[62px] rounded-full border-2 border-dashed border-white/15 bg-white/[0.03]" />
+            <span className="h-2 w-10 rounded-full bg-white/10" />
+          </div>
+        ))}
+      </div>
+      <AnimatePresence>
+        {hint && (
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute left-1/2 -translate-x-1/2 top-7 px-3.5 py-1.5 rounded-full bg-gray-800 border border-white/10 text-xs text-white shadow-lg">القصص قريباً ✨</motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1976,7 +2475,7 @@ export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'feed' | 'reels' | 'videos' | 'search' | 'create' | 'profile' | 'settings' | 'messages'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'reels' | 'videos' | 'search' | 'create' | 'profile' | 'settings' | 'messages' | 'notifications'>('feed');
   const [showLogin, setShowLogin] = useState(true);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
 
@@ -2118,7 +2617,7 @@ export default function App() {
   const conversationsRef = useRef<Conversation[]>([]);
   conversationsRef.current = conversations;
 
-  // Groups: load, then apply new messages, read receipts and membership changes live.
+  // Groups: load, then apply new messages, reactions, read receipts and membership changes live.
   const reloadGroups = async () => {
     if (!currentUserId) return;
     try {
@@ -2136,25 +2635,42 @@ export default function App() {
     const soon = () => { window.clearTimeout(timer); timer = window.setTimeout(() => void reloadGroupsRef.current(), 300); };
     const channel = supabase
       .channel('kan-groups')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, payload => {
-        const row = payload.new as { id: string; group_id: string; sender_id: string; text: string; is_system: boolean; created_at: string };
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, async payload => {
+        const row = payload.new as unknown as GroupMsgRow;
         if (row.sender_id !== currentUserId && !row.is_system) playSound('receive');
+        const urls = row.media_path ? await signPaths([row.media_path]) : new Map<string, string>();
+        const msg = groupRowToMessage(row, urls);
         setGroups(prev => {
           const g = prev.find(x => x.id === row.group_id);
           if (!g) { soon(); return prev; }
-          if (g.messages.some(m => m.id === row.id)) return prev;
-          const at = new Date(row.created_at).getTime();
-          return prev.map(x => x.id !== row.group_id ? x : {
-            ...x,
-            lastActivity: at,
-            messages: [...x.messages, { id: row.id, senderId: row.sender_id, text: row.text, timestamp: at, isSystem: row.is_system, readBy: [] }],
-          });
+          if (g.messages.some(m => m.id === msg.id)) return prev;
+          return prev.map(x => x.id !== row.group_id ? x : { ...x, lastActivity: msg.timestamp, messages: [...x.messages, msg] });
         });
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'group_messages' }, payload => {
+        const old = payload.old as { id?: string };
+        if (!old.id) return;
+        setGroups(prev => prev.map(g => g.messages.some(m => m.id === old.id) ? { ...g, messages: g.messages.filter(m => m.id !== old.id) } : g));
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_message_reads' }, payload => {
         const row = payload.new as { message_id: string; user_id: string };
         setGroups(prev => prev.map(g => g.messages.some(m => m.id === row.message_id)
           ? { ...g, messages: g.messages.map(m => m.id === row.message_id && !m.readBy.includes(row.user_id) ? { ...m, readBy: [...m.readBy, row.user_id] } : m) }
+          : g));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_message_reactions' }, payload => {
+        const row = (payload.eventType === 'DELETE' ? payload.old : payload.new) as { message_id?: string; user_id?: string; emoji?: string };
+        if (!row.message_id || !row.user_id) return;
+        const { message_id: messageId, user_id: userId } = row;
+        const emoji = payload.eventType === 'DELETE' ? null : row.emoji ?? null;
+        setGroups(prev => prev.map(g => g.messages.some(m => m.id === messageId)
+          ? {
+              ...g,
+              messages: g.messages.map(m => m.id !== messageId ? m : {
+                ...m,
+                reactions: [...m.reactions.filter(r => r.userId !== userId), ...(emoji ? [{ userId, emoji }] : [])],
+              }),
+            }
           : g));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_group_members' }, soon)
@@ -2168,6 +2684,25 @@ export default function App() {
       void supabase.removeChannel(channel);
     };
   }, [currentUserId]);
+
+  // Notifications: likes, comments, follows, group invites. Live, and the phone gets a push for the ones you left on.
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  useEffect(() => {
+    if (!currentUserId) { setNotifications([]); return; }
+    let cancelled = false;
+    void loadNotifications().then(list => { if (!cancelled) setNotifications(list); }).catch(e => console.error(e));
+    const channel = supabase
+      .channel('kan-notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUserId}` }, payload => {
+        const n = rowToNotification(payload.new as unknown as NotificationRow);
+        playSound('receive');
+        setNotifications(prev => (prev.some(x => x.id === n.id) ? prev : [n, ...prev].slice(0, 100)));
+      })
+      .subscribe();
+    return () => { cancelled = true; void supabase.removeChannel(channel); };
+  }, [currentUserId]);
+  const notifUnread = notifications.filter(n => !n.read).length;
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
 
   const refreshConversations = async () => {
     if (!currentUserId) return;
@@ -2272,7 +2807,6 @@ export default function App() {
 
   const [viewedUserId, setViewedUserId] = useState<string | null>(null);
   const goTab = (tab: typeof activeTab) => {
-    setMenuOpen(false);
     setViewedUserId(null);
     setActiveTab(tab);
   };
@@ -2376,6 +2910,7 @@ export default function App() {
                   className="flex items-center gap-0.5 p-1 ml-2 rounded-full bg-gray-900/80 backdrop-blur-md border border-white/10 shadow-lg shadow-black/30"
                 >
                   {([
+                    { tab: 'notifications' as const, label: 'الإشعارات', Icon: Bell, badge: notifUnread },
                     { tab: 'messages' as const, label: 'الرسائل', Icon: MessageSquare, badge: unreadCount },
                     { tab: 'search' as const, label: 'بحث', Icon: Search, badge: 0 },
                     { tab: 'settings' as const, label: 'الإعدادات', Icon: Settings, badge: 0 },
@@ -2386,11 +2921,11 @@ export default function App() {
                         key={tab}
                         onClick={() => goTab(tab)}
                         aria-label={label}
-                        className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-colors active:scale-90 ${on ? 'bg-violet-500/20 text-violet-200 ring-1 ring-violet-400/30' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+                        className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 ${on ? 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-md shadow-violet-500/30' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
                       >
                         <Icon size={18} />
                         {badge > 0 && (
-                          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-rose-500 rounded-full text-[10px] flex items-center justify-center font-bold text-white">{badge > 9 ? '9+' : badge}</span>
+                          <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 bg-rose-500 ring-2 ring-gray-950 rounded-full text-[10px] flex items-center justify-center font-bold text-white">{badge > 9 ? '9+' : badge}</span>
                         )}
                       </button>
                     );
@@ -2405,7 +2940,7 @@ export default function App() {
               className={`relative w-10 h-10 rounded-full flex items-center justify-center border transition-all active:scale-90 ${menuOpen ? 'bg-violet-500/15 border-violet-400/30 text-violet-200' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white'}`}
             >
               {menuOpen ? <X size={19} /> : <Menu size={19} />}
-              {!menuOpen && unreadCount > 0 && <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-gray-950" />}
+              {!menuOpen && unreadCount + notifUnread > 0 && <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-gray-950" />}
             </button>
           </div>
         </div>
@@ -2482,6 +3017,19 @@ export default function App() {
               <ProfileTab currentUser={currentUser} users={users} posts={posts} setUsers={setUsers} setPosts={setPosts} onOpenProfile={openProfile} onLoadPage={loadPostsPage} />
             </motion.div>
           )}
+          {!viewedUserId && activeTab === 'notifications' && (
+            <motion.div key="notifications" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <NotificationsTab
+                currentUser={currentUser}
+                users={users}
+                notifications={notifications}
+                setNotifications={setNotifications}
+                onOpenProfile={openProfile}
+                onOpenMine={() => goTab('profile')}
+                onOpenGroup={id => { setOpenGroupId(id); goTab('messages'); }}
+              />
+            </motion.div>
+          )}
           {!viewedUserId && activeTab === 'settings' && (
             <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <SettingsTab currentUser={currentUser} setUsers={setUsers} />
@@ -2497,6 +3045,8 @@ export default function App() {
                 groups={groups}
                 setGroups={setGroups}
                 reloadGroups={reloadGroups}
+                openGroupId={openGroupId}
+                onGroupOpened={() => setOpenGroupId(null)}
                 selectedChat={selectedChat}
                 setSelectedChat={setSelectedChat}
               />
@@ -2871,6 +3421,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
           <RefreshCw size={14} /> {newCount === 1 ? 'منشور جديد' : `${newCount} منشورات جديدة`} · اضغط للتحديث
         </button>
       )}
+      <StoriesBar users={users} currentUser={currentUser} />
       <div className="flex items-center gap-2">
         <div className="flex flex-1 gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
           {[{ key: 'all' as const, label: 'الكل' }, { key: 'following' as const, label: 'المتابَعون' }, { key: 'files' as const, label: 'الملفات' }].map(t => (
@@ -4200,7 +4751,7 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
     <div className="px-4 py-4">
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-4">
         <div className="flex items-start gap-4">
-          <Avatar src={currentUser.avatar} name={currentUser.displayName} size="xl" />
+          <Avatar src={currentUser.avatar} name={currentUser.displayName} size="xl" zoom />
           <div className="flex-1">
             <h2 className="text-xl font-bold text-white">{currentUser.displayName}</h2>
             <p className="text-gray-500 text-sm">@{currentUser.username}</p>
@@ -4223,12 +4774,12 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
       </div>
       <div className="flex gap-1 mb-4 bg-gray-900/70 rounded-2xl p-1 border border-white/5">
         {[{ key: 'posts' as const, label: 'منشوراتي', Icon: FileText, n: myPosts.length }, { key: 'likes' as const, label: 'إعجاباتي', Icon: Heart, n: likedPosts.length }, { key: 'bookmarks' as const, label: 'محفوظاتي', Icon: Bookmark, n: bookmarkedPosts.length }].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`relative flex-1 min-w-0 py-2 rounded-xl text-sm font-medium transition-colors ${tab === t.key ? 'text-violet-100' : 'text-gray-500 hover:text-gray-300'}`}>
+          <button key={t.key} onClick={() => setTab(t.key)} className={`relative flex-1 basis-0 px-1 py-2 rounded-xl text-sm font-medium transition-colors ${tab === t.key ? 'text-violet-100' : 'text-gray-500 hover:text-gray-300'}`}>
             {tab === t.key && <motion.span layoutId="profile-tab-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} className="absolute inset-0 rounded-xl bg-violet-500/15 ring-1 ring-violet-400/25" />}
-            <span className="relative flex items-center justify-center gap-1.5">
-              <t.Icon size={15} />
-              <span className="truncate">{t.label}</span>
-              {t.n > 0 && <span className="text-[10px] tabular-nums text-gray-500">{t.n}</span>}
+            <span className="relative flex items-center justify-center gap-1.5 whitespace-nowrap text-[13px] min-[400px]:text-sm">
+              <t.Icon size={15} className="hidden min-[380px]:block shrink-0" />
+              <span>{t.label}</span>
+              {t.n > 0 && <span className="hidden min-[420px]:inline text-[10px] tabular-nums text-gray-500">{t.n}</span>}
             </span>
           </button>
         ))}
@@ -4350,7 +4901,7 @@ function UserProfile({ userId, currentUser, users, posts, setUsers, setPosts, on
       {backButton}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-4">
         <div className="flex items-start gap-4">
-          <Avatar src={user.avatar} name={user.displayName} size="xl" />
+          <Avatar src={user.avatar} name={user.displayName} size="xl" zoom />
           <div className="flex-1 min-w-0">
             <h2 className="text-xl font-bold text-white">{user.displayName}</h2>
             <p className="text-gray-500 text-sm">
@@ -4656,13 +5207,15 @@ function SettingsTab({ currentUser, setUsers }: {
 }
 
 // ============ Messages Tab ============
-function MessagesTab({ currentUser, users, conversations, setConversations, groups, setGroups, reloadGroups, selectedChat, setSelectedChat }: {
+function MessagesTab({ currentUser, users, conversations, setConversations, groups, setGroups, reloadGroups, openGroupId, onGroupOpened, selectedChat, setSelectedChat }: {
   currentUser: User; users: User[];
   conversations: Conversation[];
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
   groups: Group[];
   setGroups: React.Dispatch<React.SetStateAction<Group[]>>;
   reloadGroups: () => Promise<void>;
+  openGroupId: string | null;
+  onGroupOpened: () => void;
   selectedChat: string | null;
   setSelectedChat: (id: string | null) => void;
 }) {
@@ -4672,6 +5225,13 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
   const [section, setSection] = useState<'direct' | 'groups'>('direct');
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   useBackLayer(selectedGroup !== null, () => setSelectedGroup(null));
+  useEffect(() => {
+    if (openGroupId && groups.some(g => g.id === openGroupId)) {
+      setSection('groups');
+      setSelectedGroup(openGroupId);
+      onGroupOpened();
+    }
+  }, [openGroupId, groups]); // eslint-disable-line react-hooks/exhaustive-deps
   const [creatingGroup, setCreatingGroup] = useState(false);
   const myGroups = groups.slice().sort((a, b) => b.lastActivity - a.lastActivity);
   const directUnread = myConversations.reduce((n, c) => n + c.messages.filter(m => m.senderId !== currentUser.id && !m.read).length, 0);
@@ -4777,7 +5337,7 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
                       {last && <span className="text-xs text-gray-500">{formatTime(last.timestamp)}</span>}
                     </div>
                     <p className={`text-sm truncate mt-0.5 ${unread > 0 ? 'text-white font-medium' : 'text-gray-500'}`}>
-                      {last ? (last.isSystem ? `${lastName} ${last.text}` : `${lastName}: ${last.text}`) : `${g.members.length} عضو`}
+                      {last ? (last.isSystem ? `${lastName} ${last.text}` : `${lastName}: ${groupMsgPreview(last)}`) : `${g.members.length} عضو`}
                     </p>
                   </div>
                 </motion.button>
