@@ -9,7 +9,7 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -683,6 +683,9 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
   const [scrubbing, setScrubbing] = useState(false);
   const [fs, setFs] = useState(false);
   const [flash, setFlash] = useState<{ side: 'back' | 'fwd'; n: number } | null>(null);
+  const [boost, setBoost] = useState(false);
+  const holdTimer = useRef<number | undefined>(undefined);
+  const heldRef = useRef(false);
 
   const poke = () => {
     setShowUi(true);
@@ -695,7 +698,7 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
     return () => window.clearTimeout(hideTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, scrubbing, speedMenu]);
-  useEffect(() => () => { window.clearTimeout(tapTimer.current); window.clearTimeout(flashTimer.current); }, []);
+  useEffect(() => () => { window.clearTimeout(tapTimer.current); window.clearTimeout(flashTimer.current); window.clearTimeout(holdTimer.current); }, []);
   // Scrolling the video out of view stops it (feed, profile, lists).
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -740,8 +743,23 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
     flashTimer.current = window.setTimeout(() => setFlash(null), 650);
   };
   // One tap: show the controls / pause. Double tap on a side: skip 10 seconds.
+  const startHold = (e: React.PointerEvent) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    window.clearTimeout(holdTimer.current);
+    holdTimer.current = window.setTimeout(() => {
+      const v = videoRef.current;
+      if (v && !v.paused) { heldRef.current = true; v.playbackRate = 2; setBoost(true); }
+    }, 350);
+  };
+  const endHold = () => {
+    window.clearTimeout(holdTimer.current);
+    if (videoRef.current && heldRef.current) videoRef.current.playbackRate = speed;
+    setBoost(false);
+    if (heldRef.current) window.setTimeout(() => { heldRef.current = false; }, 80); // swallow the click that follows the release
+  };
   const onSurfaceTap = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (heldRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
     const now = Date.now();
@@ -813,17 +831,30 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
       />
 
       {/* Tap surface */}
-      <div className="absolute inset-0 z-10" onClick={onSurfaceTap} />
+      <div
+        className="absolute inset-0 z-10 [-webkit-touch-callout:none]"
+        onClick={onSurfaceTap}
+        onPointerDown={startHold}
+        onPointerUp={endHold}
+        onPointerLeave={endHold}
+        onPointerCancel={endHold}
+        onContextMenu={e => e.preventDefault()}
+      />
 
-      {/* Skip ripple */}
+      {/* Skip: plain white symbol */}
       {flash && (
-        <div key={flash.n} className={`absolute top-0 bottom-0 z-20 w-1/3 flex items-center justify-center pointer-events-none animate-pulse ${flash.side === 'back' ? 'left-0 rounded-r-[100%] bg-gradient-to-l from-violet-600/45 to-transparent' : 'right-0 rounded-l-[100%] bg-gradient-to-r from-cyan-500/45 to-transparent'}`}>
+        <div key={flash.n} className={`absolute top-0 bottom-0 z-20 w-1/3 flex items-center justify-center pointer-events-none bg-white/10 ${flash.side === 'back' ? 'left-0 rounded-r-[100%]' : 'right-0 rounded-l-[100%]'}`}>
           <div className="flex flex-col items-center text-white text-xs font-semibold">
-            <span className="w-11 h-11 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-violet-500/40 mb-1">
-              <span className="text-lg leading-none">{flash.side === 'back' ? '⏪' : '⏩'}</span>
-            </span>
+            {flash.side === 'back' ? <ChevronsLeft size={30} /> : <ChevronsRight size={30} />}
             10 ث
           </div>
+        </div>
+      )}
+
+      {/* Press and hold: 2x */}
+      {boost && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full bg-black/60 backdrop-blur text-white text-xs font-semibold flex items-center gap-1 pointer-events-none">
+          2x <ChevronsRight size={14} />
         </div>
       )}
 
@@ -886,7 +917,45 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
 }
 
 // ============ Full-screen image viewer ============
+// ============ Back button: closes the top screen/sheet instead of leaving the app ============
+interface BackLayer { id: number; close: () => void; popped: boolean }
+const backStack: BackLayer[] = [];
+let backIgnore = 0;
+let backSeq = 0;
+let backListening = false;
+
+function ensureBackListener() {
+  if (backListening) return;
+  backListening = true;
+  window.addEventListener('popstate', () => {
+    if (backIgnore > 0) { backIgnore--; return; } // that one was our own history.back()
+    const top = backStack.pop();
+    if (top) { top.popped = true; top.close(); }
+  });
+}
+
+// While `active`, one history entry stands for this layer: the phone's back button pops it and runs onClose.
+function useBackLayer(active: boolean, onClose: () => void) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    if (!active) return;
+    ensureBackListener();
+    const layer: BackLayer = { id: ++backSeq, close: () => closeRef.current(), popped: false };
+    backStack.push(layer);
+    window.history.pushState({ kanLayer: layer.id }, '');
+    return () => {
+      if (layer.popped) return; // closed by the back button, its entry is already gone
+      const i = backStack.indexOf(layer);
+      if (i >= 0) backStack.splice(i, 1);
+      backIgnore++;
+      window.history.back();
+    };
+  }, [active]);
+}
+
 function ImageViewer({ src, name, onClose }: { src: string; name?: string; onClose: () => void }) {
+  useBackLayer(true, onClose);
   const [zoomed, setZoomed] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -942,6 +1011,7 @@ function KanAIModal({ messages, me, other, onClose, onUseReply }: {
   onClose: () => void;
   onUseReply: (text: string) => void;
 }) {
+  useBackLayer(true, onClose);
   const [query, setQuery] = useState('');
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
@@ -1118,6 +1188,7 @@ function postShareText(post: Post, author: User): string {
 function ShareSheet({ post, author, users, currentUser, onClose }: {
   post: Post; author: User; users: User[]; currentUser: User; onClose: () => void;
 }) {
+  useBackLayer(true, onClose);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string[]>([]);
@@ -1367,6 +1438,7 @@ function MemberPicker({ users, exclude, selected, onToggle, me }: {
 }
 
 function SheetShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useBackLayer(true, onClose);
   return createPortal(
     <div dir="rtl" className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center" onClick={onClose}>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
@@ -2200,12 +2272,25 @@ export default function App() {
 
   const [viewedUserId, setViewedUserId] = useState<string | null>(null);
   const goTab = (tab: typeof activeTab) => {
+    setMenuOpen(false);
     setViewedUserId(null);
     setActiveTab(tab);
   };
   // Home button: already on the feed -> one tap scrolls to the top, a quick second tap refreshes it.
   const lastHomeTap = useRef(0);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: PointerEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false); };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [menuOpen]);
+  // Phone back button: profile -> chat -> tab -> home, like any app.
+  useBackLayer(currentUserId !== null && viewedUserId !== null, () => setViewedUserId(null));
+  useBackLayer(currentUserId !== null && selectedChat !== null, () => setSelectedChat(null));
+  useBackLayer(currentUserId !== null && activeTab !== 'feed', () => setActiveTab('feed'));
   const onHomeTap = () => {
     if (activeTab !== 'feed' || viewedUserId) { goTab('feed'); return; }
     const now = Date.now();
@@ -2279,33 +2364,49 @@ export default function App() {
               KAN
             </h1>
           </div>
-          <div className="flex items-center gap-1.5">
-            {(() => {
-              const btn = (active: boolean) =>
-                `relative w-10 h-10 rounded-full flex items-center justify-center border active:scale-90 transition-all ${
-                  active
-                    ? 'bg-gradient-to-br from-violet-600 to-cyan-500 border-transparent text-white shadow-lg shadow-violet-500/30'
-                    : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white hover:border-violet-400/40'
-                }`;
-              return (
-                <>
-                  <button onClick={() => goTab('messages')} className={btn(activeTab === 'messages' && !viewedUserId)} aria-label="الرسائل">
-                    <MessageSquare size={19} />
-                    {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-500 ring-2 ring-gray-950 rounded-full text-[11px] flex items-center justify-center font-bold text-white">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </span>
-                    )}
-                  </button>
-                  <button onClick={() => goTab('search')} className={btn(activeTab === 'search' && !viewedUserId)} aria-label="بحث">
-                    <Search size={19} />
-                  </button>
-                  <button onClick={() => goTab('settings')} className={btn(activeTab === 'settings' && !viewedUserId)} aria-label="الإعدادات">
-                    <Settings size={19} />
-                  </button>
-                </>
-              );
-            })()}
+          <div ref={menuRef} className="relative flex items-center">
+            <AnimatePresence initial={false}>
+              {menuOpen && (
+                <motion.div
+                  key="bar"
+                  initial={{ opacity: 0, x: 14, scale: 0.94 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 14, scale: 0.94 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="flex items-center gap-0.5 p-1 ml-2 rounded-full bg-gray-900/80 backdrop-blur-md border border-white/10 shadow-lg shadow-black/30"
+                >
+                  {([
+                    { tab: 'messages' as const, label: 'الرسائل', Icon: MessageSquare, badge: unreadCount },
+                    { tab: 'search' as const, label: 'بحث', Icon: Search, badge: 0 },
+                    { tab: 'settings' as const, label: 'الإعدادات', Icon: Settings, badge: 0 },
+                  ]).map(({ tab, label, Icon, badge }) => {
+                    const on = activeTab === tab && !viewedUserId;
+                    return (
+                      <button
+                        key={tab}
+                        onClick={() => goTab(tab)}
+                        aria-label={label}
+                        className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-colors active:scale-90 ${on ? 'bg-violet-500/20 text-violet-200 ring-1 ring-violet-400/30' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+                      >
+                        <Icon size={18} />
+                        {badge > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-rose-500 rounded-full text-[10px] flex items-center justify-center font-bold text-white">{badge > 9 ? '9+' : badge}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <button
+              onClick={() => setMenuOpen(o => !o)}
+              aria-label={menuOpen ? 'إغلاق القائمة' : 'القائمة'}
+              aria-expanded={menuOpen}
+              className={`relative w-10 h-10 rounded-full flex items-center justify-center border transition-all active:scale-90 ${menuOpen ? 'bg-violet-500/15 border-violet-400/30 text-violet-200' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white'}`}
+            >
+              {menuOpen ? <X size={19} /> : <Menu size={19} />}
+              {!menuOpen && unreadCount > 0 && <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-gray-950" />}
+            </button>
           </div>
         </div>
       </header>
@@ -3323,6 +3424,7 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
   onOpenProfile: (id: string) => void;
   onClose: () => void;
 }) {
+  useBackLayer(true, onClose);
   const [text, setText] = useState('');
   const me = currentUser.id;
   const mutate = (fn: (p: Post) => Post) => setPosts(prev => prev.map(p => (p.id === post.id ? fn(p) : p)));
@@ -3645,6 +3747,7 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const [results, setResults] = useState<Post[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [watchId, setWatchId] = useState<string | null>(null);
+  useBackLayer(watchId !== null, () => setWatchId(null));
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
@@ -4118,10 +4221,15 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
           </div>
         </div>
       </div>
-      <div className="flex gap-1 mb-4 bg-gray-900 rounded-xl p-1 border border-gray-800">
-        {[{ key: 'posts' as const, label: 'منشوراتي' }, { key: 'likes' as const, label: 'إعجاباتي' }, { key: 'bookmarks' as const, label: 'محفوظاتي' }].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
-            {t.label}
+      <div className="flex gap-1 mb-4 bg-gray-900/70 rounded-2xl p-1 border border-white/5">
+        {[{ key: 'posts' as const, label: 'منشوراتي', Icon: FileText, n: myPosts.length }, { key: 'likes' as const, label: 'إعجاباتي', Icon: Heart, n: likedPosts.length }, { key: 'bookmarks' as const, label: 'محفوظاتي', Icon: Bookmark, n: bookmarkedPosts.length }].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)} className={`relative flex-1 min-w-0 py-2 rounded-xl text-sm font-medium transition-colors ${tab === t.key ? 'text-violet-100' : 'text-gray-500 hover:text-gray-300'}`}>
+            {tab === t.key && <motion.span layoutId="profile-tab-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} className="absolute inset-0 rounded-xl bg-violet-500/15 ring-1 ring-violet-400/25" />}
+            <span className="relative flex items-center justify-center gap-1.5">
+              <t.Icon size={15} />
+              <span className="truncate">{t.label}</span>
+              {t.n > 0 && <span className="text-[10px] tabular-nums text-gray-500">{t.n}</span>}
+            </span>
           </button>
         ))}
       </div>
@@ -4170,6 +4278,7 @@ function UserListModal({ title, userIds, users, onOpenProfile, onClose }: {
   onOpenProfile: (id: string) => void;
   onClose: () => void;
 }) {
+  useBackLayer(true, onClose);
   const list = userIds.map(id => users.find(u => u.id === id)).filter((u): u is User => Boolean(u));
   return createPortal(
     <div dir="rtl" className="fixed inset-0 z-[100] bg-black/70 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
@@ -4562,6 +4671,7 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
     .sort((a, b) => b.lastActivity - a.lastActivity);
   const [section, setSection] = useState<'direct' | 'groups'>('direct');
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  useBackLayer(selectedGroup !== null, () => setSelectedGroup(null));
   const [creatingGroup, setCreatingGroup] = useState(false);
   const myGroups = groups.slice().sort((a, b) => b.lastActivity - a.lastActivity);
   const directUnread = myConversations.reduce((n, c) => n + c.messages.filter(m => m.senderId !== currentUser.id && !m.read).length, 0);
