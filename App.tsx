@@ -3323,7 +3323,7 @@ export default function App() {
       </main>
 
       {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-xl border-t border-white/5">
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} className="z-50 bg-gray-950/95 backdrop-blur-xl border-t border-white/10 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] transform-gpu will-change-transform">
         <div className="max-w-2xl xl:max-w-3xl mx-auto grid grid-cols-[1fr_auto_1fr] items-end gap-1 px-[max(0.5rem,env(safe-area-inset-left))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
           {(() => {
             const tabs = {
@@ -3339,10 +3339,10 @@ export default function App() {
                 <button
                   key={tab}
                   onClick={() => (tab === 'feed' ? onHomeTap() : goTab(tab))}
-                  className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-0.5 py-2 rounded-2xl transition-colors active:scale-95 ${active ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                  className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-0.5 py-2 rounded-2xl transition-colors active:scale-95 ${active ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
                 >
-                  <Icon size={22} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'animate-spin' : ''}`} />
-                  <span className="text-[10px] leading-none truncate max-w-full">{label}</span>
+                  <Icon size={23} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'animate-spin' : ''}`} />
+                  <span className={`text-[11px] leading-none truncate max-w-full ${active ? "font-bold" : "font-medium"}`}>{label}</span>
                   <span className={`h-0.5 w-5 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
                 </button>
               );
@@ -3358,7 +3358,7 @@ export default function App() {
                   <span className={`kan-fab w-12 h-12 min-[400px]:w-14 min-[400px]:h-14 rounded-full flex items-center justify-center ring-4 ring-gray-950 ${createActive ? 'scale-105' : ''}`}>
                     <Plus size={28} strokeWidth={2.6} className="text-white" />
                   </span>
-                  <span className="mt-1 text-[10px] font-semibold kan-gradient-text">نشر</span>
+                  <span className="mt-1 text-[11px] font-bold kan-gradient-text">نشر</span>
                 </button>
                 <div className="flex items-end">
                   {tabButton('videos')}
