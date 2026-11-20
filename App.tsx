@@ -92,6 +92,7 @@ interface GroupMessage {
 interface Group {
   id: string;
   name: string;
+  avatar: string;
   createdBy: string;
   lastActivity: number;
   members: { userId: string; role: 'admin' | 'member' }[];
@@ -1017,10 +1018,11 @@ function aiErrorMessage(code: string): string {
   }
 }
 
-function KanAIModal({ messages, me, other, onClose, onUseReply }: {
+function KanAIModal({ messages, me, other, nameOf, onClose, onUseReply }: {
   messages: Message[];
   me: User;
   other: User;
+  nameOf?: (id: string) => string;
   onClose: () => void;
   onUseReply: (text: string) => void;
 }) {
@@ -1051,7 +1053,7 @@ function KanAIModal({ messages, me, other, onClose, onUseReply }: {
     setCopied(false);
     // The last 30 messages, oldest first. The server decides whether the question is about the chat.
     const context = messages.slice(-30)
-      .map(m => ({ sender: m.senderId === me.id ? me.displayName : other.displayName, text: describeMessage(m) }))
+      .map(m => ({ sender: nameOf ? nameOf(m.senderId) : m.senderId === me.id ? me.displayName : other.displayName, text: describeMessage(m) }))
       .filter(m => m.text);
     try {
       const { data, error: fnError } = await supabase.functions.invoke('kan-ai', {
@@ -1400,7 +1402,7 @@ function groupMsgPreview(m: GroupMessage): string {
 
 async function loadGroups(): Promise<Group[]> {
   const [g, mem, msgs] = await Promise.all([
-    supabase.from('chat_groups').select('id, name, created_by, last_activity'),
+    supabase.from('chat_groups').select('id, name, avatar, created_by, last_activity'),
     supabase.from('chat_group_members').select('group_id, user_id, role'),
     supabase
       .from('group_messages')
@@ -1420,9 +1422,10 @@ async function loadGroups(): Promise<Group[]> {
     byGroup.set(r.group_id, list);
   }
   const members = (mem.data ?? []) as { group_id: string; user_id: string; role: 'admin' | 'member' }[];
-  return ((g.data ?? []) as { id: string; name: string; created_by: string; last_activity: string }[]).map(row => ({
+  return ((g.data ?? []) as { id: string; name: string; avatar?: string | null; created_by: string; last_activity: string }[]).map(row => ({
     id: row.id,
     name: row.name,
+    avatar: row.avatar ?? '',
     createdBy: row.created_by,
     lastActivity: new Date(row.last_activity).getTime(),
     members: members.filter(m => m.group_id === row.id).map(m => ({ userId: m.user_id, role: m.role })),
@@ -1432,8 +1435,23 @@ async function loadGroups(): Promise<Group[]> {
 
 const groupUnread = (g: Group, me: string) => g.messages.filter(m => !m.isSystem && m.senderId !== me && !m.readBy.includes(me)).length;
 
-function GroupAvatar({ name, size = 'lg' }: { name: string; size?: 'sm' | 'md' | 'lg' | 'xl' }) {
+function GroupAvatar({ name, src = '', size = 'lg', zoom = false }: { name: string; src?: string; size?: 'sm' | 'md' | 'lg' | 'xl'; zoom?: boolean }) {
+  const [open, setOpen] = useState(false);
   const sizes = { sm: 'w-7 h-7 text-xs', md: 'w-10 h-10 text-base', lg: 'w-12 h-12 text-lg', xl: 'w-20 h-20 text-3xl' };
+  if (src) {
+    const picture = (
+      <div className={`${sizes[size]} rounded-full overflow-hidden flex-shrink-0 border-2 border-gray-700 shadow-md shadow-violet-500/20`}>
+        <img src={src} alt={name} className="w-full h-full object-cover" />
+      </div>
+    );
+    if (!zoom) return picture;
+    return (
+      <>
+        <button type="button" onClick={e => { e.stopPropagation(); setOpen(true); }} className="rounded-full flex-shrink-0 cursor-zoom-in active:scale-95 transition-transform" aria-label={`عرض صورة ${name}`}>{picture}</button>
+        {open && <ImageViewer src={src} name={name} onClose={() => setOpen(false)} />}
+      </>
+    );
+  }
   return (
     <div className={`${sizes[size]} rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center flex-shrink-0 font-bold text-white shadow-md shadow-violet-500/20`}>
       {name.trim().charAt(0).toUpperCase() || <Users size={18} />}
@@ -1543,6 +1561,33 @@ function GroupInfoSheet({ group, users, me, reload, onClose, onLeft }: {
   const [name, setName] = useState(group.name);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  const avatarInput = useRef<HTMLInputElement>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const pickAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setNote('اختر صورة فقط'); return; }
+    if (file.size > 8 * 1024 * 1024) { setNote('حجم الصورة يجب أن لا يتجاوز 8 ميجابايت'); return; }
+    setAvatarBusy(true);
+    setNote('');
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('read failed'));
+        reader.readAsDataURL(file);
+      });
+      const small = await shrinkImage(dataUrl, 320);
+      const { error } = await supabase.from('chat_groups').update({ avatar: small }).eq('id', group.id);
+      if (error) throw error;
+      await reload();
+    } catch (err) {
+      console.error(err);
+      setNote('تعذّر تغيير الصورة');
+    }
+    setAvatarBusy(false);
+  };
   const run = async (fn: () => PromiseLike<{ error: unknown }>, fail = 'تعذّر تنفيذ العملية') => {
     setBusy(true);
     setNote('');
@@ -1571,7 +1616,17 @@ function GroupInfoSheet({ group, users, me, reload, onClose, onLeft }: {
   return (
     <SheetShell title="معلومات المجموعة" onClose={onClose}>
       <div className="flex flex-col items-center gap-2 mb-4">
-        <GroupAvatar name={group.name} size="xl" />
+        <div className="relative">
+          <GroupAvatar name={group.name} src={group.avatar} size="xl" zoom />
+          {iAmAdmin && (
+            <>
+              <input ref={avatarInput} type="file" accept="image/*" className="hidden" onChange={e => void pickAvatar(e)} />
+              <button onClick={() => avatarInput.current?.click()} disabled={avatarBusy} aria-label="تغيير صورة المجموعة" className="absolute -bottom-1 -left-1 w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 text-white flex items-center justify-center ring-2 ring-gray-900 shadow-md active:scale-90 disabled:opacity-70">
+                {avatarBusy ? <RefreshCw size={14} className="animate-spin" /> : <Camera size={15} />}
+              </button>
+            </>
+          )}
+        </div>
         {renaming ? (
           <div className="flex items-center gap-2 w-full">
             <input value={name} maxLength={60} onChange={e => setName(e.target.value)} className="flex-1 min-w-0 px-3 py-2 bg-gray-800 rounded-xl text-[16px] text-white focus:outline-none focus:ring-1 focus:ring-violet-500" />
@@ -1641,6 +1696,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [media, setMedia] = useState<{ type: 'image' | 'video' | 'file'; url: string; file: File } | null>(null);
   const [replyingTo, setReplyingTo] = useState<GroupMessage | null>(null);
@@ -1794,7 +1850,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
         <div className="flex items-center gap-3 px-3 py-3 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 relative z-10">
           <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors" aria-label="رجوع"><ChevronRight size={20} /></button>
           <button onClick={() => setInfoOpen(true)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
-            <GroupAvatar name={group.name} size="md" />
+            <GroupAvatar name={group.name} src={group.avatar} size="md" />
             <div className="min-w-0">
               <div className="font-medium text-white truncate">{group.name}</div>
               <div className="text-xs text-gray-500 truncate">{group.members.map(m => person(m.userId)?.displayName ?? '').filter(Boolean).slice(0, 4).join('، ')}{group.members.length > 4 ? '...' : ''}</div>
@@ -1825,8 +1881,12 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 <div className={`max-w-[85%] sm:max-w-[75%] flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
                   {showName && sender && <span className={`text-[11px] font-semibold mb-0.5 px-1 ${nameColors[sender.displayName.charCodeAt(0) % nameColors.length]}`}>{sender.displayName}</span>}
                   <div
+                    {...messageGestures(
+                      () => { setReplyingTo(m); window.setTimeout(() => inputRef.current?.focus(), 30); },
+                      () => { setActiveMsgId(m.id); setReactingTo(m.id); },
+                    )}
                     onClick={e => { e.stopPropagation(); setActiveMsgId(active ? null : m.id); setReactingTo(null); }}
-                    className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words cursor-pointer select-none touch-manipulation transition-shadow ${highlightId === m.id ? 'ring-2 ring-cyan-400' : ''} ${mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`}
+                    className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words cursor-pointer select-none touch-pan-y transition-shadow ${highlightId === m.id ? 'ring-2 ring-cyan-400' : ''} ${mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`}
                   >
                     {m.replyToId && (
                       <button
@@ -1950,6 +2010,15 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setEmojiOpen(o => !o)} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-yellow-300 active:scale-95" aria-label="إيموجي"><Smile size={16} /> إيموجي</button>
                     {emojiOpen && <EmojiPicker onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} />}
                   </div>
+                  <button
+                    onPointerDown={e => e.preventDefault()}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => { setAiOpen(true); setToolsOpen(false); }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gradient-to-r from-violet-600/30 to-cyan-500/20 border border-violet-400/30 text-white text-xs active:scale-95"
+                    aria-label="اسأل KAN"
+                  >
+                    <Sparkles size={16} className="text-violet-300" /> اسأل KAN
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1961,7 +2030,6 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 autoComplete="off"
                 value={text}
                 onChange={e => setText(e.target.value)}
-                onFocus={() => setToolsOpen(false)}
                 placeholder="اكتب رسالة للمجموعة..."
                 className="flex-1 min-w-0 h-10 px-4 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && void sendMessage()}
@@ -1984,6 +2052,19 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
           </div>
         )}
         {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}
+        {aiOpen && (
+          <KanAIModal
+            messages={group.messages.filter(m => !m.isSystem).map(m => ({
+              id: m.id, senderId: m.senderId, text: m.text, timestamp: m.timestamp, read: true,
+              media: m.media ? { type: m.media.type, url: m.media.url, name: m.media.name, duration: m.media.duration, size: m.media.size } : undefined,
+            })) as unknown as Message[]}
+            me={currentUser}
+            other={{ ...currentUser, id: group.id, displayName: group.name, avatar: group.avatar }}
+            nameOf={id => person(id)?.displayName ?? 'مستخدم'}
+            onClose={() => setAiOpen(false)}
+            onUseReply={t => { setText(t); setAiOpen(false); window.setTimeout(() => inputRef.current?.focus(), 50); }}
+          />
+        )}
         {infoOpen && <GroupInfoSheet group={group} users={users} me={currentUser} reload={reload} onClose={() => setInfoOpen(false)} onLeft={() => { setInfoOpen(false); void reload(); onBack(); }} />}
       </div>
     </div>
@@ -2203,6 +2284,87 @@ function NotificationsTab({ currentUser, users, notifications, setNotifications,
   );
 }
 
+// ============ In-app banner (a new message or notification while you are browsing) ============
+interface InAppToast { id: number; title: string; body: string; avatar?: string; group?: boolean; onOpen: () => void }
+
+function messagePreviewText(text: string, mediaType?: string | null): string {
+  const labels: Record<string, string> = { image: '📷 صورة', video: '🎥 فيديو', voice: '🎤 رسالة صوتية', file: '📎 ملف' };
+  const label = mediaType ? labels[mediaType] ?? '' : '';
+  return text ? (label ? `${label} ${text}` : text) : label || 'رسالة جديدة';
+}
+
+function notificationText(n: AppNotification): string {
+  switch (n.type) {
+    case 'like': return 'أعجب بمنشورك';
+    case 'comment': return `علّق على منشورك${n.snippet ? `: ${n.snippet}` : ''}`;
+    case 'reply': return `ردّ على تعليقك${n.snippet ? `: ${n.snippet}` : ''}`;
+    case 'follow': return 'بدأ بمتابعتك';
+    default: return `أضافك إلى مجموعة ${n.snippet}`;
+  }
+}
+
+function ToastBanner({ toast, onClose }: { toast: InAppToast; onClose: () => void }) {
+  useEffect(() => {
+    const t = window.setTimeout(onClose, 4800);
+    return () => window.clearTimeout(t);
+  }, [toast.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div dir="rtl" className="fixed inset-x-0 top-0 z-[160] flex justify-center px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pointer-events-none">
+      <motion.button
+        initial={{ y: -90, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: -90, opacity: 0 }}
+        transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+        drag="y"
+        dragConstraints={{ top: -90, bottom: 0 }}
+        dragElastic={0.4}
+        onDragEnd={(_, info) => { if (info.offset.y < -24) onClose(); }}
+        onClick={() => { toast.onOpen(); onClose(); }}
+        className="pointer-events-auto w-full max-w-md flex items-center gap-3 p-3 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 text-right"
+      >
+        {toast.group ? <GroupAvatar name={toast.title} src={toast.avatar} size="md" /> : <Avatar src={toast.avatar ?? ''} name={toast.title} size="md" />}
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-white truncate">{toast.title}</div>
+          <div className="text-xs text-gray-300 truncate" dir="auto">{toast.body}</div>
+        </div>
+        <span className="w-2 h-2 rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 shrink-0" />
+      </motion.button>
+    </div>
+  );
+}
+
+// ============ Intro screen while the app starts ============
+function SplashScreen() {
+  return (
+    <div dir="rtl" className="fixed inset-0 bg-gray-950 flex flex-col items-center justify-center overflow-hidden">
+      <div aria-hidden className="absolute inset-0" style={{ background: 'radial-gradient(40rem 26rem at 50% 38%, rgba(124,58,237,0.30), transparent 62%), radial-gradient(28rem 20rem at 88% 88%, rgba(6,182,212,0.16), transparent 60%)' }} />
+      <motion.div
+        initial={{ scale: 0.55, opacity: 0, rotate: -10 }}
+        animate={{ scale: 1, opacity: 1, rotate: 0 }}
+        transition={{ type: 'spring', damping: 13, stiffness: 120 }}
+        className="relative"
+      >
+        {[0, 1].map(i => (
+          <motion.span
+            key={i}
+            aria-hidden
+            className="absolute inset-0 rounded-[28px] border border-violet-400/40"
+            initial={{ scale: 1, opacity: 0.6 }}
+            animate={{ scale: 1.8 + i * 0.5, opacity: 0 }}
+            transition={{ duration: 2.2, repeat: Infinity, delay: i * 0.8, ease: 'easeOut' }}
+          />
+        ))}
+        <img src={LOGO_URL} alt="KAN" className="relative w-24 h-24 rounded-[28px] shadow-2xl shadow-violet-500/40" />
+      </motion.div>
+      <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.5 }} className="relative mt-7 text-5xl font-extrabold tracking-[0.3em] pl-[0.3em] kan-gradient-text">KAN</motion.h1>
+      <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55, duration: 0.5 }} className="relative mt-2 text-sm text-gray-400">شبكة التواصل الاجتماعي</motion.p>
+      <div dir="ltr" className="absolute bottom-[max(2.5rem,env(safe-area-inset-bottom))] w-40 h-1 rounded-full bg-white/10 overflow-hidden">
+        <motion.div className="h-full w-1/2 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400" initial={{ x: '-100%' }} animate={{ x: '220%' }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }} />
+      </div>
+    </div>
+  );
+}
+
 // ============ Stories strip (design only, not wired up yet) ============
 function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }) {
   const [hint, setHint] = useState(false);
@@ -2248,10 +2410,71 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
   );
 }
 
+// ============ Message gestures: swipe a bubble to reply, press and hold for reactions ============
+interface GestureState { sx: number; sy: number; dx: number; timer?: number; swiping: boolean; fired: boolean; down: boolean; suppress: boolean }
+const gestureStates = new WeakMap<HTMLElement, GestureState>();
+
+function messageGestures(onReply: () => void, onLongPress: () => void) {
+  const stateOf = (el: HTMLElement): GestureState => {
+    let st = gestureStates.get(el);
+    if (!st) { st = { sx: 0, sy: 0, dx: 0, swiping: false, fired: false, down: false, suppress: false }; gestureStates.set(el, st); }
+    return st;
+  };
+  const finish = (el: HTMLElement, allowReply: boolean) => {
+    const st = stateOf(el);
+    window.clearTimeout(st.timer);
+    if (st.swiping) {
+      el.style.transition = 'transform 0.22s cubic-bezier(.2,.8,.2,1)';
+      el.style.transform = '';
+      if (allowReply && Math.abs(st.dx) > 56) { navigator.vibrate?.(8); onReply(); }
+    }
+    st.swiping = false;
+    st.down = false;
+    st.dx = 0;
+  };
+  return {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const el = e.currentTarget;
+      const st = stateOf(el);
+      st.sx = e.clientX; st.sy = e.clientY; st.dx = 0;
+      st.swiping = false; st.fired = false; st.suppress = false; st.down = true;
+      el.style.transition = '';
+      window.clearTimeout(st.timer);
+      st.timer = window.setTimeout(() => {
+        if (st.down && !st.swiping) { st.fired = true; st.suppress = true; navigator.vibrate?.(12); onLongPress(); }
+      }, 450);
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      const el = e.currentTarget;
+      const st = stateOf(el);
+      if (!st.down) return;
+      const dx = e.clientX - st.sx;
+      const dy = e.clientY - st.sy;
+      if (!st.swiping) {
+        if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { window.clearTimeout(st.timer); st.down = false; return; }
+        if (Math.abs(dx) < 10) return;
+        st.swiping = true; st.suppress = true;
+        window.clearTimeout(st.timer);
+      }
+      st.dx = dx;
+      el.style.transform = `translateX(${Math.sign(dx) * Math.min(Math.abs(dx) * 0.6, 90)}px)`;
+    },
+    onPointerUp: (e: React.PointerEvent<HTMLElement>) => finish(e.currentTarget, true),
+    onPointerCancel: (e: React.PointerEvent<HTMLElement>) => finish(e.currentTarget, false),
+    onPointerLeave: (e: React.PointerEvent<HTMLElement>) => { if (e.pointerType === 'mouse') finish(e.currentTarget, false); },
+    onContextMenu: (e: React.MouseEvent<HTMLElement>) => e.preventDefault(),
+    onClickCapture: (e: React.MouseEvent<HTMLElement>) => {
+      const st = gestureStates.get(e.currentTarget);
+      if (st?.suppress) { e.stopPropagation(); e.preventDefault(); st.suppress = false; }
+    },
+  };
+}
+
 function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
   const [group, setGroup] = useState(0);
   return (
-    <div dir="rtl" className="absolute bottom-full mb-2 right-0 z-30 w-72 max-w-[92vw] bg-gray-900 border border-gray-700 rounded-2xl shadow-xl">
+    <div dir="rtl" onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} className="absolute bottom-full mb-2 right-0 z-30 w-72 max-w-[92vw] bg-gray-900 border border-gray-700 rounded-2xl shadow-xl">
       <div className="flex items-center justify-between px-2 pt-2 border-b border-gray-800">
         <div className="flex">
           {EMOJI_GROUPS.map((g, i) => (
@@ -2531,7 +2754,7 @@ export default function App() {
     setFeedLoading(true);
     try {
       const page = await fetchPosts({ limit: FEED_PAGE });
-      setPosts(page);
+      setPosts(prev => mergePosts(prev, page));
       const last = page[page.length - 1];
       feedCursor.current = last ? last.cursor : null;
       setFeedFrontier(last ? last.timestamp : 0);
@@ -2617,6 +2840,15 @@ export default function App() {
   const conversationsRef = useRef<Conversation[]>([]);
   conversationsRef.current = conversations;
 
+  // Latest screen state for the live handlers (they live inside long-running subscriptions).
+  const [toast, setToast] = useState<InAppToast | null>(null);
+  const toastRef = useRef<(t: Omit<InAppToast, 'id'>) => void>(() => undefined);
+  toastRef.current = t => setToast({ ...t, id: Date.now() });
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const uiRef = useRef<{ tab: string; chatWith: string | null; groupId: string | null; users: User[]; groups: Group[] }>({ tab: 'feed', chatWith: null, groupId: null, users: [], groups: [] });
+  uiRef.current = { tab: activeTab, chatWith: selectedChat, groupId: activeGroupId, users, groups };
+  const navRef = useRef<{ openChat: (id: string) => void; openGroup: (id: string) => void; openNotifs: () => void }>({ openChat: () => undefined, openGroup: () => undefined, openNotifs: () => undefined });
+
   // Groups: load, then apply new messages, reactions, read receipts and membership changes live.
   const reloadGroups = async () => {
     if (!currentUserId) return;
@@ -2637,7 +2869,15 @@ export default function App() {
       .channel('kan-groups')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, async payload => {
         const row = payload.new as unknown as GroupMsgRow;
-        if (row.sender_id !== currentUserId && !row.is_system) playSound('receive');
+        if (row.sender_id !== currentUserId && !row.is_system) {
+          playSound('receive');
+          const ui = uiRef.current;
+          if (document.visibilityState === 'visible' && !(ui.tab === 'messages' && ui.groupId === row.group_id)) {
+            const g = ui.groups.find(x => x.id === row.group_id);
+            const who = ui.users.find(x => x.id === row.sender_id)?.displayName ?? '';
+            toastRef.current({ title: g?.name ?? 'مجموعة', body: `${who}: ${messagePreviewText(row.text, row.media_type)}`, avatar: g?.avatar, group: true, onOpen: () => navRef.current.openGroup(row.group_id) });
+          }
+        }
         const urls = row.media_path ? await signPaths([row.media_path]) : new Map<string, string>();
         const msg = groupRowToMessage(row, urls);
         setGroups(prev => {
@@ -2696,6 +2936,13 @@ export default function App() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUserId}` }, payload => {
         const n = rowToNotification(payload.new as unknown as NotificationRow);
         playSound('receive');
+        {
+          const ui = uiRef.current;
+          if (document.visibilityState === 'visible' && ui.tab !== 'notifications') {
+            const actor = n.actorId ? ui.users.find(x => x.id === n.actorId) : undefined;
+            toastRef.current({ title: actor?.displayName ?? 'إشعار جديد', body: notificationText(n), avatar: actor?.avatar, onOpen: () => navRef.current.openNotifs() });
+          }
+        }
         setNotifications(prev => (prev.some(x => x.id === n.id) ? prev : [n, ...prev].slice(0, 100)));
       })
       .subscribe();
@@ -2721,7 +2968,15 @@ export default function App() {
       .channel('kan-chat')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async payload => {
         const row = payload.new as unknown as MessageRow;
-        if (row.sender_id !== currentUserId) { playSound('receive'); markDelivered(currentUserId); }
+        if (row.sender_id !== currentUserId) {
+          playSound('receive');
+          markDelivered(currentUserId);
+          const ui = uiRef.current;
+          if (document.visibilityState === 'visible' && !(ui.tab === 'messages' && ui.chatWith === row.sender_id)) {
+            const sender = ui.users.find(x => x.id === row.sender_id);
+            toastRef.current({ title: sender?.displayName ?? 'رسالة جديدة', body: messagePreviewText(row.text, row.media_type), avatar: sender?.avatar, onOpen: () => navRef.current.openChat(row.sender_id) });
+          }
+        }
         if (!conversationsRef.current.some(c => c.id === row.conversation_id)) {
           await refreshConversations();
           return;
@@ -2810,9 +3065,19 @@ export default function App() {
     setViewedUserId(null);
     setActiveTab(tab);
   };
+  navRef.current = {
+    openChat: id => { setSelectedChat(id); goTab('messages'); },
+    openGroup: id => { setOpenGroupId(id); goTab('messages'); },
+    openNotifs: () => goTab('notifications'),
+  };
   // Home button: already on the feed -> one tap scrolls to the top, a quick second tap refreshes it.
   const lastHomeTap = useRef(0);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setIntroDone(true), 1500);
+    return () => window.clearTimeout(t);
+  }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -2862,8 +3127,8 @@ export default function App() {
   if (!isConfigured) {
     return <StatusScreen text="لم يتم ضبط اتصال Supabase (VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY)." />;
   }
-  if (!authReady || (currentUserId && loadedFor !== currentUserId)) {
-    return <StatusScreen text="جارٍ التحميل..." />;
+  if (!introDone || !authReady || (currentUserId && loadedFor !== currentUserId)) {
+    return <SplashScreen />;
   }
   if (currentUserId && !currentUser) {
     return (
@@ -2888,7 +3153,8 @@ export default function App() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-gray-950 text-white font-sans">
+    <div dir="rtl" className="kan-enter min-h-screen bg-gray-950 text-white font-sans">
+      <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/70 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-2xl xl:max-w-3xl mx-auto px-3 min-[400px]:px-4 py-3 flex items-center justify-between">
@@ -3047,6 +3313,7 @@ export default function App() {
                 reloadGroups={reloadGroups}
                 openGroupId={openGroupId}
                 onGroupOpened={() => setOpenGroupId(null)}
+                onActiveGroupChange={setActiveGroupId}
                 selectedChat={selectedChat}
                 setSelectedChat={setSelectedChat}
               />
@@ -3411,28 +3678,28 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
     };
   }, []);
 
+  // New posts from other people slide in by themselves while you are at the top, no banner.
+  useEffect(() => {
+    if (newCount === 0) return;
+    const tryRefresh = () => { if (window.scrollY < 120) onRefresh(); };
+    tryRefresh();
+    window.addEventListener('scroll', tryRefresh, { passive: true });
+    return () => window.removeEventListener('scroll', tryRefresh);
+  }, [newCount]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="px-4 py-4 space-y-4">
-      {newCount > 0 && (
-        <button
-          onClick={() => { window.scrollTo({ top: 0 }); onRefresh(); }}
-          className="sticky top-[4.5rem] z-30 mx-auto flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-medium shadow-lg shadow-violet-500/30"
-        >
-          <RefreshCw size={14} /> {newCount === 1 ? 'منشور جديد' : `${newCount} منشورات جديدة`} · اضغط للتحديث
-        </button>
-      )}
       <StoriesBar users={users} currentUser={currentUser} />
-      <div className="flex items-center gap-2">
-        <div className="flex flex-1 gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
-          {[{ key: 'all' as const, label: 'الكل' }, { key: 'following' as const, label: 'المتابَعون' }, { key: 'files' as const, label: 'الملفات' }].map(t => (
-            <button key={t.key} onClick={() => setMode(t.key)} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${mode === t.key ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <button onClick={onRefresh} disabled={loading} className="p-2.5 rounded-xl bg-gray-900 border border-gray-800 text-gray-300 hover:text-white disabled:opacity-60" aria-label="تحديث">
-          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-        </button>
+      <div className="flex gap-1 bg-gray-900/70 rounded-2xl p-1 border border-white/5">
+        {([{ key: 'all', label: 'الكل', Icon: Sparkles }, { key: 'following', label: 'المتابَعون', Icon: Users }, { key: 'files', label: 'الملفات', Icon: FileText }] as const).map(t => (
+          <button key={t.key} onClick={() => setMode(t.key)} className={`relative flex-1 basis-0 px-1 py-2 rounded-xl text-sm font-medium transition-colors ${mode === t.key ? 'text-violet-100' : 'text-gray-500 hover:text-gray-300'}`}>
+            {mode === t.key && <motion.span layoutId="feed-mode-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} className="absolute inset-0 rounded-xl bg-violet-500/15 ring-1 ring-violet-400/25" />}
+            <span className="relative flex items-center justify-center gap-1.5 whitespace-nowrap">
+              <t.Icon size={15} className="shrink-0" />
+              <span>{t.label}</span>
+            </span>
+          </button>
+        ))}
       </div>
       {displayPosts.length === 0 && !loading && (
         <div className="text-center py-12">
@@ -5207,7 +5474,7 @@ function SettingsTab({ currentUser, setUsers }: {
 }
 
 // ============ Messages Tab ============
-function MessagesTab({ currentUser, users, conversations, setConversations, groups, setGroups, reloadGroups, openGroupId, onGroupOpened, selectedChat, setSelectedChat }: {
+function MessagesTab({ currentUser, users, conversations, setConversations, groups, setGroups, reloadGroups, openGroupId, onGroupOpened, onActiveGroupChange, selectedChat, setSelectedChat }: {
   currentUser: User; users: User[];
   conversations: Conversation[];
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
@@ -5216,6 +5483,7 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
   reloadGroups: () => Promise<void>;
   openGroupId: string | null;
   onGroupOpened: () => void;
+  onActiveGroupChange: (id: string | null) => void;
   selectedChat: string | null;
   setSelectedChat: (id: string | null) => void;
 }) {
@@ -5225,6 +5493,7 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
   const [section, setSection] = useState<'direct' | 'groups'>('direct');
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   useBackLayer(selectedGroup !== null, () => setSelectedGroup(null));
+  useEffect(() => { onActiveGroupChange(selectedGroup); }, [selectedGroup]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (openGroupId && groups.some(g => g.id === openGroupId)) {
       setSection('groups');
@@ -5328,7 +5597,7 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
               return (
                 <motion.button key={g.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} onClick={() => setSelectedGroup(g.id)} className="w-full flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl hover:border-gray-700 transition-all text-right">
                   <div className="relative">
-                    <GroupAvatar name={g.name} size="lg" />
+                    <GroupAvatar name={g.name} src={g.avatar} size="lg" />
                     {unread > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-violet-500 rounded-full text-xs flex items-center justify-center font-bold">{unread > 9 ? '9+' : unread}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -5971,8 +6240,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     setText(text.slice(0, start) + emoji + text.slice(end));
     notifyTyping();
     window.requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(start + emoji.length, start + emoji.length);
+      if (el && document.activeElement === el) el.setSelectionRange(start + emoji.length, start + emoji.length);
     });
   };
 
@@ -6061,8 +6329,12 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
               <div className={`max-w-[88%] sm:max-w-[75%] ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
                 <div
+                  {...messageGestures(
+                    () => { setReplyingTo(msg); window.setTimeout(() => inputRef.current?.focus(), 30); },
+                    () => { setActiveMsgId(msg.id); setReactingTo(msg.id); },
+                  )}
                   onClick={() => handleBubbleTap(msg)}
-                  className={`relative select-none touch-manipulation px-4 py-2.5 rounded-2xl cursor-pointer transition-shadow ${highlightId === msg.id ? 'ring-2 ring-cyan-400' : ''} ${
+                  className={`relative select-none touch-pan-y px-4 py-2.5 rounded-2xl cursor-pointer transition-shadow ${highlightId === msg.id ? 'ring-2 ring-cyan-400' : ''} ${
                     isMine
                       ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded-bl-sm'
                       : 'bg-gray-800/90 backdrop-blur-sm text-gray-200 rounded-br-sm'
@@ -6319,7 +6591,6 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               value={text} onChange={e => { setText(e.target.value); if (e.target.value) notifyTyping(); }}
               placeholder="اكتب رسالة..."
               className="flex-1 min-w-0 h-10 px-4 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              onFocus={() => setToolsOpen(false)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             />
             {text.trim() || media ? (
