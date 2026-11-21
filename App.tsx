@@ -1478,7 +1478,36 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
     try { await navigator.clipboard.writeText(link); flash('تم نسخ الرابط'); } catch { flash('تعذّر النسخ'); }
   };
   const openExternal = (url: string) => { window.open(url, '_blank', 'noopener'); };
+  // Puts the post on your own story for 24 hours (the story keeps a link back to the post).
+  const shareToStory = async () => {
+    if (busy) return;
+    setBusy('story');
+    try {
+      const m = post.media;
+      const cover = post.coverUrl;
+      const url = m && m.type === 'image' ? m.url : m && m.type === 'video' ? m.url : cover ?? '';
+      const type: 'image' | 'video' = m && m.type === 'video' ? 'video' : 'image';
+      const hasVisual = Boolean(url) && (m?.type === 'image' || m?.type === 'video' || cover);
+      const captionSource = comment ? comment.text : [post.title, post.text].filter(Boolean).join('\n');
+      const { error } = await supabase.from('stories').insert({
+        user_id: currentUser.id,
+        media_url: hasVisual ? url : '',
+        media_type: hasVisual ? type : 'image',
+        caption: (captionSource || `${author.displayName} (@${author.username})`).slice(0, 300),
+        shared_post_id: post.id,
+      });
+      if (error) throw error;
+      notifyStoriesChanged();
+      flash('تمت المشاركة في قصتك ✓');
+      window.setTimeout(onClose, 900);
+    } catch (e) {
+      console.error(e);
+      flash('تعذّرت المشاركة في القصة');
+    }
+    setBusy(null);
+  };
   const actions: { key: string; label: string; Icon: typeof Copy; cls: string; run: () => void }[] = [
+    { key: 'story', label: 'قصتك', Icon: Plus, cls: 'from-violet-600 via-fuchsia-500 to-cyan-400', run: () => void shareToStory() },
     { key: 'link', label: 'نسخ الرابط', Icon: Copy, cls: 'from-violet-600 to-fuchsia-500', run: () => void copyLink() },
     { key: 'wa', label: 'واتساب', Icon: MessageCircle, cls: 'from-emerald-500 to-green-600', run: () => openExternal(`https://wa.me/?text=${encodeURIComponent(text)}`) },
     { key: 'tg', label: 'تيليجرام', Icon: Send, cls: 'from-sky-500 to-cyan-500', run: () => openExternal(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text.replace(`\n${link}`, '').slice(0, 300))}`) },
@@ -2682,8 +2711,67 @@ function SplashScreen() {
 }
 
 // ============ Stories strip (design only, not wired up yet) ============
-interface StoryItem { id: string; userId: string; url: string; type: 'image' | 'video'; caption: string; createdAt: number }
+interface StoryItem { id: string; userId: string; url: string; type: 'image' | 'video'; caption: string; createdAt: number; sharedPostId?: string }
 interface StoryGroup { userId: string; items: StoryItem[] }
+
+type StoryRow = { id: string; user_id: string; media_url: string | null; media_type: 'image' | 'video'; caption: string; created_at: string; shared_post_id: string | null };
+const STORY_SELECT = 'id, user_id, media_url, media_type, caption, created_at, shared_post_id';
+const rowToStory = (r: StoryRow): StoryItem => ({
+  id: r.id, userId: r.user_id, url: r.media_url ?? '', type: r.media_type, caption: r.caption,
+  createdAt: new Date(r.created_at).getTime(), sharedPostId: r.shared_post_id ?? undefined,
+});
+const notifyStoriesChanged = () => window.dispatchEvent(new Event('kan-stories-changed'));
+
+// The picture on a profile: a coloured ring when that person has an active story (24h); tap to watch it.
+function ProfileStoryAvatar({ user, currentUser, users }: { user: User; currentUser: User; users: User[] }) {
+  const [items, setItems] = useState<StoryItem[]>([]);
+  const [seen, setSeen] = useState<Set<string>>(new Set());
+  const [open, setOpen] = useState(false);
+  const canSee = user.id === currentUser.id || currentUser.following.includes(user.id);
+
+  useEffect(() => {
+    if (!canSee) { setItems([]); return; }
+    let off = false;
+    const load = async () => {
+      const { data, error } = await supabase.from('stories').select(STORY_SELECT)
+        .eq('user_id', user.id).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true }).limit(50);
+      if (off) return;
+      if (error) { console.error(error); return; }
+      const list = ((data ?? []) as StoryRow[]).map(rowToStory);
+      setItems(list);
+      if (list.length > 0 && user.id !== currentUser.id) {
+        const { data: v } = await supabase.from('story_views').select('story_id').eq('viewer_id', currentUser.id).in('story_id', list.map(s => s.id));
+        if (!off) setSeen(new Set((v ?? []).map(x => (x as { story_id: string }).story_id)));
+      }
+    };
+    void load();
+    window.addEventListener('kan-stories-changed', load);
+    return () => { off = true; window.removeEventListener('kan-stories-changed', load); };
+  }, [user.id, canSee, currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (items.length === 0) return <Avatar src={user.avatar} name={user.displayName} size="xl" zoom />;
+  const unseen = user.id === currentUser.id || items.some(i => !seen.has(i.id));
+  return (
+    <>
+      <button onClick={() => setOpen(true)} aria-label="عرض القصة" className="relative shrink-0 active:scale-95 transition-transform">
+        <div className={`rounded-full p-[3px] ${unseen ? 'bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400' : 'bg-gray-700'}`}>
+          <div className="rounded-full bg-gray-950 p-[2px]"><Avatar src={user.avatar} name={user.displayName} size="xl" /></div>
+        </div>
+      </button>
+      {open && (
+        <StoryViewer
+          groups={[{ userId: user.id, items }]}
+          startGroup={0}
+          users={users}
+          currentUser={currentUser}
+          onSeen={id => setSeen(prev => (prev.has(id) ? prev : new Set(prev).add(id)))}
+          onChanged={notifyStoriesChanged}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
 
 function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }) {
   const [stories, setStories] = useState<StoryItem[]>([]);
@@ -2696,20 +2784,21 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
   const load = async () => {
     const { data, error } = await supabase
       .from('stories')
-      .select('id, user_id, media_url, media_type, caption, created_at')
+      .select(STORY_SELECT)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: true })
       .limit(400);
     if (error) { console.error(error); return; }
-    const rows = (data ?? []) as { id: string; user_id: string; media_url: string; media_type: 'image' | 'video'; caption: string; created_at: string }[];
-    setStories(rows.map(r => ({ id: r.id, userId: r.user_id, url: r.media_url, type: r.media_type, caption: r.caption, createdAt: new Date(r.created_at).getTime() })));
+    setStories(((data ?? []) as StoryRow[]).map(rowToStory));
     const { data: v } = await supabase.from('story_views').select('story_id').eq('viewer_id', currentUser.id).gt('viewed_at', new Date(Date.now() - 86400000).toISOString());
     setSeen(new Set((v ?? []).map(x => (x as { story_id: string }).story_id)));
   };
   useEffect(() => {
     void load();
     const t = window.setInterval(() => void load(), 60000);
-    return () => window.clearInterval(t);
+    const onChanged = () => void load();
+    window.addEventListener('kan-stories-changed', onChanged);
+    return () => { window.clearInterval(t); window.removeEventListener('kan-stories-changed', onChanged); };
   }, [currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flash = (msg: string) => { setHint(msg); window.setTimeout(() => setHint(''), 2200); };
@@ -2810,6 +2899,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
       const url = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
       const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300) });
       if (insErr) { void supabase.storage.from(POST_MEDIA_BUCKET).remove([path]); throw insErr; }
+      notifyStoriesChanged();
       onDone();
     } catch (e) {
       console.error(e);
@@ -2853,6 +2943,12 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
   const [duration, setDuration] = useState(5000);
   const [viewers, setViewers] = useState<string[] | null>(null);
   const [showViewers, setShowViewers] = useState(false);
+  const [liked, setLiked] = useState(false);
+  const [likers, setLikers] = useState<string[]>([]);
+  const [replyText, setReplyText] = useState('');
+  const [replyFocus, setReplyFocus] = useState(false);
+  const [sentNote, setSentNote] = useState('');
+  const [burst, setBurst] = useState(0);
   const group = groups[gi];
   const story = group?.items[si];
   const author = users.find(u => u.id === group?.userId);
@@ -2885,22 +2981,73 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
     setDuration(5000);
     setShowViewers(false);
     setViewers(null);
+    setLiked(false);
+    setLikers([]);
+    setReplyText('');
+    setSentNote('');
     if (!story) return;
+    let offLikes = false;
+    void supabase.from('story_likes').select('user_id').eq('story_id', story.id).then(({ data }) => {
+      if (offLikes) return;
+      const ids = (data ?? []).map(r => (r as { user_id: string }).user_id);
+      setLikers(ids);
+      setLiked(ids.includes(currentUser.id));
+    });
     if (story.userId !== currentUser.id) {
       onSeen(story.id);
       void supabase.from('story_views').upsert({ story_id: story.id, viewer_id: currentUser.id }, { onConflict: 'story_id,viewer_id', ignoreDuplicates: true }).then(({ error }) => { if (error) console.error(error); });
+      return () => { offLikes = true; };
     } else {
       let off = false;
       void supabase.from('story_views').select('viewer_id').eq('story_id', story.id).then(({ data }) => {
         if (!off) setViewers((data ?? []).map(r => (r as { viewer_id: string }).viewer_id));
       });
-      return () => { off = true; };
+      return () => { off = true; offLikes = true; };
     }
   }, [story?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const toggleLike = async () => {
+    if (!story) return;
+    const was = liked;
+    setLiked(!was);
+    setLikers(l => (was ? l.filter(x => x !== currentUser.id) : [...l.filter(x => x !== currentUser.id), currentUser.id]));
+    if (!was) setBurst(n => n + 1);
+    const { error } = was
+      ? await supabase.from('story_likes').delete().eq('story_id', story.id).eq('user_id', currentUser.id)
+      : await supabase.from('story_likes').insert({ story_id: story.id, user_id: currentUser.id });
+    if (error) {
+      console.error(error);
+      setLiked(was);
+      setLikers(l => (was ? [...l, currentUser.id] : l.filter(x => x !== currentUser.id)));
+    }
+  };
+
+  // A reply goes to the owner's private chat.
+  const sendReply = async () => {
+    const body = replyText.trim();
+    if (!body || !story || story.userId === currentUser.id) return;
+    setReplyText('');
+    try {
+      const convId = await getOrCreateConversation(currentUser.id, story.userId);
+      const { error } = await supabase.from('messages').insert({
+        id: crypto.randomUUID(), conversation_id: convId, sender_id: currentUser.id,
+        text: `↪️ رد على قصتك\n${body}`.slice(0, 1000),
+        media_path: null, media_type: null, media_duration: null, media_name: null, media_size: null, reply_to_id: null,
+      });
+      if (error) throw error;
+      playSound('send');
+      setSentNote('تم إرسال ردك ✓');
+    } catch (e) {
+      console.error(e);
+      setReplyText(body);
+      setSentNote('تعذّر إرسال الرد');
+    }
+    window.setTimeout(() => setSentNote(''), 1800);
+  };
+
   // Pictures advance on a timer; videos report their own progress.
   useEffect(() => {
-    if (!story || story.type !== 'image' || paused || showViewers) return;
+    if (!story || story.type !== 'image' || paused || showViewers || replyFocus) return;
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
@@ -2911,21 +3058,23 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [story?.id, paused, showViewers, duration]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [story?.id, paused, showViewers, replyFocus, duration]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (progress >= 1) next(); }, [progress]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (paused || showViewers) v.pause(); else void v.play().catch(() => undefined);
-  }, [paused, showViewers, story?.id]);
+    if (paused || showViewers || replyFocus) v.pause(); else void v.play().catch(() => undefined);
+  }, [paused, showViewers, replyFocus, story?.id]);
 
   const remove = async () => {
     if (!story || !window.confirm('حذف هذه القصة؟')) return;
     const { error } = await supabase.from('stories').delete().eq('id', story.id);
     if (error) { console.error(error); return; }
-    const p = mediaPath(story.url);
+    // A shared post's media belongs to the post, so only delete files this story uploaded itself.
+    const p = story.sharedPostId ? null : mediaPath(story.url);
     if (p) void supabase.storage.from(POST_MEDIA_BUCKET).remove([p]);
     onChanged();
+    notifyStoriesChanged();
     onClose();
   };
 
@@ -2952,7 +3101,13 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
       onPointerCancel={() => { window.clearTimeout(holdTimer.current); setPaused(false); }}
     >
       <div className="relative w-full h-full max-w-md bg-black overflow-hidden">
-        {story.type === 'image'
+        {!story.url
+          ? (
+            <div className="absolute inset-0 flex items-center justify-center p-8 bg-gradient-to-br from-violet-700 via-fuchsia-600 to-cyan-500">
+              <p className="text-white text-2xl font-bold leading-10 text-center whitespace-pre-wrap break-words line-clamp-[10]" dir="auto">{story.caption}</p>
+            </div>
+          )
+          : story.type === 'image'
           ? <img src={story.url} alt="" draggable={false} className="absolute inset-0 w-full h-full object-contain" />
           : (
             <video
@@ -2988,12 +3143,43 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
           </div>
         </div>
         <div className="absolute inset-x-0 bottom-0 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 px-4 bg-gradient-to-t from-black/70 to-transparent">
-          {story.caption && <p className="text-white text-[15px] leading-6 text-center mb-3 whitespace-pre-wrap pointer-events-none" dir="auto">{story.caption}</p>}
-          {isMine && (
-            <div className="flex justify-center" {...ignore}>
+          {story.caption && story.url && <p className="text-white text-[15px] leading-6 text-center mb-3 whitespace-pre-wrap pointer-events-none" dir="auto">{story.caption}</p>}
+          {story.sharedPostId && (
+            <div className="flex justify-center mb-3" {...ignore}>
+              <button onClick={() => { const id = story.sharedPostId!; onClose(); window.setTimeout(() => openPost(id), 60); }} className="px-4 py-1.5 rounded-full bg-white/20 backdrop-blur text-white text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-transform">
+                عرض المنشور ‹
+              </button>
+            </div>
+          )}
+          {sentNote && <div className="text-center text-xs text-cyan-300 mb-2 pointer-events-none">{sentNote}</div>}
+          {isMine ? (
+            <div className="flex items-center justify-center gap-2" {...ignore}>
               <button onClick={() => setShowViewers(v => !v)} className="px-4 py-1.5 rounded-full bg-white/15 text-white text-sm flex items-center gap-2">
                 <Eye size={16} /> {viewers === null ? '...' : viewers.length}
               </button>
+              <span className="px-4 py-1.5 rounded-full bg-white/15 text-white text-sm flex items-center gap-2"><Heart size={16} className="fill-rose-400 text-rose-400" /> {likers.length}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2" {...ignore} dir="rtl">
+              <input
+                value={replyText}
+                onChange={e => setReplyText(e.target.value.slice(0, 500))}
+                onFocus={() => setReplyFocus(true)}
+                onBlur={() => setReplyFocus(false)}
+                onKeyDown={e => { if (e.key === 'Enter') void sendReply(); }}
+                enterKeyHint="send"
+                placeholder={`رد على ${author?.displayName ?? ''}...`}
+                className="flex-1 min-w-0 h-11 px-4 rounded-full bg-white/10 border border-white/25 backdrop-blur text-[16px] text-white placeholder-white/60 focus:outline-none focus:border-white/60"
+              />
+              {replyText.trim()
+                ? <button onPointerDown={e => e.preventDefault()} onClick={() => void sendReply()} aria-label="إرسال الرد" className="w-11 h-11 shrink-0 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white flex items-center justify-center active:scale-90 transition-transform"><Send size={18} /></button>
+                : (
+                  <button onClick={() => void toggleLike()} aria-label="إعجاب" className="relative w-11 h-11 shrink-0 rounded-full bg-white/10 border border-white/25 flex items-center justify-center active:scale-90 transition-transform">
+                    <motion.span key={burst} initial={{ scale: 0.6 }} animate={{ scale: [0.6, 1.35, 1] }} transition={{ duration: 0.35 }} className="flex">
+                      <Heart size={22} className={liked ? 'fill-rose-500 text-rose-500' : 'text-white'} />
+                    </motion.span>
+                  </button>
+                )}
             </div>
           )}
         </div>
@@ -3736,8 +3922,12 @@ export default function App() {
   useBackLayer(currentUserId !== null && activeTab !== 'feed', () => setActiveTab('feed'));
   // Home, scrolled down: the phone's back button first takes you back to the top of the page.
   setBackFallback(() => {
-    if (currentUserId !== null && activeTab === 'feed' && !viewedUserId && selectedChat === null && window.scrollY > 300) {
+    if (currentUserId !== null && activeTab === 'feed' && !viewedUserId && selectedChat === null && window.scrollY > 120) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (!feedBusy.current) {
+        setHomeRefreshing(true);
+        void loadFeedFirst().finally(() => window.setTimeout(() => setHomeRefreshing(false), 400));
+      }
       return true;
     }
     return false;
@@ -4695,7 +4885,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden [contain:layout_paint] [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
       <div className="p-4 flex items-center gap-3">
         <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
           <Avatar src={author.avatar} name={author.displayName} size="md" />
@@ -5929,7 +6119,7 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
     <div className="px-4 py-4">
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-4">
         <div className="flex items-start gap-4">
-          <Avatar src={currentUser.avatar} name={currentUser.displayName} size="xl" zoom />
+          <ProfileStoryAvatar user={currentUser} currentUser={currentUser} users={users} />
           <div className="flex-1">
             <h2 className="text-xl font-bold text-white">{currentUser.displayName}</h2>
             <p className="text-gray-500 text-sm">@{currentUser.username}</p>
@@ -6079,7 +6269,7 @@ function UserProfile({ userId, currentUser, users, posts, setUsers, setPosts, on
       {backButton}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-4">
         <div className="flex items-start gap-4">
-          <Avatar src={user.avatar} name={user.displayName} size="xl" zoom />
+          <ProfileStoryAvatar user={user} currentUser={currentUser} users={users} />
           <div className="flex-1 min-w-0">
             <h2 className="text-xl font-bold text-white">{user.displayName}</h2>
             <p className="text-gray-500 text-sm">
