@@ -1,10 +1,13 @@
 <!doctype html>
 <html lang="ar" dir="rtl" class="dark">
   <head>
-    <meta name="google-site-verification" content="0ove_dHFNksai6jRCPdu0dT4Q7EoSkqnj0iD2sbPi3s" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0b1a" />
+    <script>try{var t=localStorage.getItem('kan-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
     <link rel="icon" type="image/png" href="%BASE_URL%icon-192.png" />
     <link rel="apple-touch-icon" href="%BASE_URL%icon-192.png" />
@@ -20,6 +23,8 @@
         background-color: #0b0b1a;
         color: #ffffff;
       }
+      html[data-theme='light'], html[data-theme='light'] body { background-color: #f3f3f7; color: #0f0f1a; }
+      html[data-theme='dark'], html[data-theme='dark'] body { background-color: #000000; }
     </style>
   </head>
   <body>

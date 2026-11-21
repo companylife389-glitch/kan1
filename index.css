@@ -5,9 +5,9 @@
   --color-gray-50: #f5f5fb;
   --color-gray-100: #ebebf6;
   --color-gray-200: #d9d9ee;
-  --color-gray-300: #b9b9d8;
-  --color-gray-400: #9a9abf;
-  --color-gray-500: #7a7aa2;
+  --color-gray-300: #cfcfe6;
+  --color-gray-400: #b3b3d6;
+  --color-gray-500: #9a9ac0;
   --color-gray-600: #4f4f75;
   --color-gray-700: #35355a;
   --color-gray-800: #23233f;
@@ -20,17 +20,28 @@ html {
   overscroll-behavior-y: contain;
 }
 
+:root {
+  --kan-glow-a: rgba(124, 58, 237, 0.20);
+  --kan-glow-b: rgba(6, 182, 212, 0.11);
+}
+
 body {
-  background-color: #0b0b1a;
+  background-color: var(--color-gray-950);
   background-image:
-    radial-gradient(60rem 28rem at 50% -8%, rgba(124, 58, 237, 0.20), transparent 60%),
-    radial-gradient(36rem 24rem at 100% 8%, rgba(6, 182, 212, 0.11), transparent 60%);
+    radial-gradient(60rem 28rem at 50% -8%, var(--kan-glow-a), transparent 60%),
+    radial-gradient(36rem 24rem at 100% 8%, var(--kan-glow-b), transparent 60%);
   background-attachment: fixed;
-  color: #ffffff;
+  color: var(--color-white);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  text-rendering: optimizeLegibility;
+  font-family: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
 }
+
+/* Clear, confident text: strong names and headings, no thin weights. */
+h1, h2, h3, strong, b { font-weight: 700; }
+input, textarea, button { font-family: inherit; }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
@@ -123,3 +134,47 @@ button, a {
 @media (prefers-reduced-motion: reduce) {
   .kan-enter { animation: none; }
 }
+
+
+/* ============ Themes ============
+   KAN Theme is the default (the palette above). Light and Dark re-map the same variables, so every screen follows. */
+html[data-theme='dark'] {
+  --color-gray-50: #f2f2f7;  --color-gray-100: #e5e5ea; --color-gray-200: #d1d1d6; --color-gray-300: #c7c7cc;
+  --color-gray-400: #aeaeb2; --color-gray-500: #8e8e93; --color-gray-600: #48484a; --color-gray-700: #2c2c2e;
+  --color-gray-800: #1c1c1e; --color-gray-900: #121212; --color-gray-950: #000000;
+  --kan-glow-a: transparent; --kan-glow-b: transparent;
+  color-scheme: dark;
+}
+html[data-theme='dark'] .seg { background: #0c0c0e; border-color: #1f1f23; }
+html[data-theme='dark'] .seg-btn.seg-on { background: #5b5ef4; color: #ffffff; }
+html[data-theme='dark'] .seg-pill { display: none; }
+
+html[data-theme='light'] {
+  --color-white: #0f0f1a;
+  --color-gray-50: #0f0f1a;  --color-gray-100: #1a1a28; --color-gray-200: #272738; --color-gray-300: #3a3a4e;
+  --color-gray-400: #585870; --color-gray-500: #6b6b84; --color-gray-600: #a4a4b8; --color-gray-700: #d6d6e0;
+  --color-gray-800: #e9e9f0; --color-gray-900: #ffffff; --color-gray-950: #f3f3f7;
+  --color-violet-100: #4c1d95; --color-violet-200: #5b21b6; --color-violet-300: #6d28d9; --color-violet-400: #7c3aed;
+  --color-cyan-300: #0e7490;   --color-cyan-400: #0891b2;
+  --color-emerald-300: #047857; --color-rose-300: #be123c; --color-amber-300: #b45309;
+  --color-pink-300: #be185d;   --color-teal-300: #0f766e; --color-yellow-300: #a16207; --color-red-400: #dc2626;
+  --kan-glow-a: rgba(124, 58, 237, 0.06); --kan-glow-b: rgba(6, 182, 212, 0.05);
+  color-scheme: light;
+}
+/* Text that sits on a coloured fill or on photos/video stays white in every theme. */
+html[data-theme='light'] .kan-fab,
+html[data-theme='light'] [class*='bg-gradient-to-']:not([class*='from-violet-600/']):not([class*='to-cyan-500/']),
+html[data-theme='light'] [class~='bg-violet-600'], html[data-theme='light'] [class~='bg-violet-500'],
+html[data-theme='light'] [class~='bg-cyan-500'], html[data-theme='light'] [class~='bg-rose-500'],
+html[data-theme='light'] [class~='bg-red-500'], html[data-theme='light'] [class~='bg-emerald-500'],
+html[data-theme='light'] [class~='bg-amber-500'], html[data-theme='light'] [class~='bg-pink-500'],
+html[data-theme='light'] [class~='bg-black'], html[data-theme='light'] [class*='bg-black/'] {
+  --color-white: #ffffff;
+}
+html[data-theme='light'] nav { box-shadow: 0 -4px 16px rgba(15, 15, 30, 0.08) !important; }
+html[data-theme='light'] .seg { background: transparent; border-color: #e3e3ec; border-radius: 0; padding: 0; }
+html[data-theme='light'] .seg-btn { border-radius: 0; }
+html[data-theme='light'] .seg-btn.seg-on { color: #4f46e5; box-shadow: inset 0 -2px 0 #6366f1; }
+html[data-theme='light'] .seg-pill { display: none; }
+html[data-theme='light'] ::-webkit-scrollbar-track { background: #f3f3f7; }
+html[data-theme='light'] ::-webkit-scrollbar-thumb { background: #cfcfdc; }
