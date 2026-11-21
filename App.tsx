@@ -3118,25 +3118,6 @@ export default function App() {
     return () => window.clearTimeout(t);
   }, []);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [barsHidden, setBarsHidden] = useState(false);
-  useEffect(() => {
-    const onHome = activeTab === 'feed' && !viewedUserId && selectedChat === null;
-    if (!onHome || menuOpen) { setBarsHidden(false); return; }
-    let timer: number | undefined;
-    const arm = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => { if (window.scrollY > 120) setBarsHidden(true); }, 3000);
-    };
-    const wake = () => { setBarsHidden(false); arm(); };
-    arm();
-    const events = ['scroll', 'touchstart', 'pointerdown', 'keydown'] as const;
-    events.forEach(ev => window.addEventListener(ev, wake, { passive: true }));
-    return () => {
-      window.clearTimeout(timer);
-      events.forEach(ev => window.removeEventListener(ev, wake));
-      setBarsHidden(false);
-    };
-  }, [activeTab, viewedUserId, selectedChat, menuOpen]);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!menuOpen) return;
@@ -3211,10 +3192,10 @@ export default function App() {
   }
 
   return (
-    <div dir="rtl" className="kan-enter min-h-screen bg-gray-950 text-white font-sans">
+    <div dir="rtl" className="min-h-screen bg-gray-950 text-white font-sans">
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       {/* Header */}
-      <header className={`fixed top-0 left-0 right-0 z-50 bg-gray-950/70 backdrop-blur-xl border-b border-white/5 transition-transform duration-300 ease-out ${barsHidden ? '-translate-y-full' : 'translate-y-0'}`}>
+      <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/70 backdrop-blur-xl border-b border-white/5">
         <div className="w-full px-3 min-[400px]:px-4 md:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src={LOGO_URL} alt="" className="w-8 h-8 rounded-lg" />
@@ -3280,7 +3261,7 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <main className="pt-16 pb-20 w-full min-h-screen md:px-4 lg:px-8">
+      <main className="kan-enter pt-16 pb-20 w-full min-h-screen md:px-4 lg:px-8">
         <InstallBanner />
         <AnimatePresence mode="wait" initial={false}>
           {viewedUserId && (
@@ -3381,7 +3362,7 @@ export default function App() {
       </main>
 
       {/* Bottom Nav */}
-      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} className={`z-50 bg-gray-950/95 backdrop-blur-xl border-t border-white/10 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] transform-gpu will-change-transform transition-transform duration-300 ease-out ${barsHidden ? 'translate-y-full' : 'translate-y-0'}`}>
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} className="z-50 bg-gray-950/95 backdrop-blur-xl border-t border-white/10 shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
         <div className="w-full grid grid-cols-[1fr_auto_1fr] items-end gap-1 px-[max(0.5rem,env(safe-area-inset-left))] md:px-6 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
           {(() => {
             const tabs = {
@@ -4213,7 +4194,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       <video
         ref={videoRef}
         src={post.media?.url}
-        className={`absolute inset-0 w-full h-full ${landscape ? 'object-contain' : 'object-cover'}`}
+        className={`absolute inset-0 w-full h-full ${landscape ? 'object-contain' : 'object-cover md:object-contain'}`}
         onLoadedMetadata={e => setLandscape(e.currentTarget.videoWidth > e.currentTarget.videoHeight)}
         loop
         muted={muted}
@@ -4436,9 +4417,9 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   }
 
   return (
-    <div className="max-w-md mx-auto">
+    <div className="w-full md:-mx-4 lg:-mx-8 md:w-[calc(100%+2rem)] lg:w-[calc(100%+4rem)]">
       <div
-        className="h-[calc(100dvh-9rem)] overflow-y-scroll snap-y snap-mandatory no-scrollbar rounded-2xl"
+        className="h-[calc(100dvh-9rem)] overflow-y-scroll snap-y snap-mandatory no-scrollbar"
         onScroll={e => {
           const el = e.currentTarget;
           if (el.scrollTop + el.clientHeight * 2.5 >= el.scrollHeight) void loadMore();
