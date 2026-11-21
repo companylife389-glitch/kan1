@@ -9,7 +9,7 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -76,6 +76,7 @@ interface Message {
   replyToId?: string;
   sharedPostId?: string;
   sharedCommentId?: string;
+  editedAt?: number;
   reactions?: { userId: string; emoji: string }[];
   media?: { type: 'image' | 'video' | 'voice' | 'file'; url: string; duration?: number; name?: string; size?: number; path?: string };
 }
@@ -87,6 +88,7 @@ interface GroupMessage {
   text: string;
   timestamp: number;
   isSystem: boolean;
+  editedAt?: number;
   readBy: string[];
   replyToId?: string;
   media?: { type: 'image' | 'video' | 'voice' | 'file'; url: string; duration?: number; name?: string; size?: number; path?: string };
@@ -421,6 +423,7 @@ interface MessageRow {
   message_reactions?: { user_id: string; emoji: string }[];
   read_at: string | null;
   delivered_at?: string | null;
+  edited_at?: string | null;
   created_at: string;
 }
 
@@ -452,6 +455,7 @@ function rowToMessage(r: MessageRow, urls: Map<string, string>): Message {
     replyToId: r.reply_to_id ?? undefined,
     sharedPostId: r.shared_post_id ?? undefined,
     sharedCommentId: r.shared_comment_id ?? undefined,
+    editedAt: r.edited_at ? new Date(r.edited_at).getTime() : undefined,
     reactions: (r.message_reactions ?? []).map(x => ({ userId: x.user_id, emoji: x.emoji })),
     media: r.media_type && url
       ? { type: r.media_type, url, duration: r.media_duration ?? undefined, name: r.media_name ?? undefined, size: r.media_size ?? undefined, path: r.media_path ?? undefined }
@@ -471,7 +475,7 @@ async function loadConversations(me: string): Promise<Conversation[]> {
     supabase.from('conversations').select('id, user_a, user_b, last_activity'),
     supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, text, media_path, media_type, media_duration, media_name, media_size, reply_to_id, shared_post_id, shared_comment_id, read_at, delivered_at, created_at, message_reactions(user_id, emoji)')
+      .select('id, conversation_id, sender_id, text, media_path, media_type, media_duration, media_name, media_size, reply_to_id, shared_post_id, shared_comment_id, read_at, delivered_at, edited_at, created_at, message_reactions(user_id, emoji)')
       .order('created_at', { ascending: false })
       .limit(500),
     supabase.from('chat_backgrounds').select('conversation_id, type, value').eq('user_id', me),
@@ -1021,6 +1025,131 @@ applyTheme(getTheme());
 let openPostHandler: (postId: string, commentId?: string) => void = () => undefined;
 function openPost(postId: string, commentId?: string) { openPostHandler(postId, commentId); }
 
+// Any screen can open a profile; the App draws it on top of the screen stack.
+let openProfileHandler: (userId: string) => void = () => undefined;
+function openUserProfile(userId: string) { openProfileHandler(userId); }
+
+// Links that open inside the app (GitHub Pages friendly: the part after # is never sent to the server).
+function appBaseUrl() { return `${window.location.origin}${window.location.pathname}`; }
+function postLink(postId: string, commentId?: string) { return `${appBaseUrl()}#/post/${postId}${commentId ? `/${commentId}` : ''}`; }
+
+// Puts the page back to where it was, retrying for a moment while the screen below finishes drawing.
+function restoreScroll(y: number) {
+  let cancelled = false;
+  const stop = () => { cancelled = true; };
+  window.addEventListener('touchstart', stop, { once: true, passive: true });
+  window.addEventListener('wheel', stop, { once: true, passive: true });
+  const t0 = performance.now();
+  const step = () => {
+    if (cancelled) return;
+    window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior });
+    if (Math.abs(window.scrollY - y) > 2 && performance.now() - t0 < 900) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Calls onSeen with the ids of messages (elements marked data-unread="1", ids in data-mids) once they are really on screen.
+function useSeenObserver(root: React.RefObject<HTMLElement | null>, enabled: boolean, depKey: string, onSeen: (ids: string[]) => void) {
+  const cb = useRef(onSeen);
+  cb.current = onSeen;
+  useEffect(() => {
+    const el = root.current;
+    if (!el || !enabled) return;
+    const pending = new Set<string>();
+    const done = new Set<string>();
+    let timer: number | undefined;
+    const flush = () => {
+      if (pending.size === 0) return;
+      const ids = [...pending];
+      pending.clear();
+      cb.current(ids);
+    };
+    const io = new IntersectionObserver(entries => {
+      let any = false;
+      for (const en of entries) {
+        const h = en.rootBounds?.height ?? 0;
+        if (!en.isIntersecting || !(en.intersectionRatio >= 0.6 || (h > 0 && en.intersectionRect.height >= h * 0.5))) continue;
+        const target = en.target as HTMLElement;
+        for (const id of (target.dataset.mids ?? '').split(',')) {
+          if (id && !done.has(id)) { done.add(id); pending.add(id); any = true; }
+        }
+        io.unobserve(target);
+      }
+      if (any) { window.clearTimeout(timer); timer = window.setTimeout(flush, 350); }
+    }, { root: el, threshold: [0.1, 0.3, 0.6, 1] });
+    el.querySelectorAll<HTMLElement>('[data-unread="1"]').forEach(n => io.observe(n));
+    return () => { io.disconnect(); window.clearTimeout(timer); flush(); };
+  }, [enabled, depKey]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+async function updateText(table: 'messages' | 'group_messages' | 'posts' | 'comments', id: string, text: string): Promise<boolean> {
+  const { error } = await supabase.from(table).update({ text }).eq('id', id);
+  if (error) { console.error(error); return false; }
+  return true;
+}
+
+// One small sheet to edit text anywhere (post, comment, message). With initialTitle it also edits a headline.
+function EditTextModal({ title, initial, initialTitle, maxLength, allowEmpty, onSave, onClose }: {
+  title: string; initial: string; initialTitle?: string; maxLength: number; allowEmpty?: boolean;
+  onSave: (text: string, headline: string) => Promise<boolean>; onClose: () => void;
+}) {
+  useBackLayer(true, onClose);
+  const [value, setValue] = useState(initial);
+  const [head, setHead] = useState(initialTitle ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = taRef.current;
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, []);
+  const save = async () => {
+    if (busy) return;
+    const v = value.trim();
+    const h = head.trim();
+    if (!v && !allowEmpty) { setErr('النص لا يمكن أن يكون فارغاً'); return; }
+    if (v === initial.trim() && h === (initialTitle ?? '').trim()) { onClose(); return; }
+    setBusy(true);
+    setErr('');
+    const ok = await onSave(v, h);
+    setBusy(false);
+    if (ok) onClose(); else setErr('تعذّر حفظ التعديل، حاول مرة أخرى');
+  };
+  return createPortal(
+    <div dir="rtl" className="fixed inset-0 z-[150] flex items-center justify-center p-4" onClick={e => { e.stopPropagation(); onClose(); }}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="relative w-full max-w-md bg-gray-900 border border-white/10 rounded-3xl p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold kan-gradient-text">{title}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 text-gray-400" aria-label="إغلاق"><X size={18} /></button>
+        </div>
+        {initialTitle !== undefined && (
+          <input value={head} onChange={e => setHead(e.target.value.slice(0, 120))} placeholder="العنوان" className="w-full mb-2 px-3 py-2.5 bg-gray-800 rounded-xl text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-400" />
+        )}
+        <textarea
+          ref={taRef}
+          value={value}
+          onChange={e => setValue(e.target.value.slice(0, maxLength))}
+          rows={5}
+          dir="auto"
+          className="w-full px-3 py-2.5 bg-gray-800 rounded-xl text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-400 resize-none"
+        />
+        <div className="flex items-center justify-between mt-1 text-[11px] text-gray-500">
+          <span>{err ? <span className="text-red-400">{err}</span> : ''}</span>
+          <span>{value.length}/{maxLength}</span>
+        </div>
+        <div className="flex gap-2 mt-3">
+          <button onClick={() => void save()} disabled={busy} className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold active:scale-95 transition-transform disabled:opacity-60 flex items-center justify-center gap-2">
+            {busy ? <RefreshCw size={15} className="animate-spin" /> : <Check size={15} />} حفظ
+          </button>
+          <button onClick={onClose} className="px-5 py-2.5 rounded-full bg-white/5 text-gray-300 text-sm">إلغاء</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ============ Back button: closes the top screen/sheet instead of leaving the app ============
 // One history entry (the "sentinel") sits above the real page. Pressing Back consumes it, we close the top
 // layer (or scroll Home to the top), then put the sentinel back. With nothing left to close, Back leaves the app.
@@ -1326,34 +1455,37 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const text = comment ? `${comment.authorName}: ${comment.text}\n— ${author.displayName} (@${author.username}) على KAN` : postShareText(post, author);
+  const link = postLink(post.id, comment?.id);
+  const text = (comment ? `${comment.authorName}: ${comment.text}\n— ${author.displayName} (@${author.username}) على KAN` : postShareText(post, author)) + `\n${link}`;
   const people = users
     .filter(u => u.id !== currentUser.id && (u.displayName + ' ' + u.username).toLowerCase().includes(q.trim().toLowerCase()))
     .sort((a, b) => Number(currentUser.following.includes(b.id)) - Number(currentUser.following.includes(a.id)))
     .slice(0, 40);
 
+  const flash = (msg: string) => { setNote(msg); window.setTimeout(() => setNote(''), 1800); };
   const nativeShare = async () => {
-    if (busy) return;
-    setBusy('native');
-    setNote('');
-    const f = comment ? null : await getFile();
     try {
-      if (f && typeof navigator.canShare === 'function' && navigator.canShare({ files: [f] })) {
-        await navigator.share({ files: [f], text });
-        onClose();
-      } else if ('share' in navigator) {
-        await navigator.share({ text });
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ title: `${author.displayName} على KAN`, text: text.replace(`\n${link}`, '').slice(0, 300), url: link });
         onClose();
       } else {
-        await navigator.clipboard.writeText(text);
-        setNote('تم نسخ النص');
+        await navigator.clipboard.writeText(link);
+        flash('تم نسخ الرابط');
       }
     } catch { /* the person closed the share sheet */ }
-    setBusy(null);
   };
-  const copyText = async () => {
-    try { await navigator.clipboard.writeText(text); setNote('تم نسخ النص'); } catch { setNote('تعذّر النسخ'); }
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(link); flash('تم نسخ الرابط'); } catch { flash('تعذّر النسخ'); }
   };
+  const openExternal = (url: string) => { window.open(url, '_blank', 'noopener'); };
+  const actions: { key: string; label: string; Icon: typeof Copy; cls: string; run: () => void }[] = [
+    { key: 'link', label: 'نسخ الرابط', Icon: Copy, cls: 'from-violet-600 to-fuchsia-500', run: () => void copyLink() },
+    { key: 'wa', label: 'واتساب', Icon: MessageCircle, cls: 'from-emerald-500 to-green-600', run: () => openExternal(`https://wa.me/?text=${encodeURIComponent(text)}`) },
+    { key: 'tg', label: 'تيليجرام', Icon: Send, cls: 'from-sky-500 to-cyan-500', run: () => openExternal(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text.replace(`\n${link}`, '').slice(0, 300))}`) },
+    { key: 'more', label: 'المزيد', Icon: Share2, cls: 'from-gray-600 to-gray-500', run: () => void nativeShare() },
+    ...(post.media && !comment ? [{ key: 'save', label: 'حفظ', Icon: Download, cls: 'from-gray-600 to-gray-500', run: () => { void downloadFile(post.media!.url, post.media!.name || (post.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); } }] : []),
+  ];
+
   const sendTo = async (u: User) => {
     if (busy || sentTo.includes(u.id)) return;
     setBusy(u.id);
@@ -1423,47 +1555,38 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 px-4 mb-3">
-          <button onClick={() => void nativeShare()} disabled={busy === 'native'} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-gradient-to-br from-violet-600/30 to-cyan-500/20 border border-violet-400/30 text-white text-xs font-medium active:scale-95 transition-transform disabled:opacity-60">
-            <Share2 size={20} className="text-cyan-300" /> تطبيقات أخرى
-          </button>
-          <button onClick={() => void copyText()} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white/5 border border-white/10 text-gray-200 text-xs font-medium active:scale-95 transition-transform">
-            <Copy size={20} /> نسخ النص
-          </button>
-          {post.media && !comment ? (
-            <button onClick={() => { void downloadFile(post.media!.url, post.media!.name || (post.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); }} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white/5 border border-white/10 text-gray-200 text-xs font-medium active:scale-95 transition-transform">
-              <Download size={20} /> حفظ
+        <div className="flex gap-3.5 overflow-x-auto no-scrollbar px-5 pb-4">
+          {actions.map(a => (
+            <button key={a.key} onClick={a.run} className="flex flex-col items-center gap-1.5 shrink-0 w-[62px] active:scale-90 transition-transform">
+              <span className={`w-14 h-14 rounded-full bg-gradient-to-br ${a.cls} flex items-center justify-center shadow-lg text-white`}><a.Icon size={22} /></span>
+              <span className="text-[11px] text-gray-300 whitespace-nowrap">{a.label}</span>
             </button>
-          ) : <div />}
+          ))}
         </div>
 
         <div className="px-4 pb-2">
           <div className="relative">
             <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="أرسل في محادثة..." className="w-full pr-9 pl-3 py-2.5 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="أرسل في محادثة..." className="w-full pr-9 pl-3 py-2.5 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-400/50" />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(1rem,env(safe-area-inset-bottom))] min-h-[120px]">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] min-h-[140px]">
           {people.length === 0 && <p className="text-center text-sm text-gray-500 py-6">لا يوجد أحد</p>}
-          {people.map(u => {
-            const done = sentTo.includes(u.id);
-            return (
-              <div key={u.id} className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5">
-                <Avatar src={u.avatar} name={u.displayName} size="md" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm text-white truncate">{u.displayName}</div>
-                  <div className="text-xs text-gray-500 truncate">@{u.username}</div>
-                </div>
-                <button
-                  onClick={() => void sendTo(u)}
-                  disabled={busy !== null || done}
-                  className={`px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all ${done ? 'bg-cyan-500/15 text-cyan-300' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white active:scale-95'} disabled:opacity-70`}
-                >
-                  {busy === u.id ? <RefreshCw size={13} className="animate-spin" /> : done ? <><Check size={13} /> تم</> : <><Send size={13} /> إرسال</>}
+          <div className="grid grid-cols-4 gap-x-2 gap-y-4 pt-2">
+            {people.map(u => {
+              const done = sentTo.includes(u.id);
+              return (
+                <button key={u.id} onClick={() => void sendTo(u)} disabled={busy !== null || done} className="flex flex-col items-center gap-1.5 active:scale-90 transition-transform">
+                  <span className="relative block">
+                    <Avatar src={u.avatar} name={u.displayName} size="lg" />
+                    {done && <span className="absolute inset-0 rounded-full bg-cyan-500/75 flex items-center justify-center"><Check size={22} className="text-white" /></span>}
+                    {busy === u.id && <span className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center"><RefreshCw size={18} className="text-white animate-spin" /></span>}
+                  </span>
+                  <span className="text-[11px] text-gray-300 truncate w-full text-center">{u.displayName}</span>
                 </button>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
         {note && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-gray-800 border border-white/10 text-xs text-white shadow-lg">{note}</div>}
       </motion.div>
@@ -1478,6 +1601,7 @@ type GroupMsgRow = {
   reply_to_id?: string | null;
   media_path?: string | null; media_type?: 'image' | 'video' | 'voice' | 'file' | null;
   media_name?: string | null; media_size?: number | null; media_duration?: number | null;
+  edited_at?: string | null;
   group_message_reads?: { user_id: string }[];
   group_message_reactions?: { user_id: string; emoji: string }[];
 };
@@ -1490,6 +1614,7 @@ function groupRowToMessage(r: GroupMsgRow, urls: Map<string, string>): GroupMess
     text: r.text,
     timestamp: new Date(r.created_at).getTime(),
     isSystem: r.is_system,
+    editedAt: r.edited_at ? new Date(r.edited_at).getTime() : undefined,
     readBy: (r.group_message_reads ?? []).map(x => x.user_id),
     replyToId: r.reply_to_id ?? undefined,
     reactions: (r.group_message_reactions ?? []).map(x => ({ userId: x.user_id, emoji: x.emoji })),
@@ -1513,7 +1638,7 @@ async function loadGroups(): Promise<Group[]> {
     supabase.from('chat_group_members').select('group_id, user_id, role'),
     supabase
       .from('group_messages')
-      .select('id, group_id, sender_id, text, is_system, created_at, reply_to_id, media_path, media_type, media_name, media_size, media_duration, group_message_reads(user_id), group_message_reactions(user_id, emoji)')
+      .select('id, group_id, sender_id, text, is_system, created_at, reply_to_id, media_path, media_type, media_name, media_size, media_duration, edited_at, group_message_reads(user_id), group_message_reactions(user_id, emoji)')
       .order('created_at', { ascending: false })
       .limit(600),
   ]);
@@ -1811,6 +1936,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const keepProgress = useRef(false);
   const [replyingTo, setReplyingTo] = useState<GroupMessage | null>(null);
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<GroupMessage | null>(null);
   const [reactingTo, setReactingTo] = useState<string | null>(null);
   const [seenFor, setSeenFor] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -1834,15 +1960,17 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   }, []);
 
   // Real read receipts: a message counts as seen only once it was on this person's screen.
-  useEffect(() => {
-    if (!visible) return;
-    const ids = group.messages.filter(m => !m.isSystem && m.senderId !== currentUser.id && !m.readBy.includes(currentUser.id)).map(m => m.id);
-    if (ids.length === 0) return;
-    patchMsgs(list => list.map(m => ids.includes(m.id) ? { ...m, readBy: [...m.readBy, currentUser.id] } : m));
-    void supabase.from('group_message_reads').upsert(ids.map(id => ({ message_id: id, user_id: currentUser.id })), { onConflict: 'message_id,user_id', ignoreDuplicates: true }).then(({ error: err }) => {
-      if (err) console.error(err);
-    });
-  }, [group.messages.length, group.id, visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  useSeenObserver(
+    scrollRef,
+    visible,
+    group.messages.filter(m => !m.isSystem && m.senderId !== currentUser.id && !m.readBy.includes(currentUser.id)).map(m => m.id).join(','),
+    ids => {
+      patchMsgs(list => list.map(m => (ids.includes(m.id) && !m.readBy.includes(currentUser.id) ? { ...m, readBy: [...m.readBy, currentUser.id] } : m)));
+      void supabase.from('group_message_reads').upsert(ids.map(id => ({ message_id: id, user_id: currentUser.id })), { onConflict: 'message_id,user_id', ignoreDuplicates: true }).then(({ error: err }) => {
+        if (err) console.error(err);
+      });
+    },
+  );
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -1985,6 +2113,20 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
           <button onClick={() => setInfoOpen(true)} className="p-2 hover:bg-gray-800 rounded-full text-gray-400" aria-label="معلومات المجموعة"><Users size={18} /></button>
         </div>
 
+        {editing && (
+          <EditTextModal
+            title="تعديل الرسالة"
+            initial={editing.text}
+            maxLength={4000}
+            allowEmpty={!!editing.media}
+            onClose={() => setEditing(null)}
+            onSave={async v => {
+              const ok = await updateText('group_messages', editing.id, v);
+              if (ok) patchMsgs(list => list.map(m => (m.id === editing.id ? { ...m, text: v, editedAt: Date.now() } : m)));
+              return ok;
+            }}
+          />
+        )}
         <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" onClick={() => { setActiveMsgId(null); setReactingTo(null); }}>
           {group.messages.length === 0 && <p className="text-center text-gray-500 text-sm py-12">ابدأ المحادثة في المجموعة 👋</p>}
           {group.messages.map((m, i) => {
@@ -2002,10 +2144,10 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             const reactionGroups = new Map<string, string[]>();
             for (const r of m.reactions) reactionGroups.set(r.emoji, [...(reactionGroups.get(r.emoji) ?? []), r.userId]);
             return (
-              <motion.div key={m.id} id={`gmsg-${m.id}`} initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.18 }} className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
-                {!mine && (showName && sender ? <Avatar src={sender.avatar} name={sender.displayName} size="sm" zoom /> : <div className="w-7 shrink-0" />)}
+              <motion.div key={m.id} id={`gmsg-${m.id}`} data-unread={!mine && !m.readBy.includes(currentUser.id) ? '1' : undefined} data-mids={m.id} initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.18 }} className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
+                {!mine && (showName && sender ? <button onClick={e => { e.stopPropagation(); openUserProfile(sender.id); }} className="shrink-0 self-end"><Avatar src={sender.avatar} name={sender.displayName} size="sm" /></button> : <div className="w-7 shrink-0" />)}
                 <div className={`max-w-[85%] sm:max-w-[75%] flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
-                  {showName && sender && <span className={`text-[11px] font-semibold mb-0.5 px-1 ${nameColors[sender.displayName.charCodeAt(0) % nameColors.length]}`}>{sender.displayName}</span>}
+                  {showName && sender && <button onClick={e => { e.stopPropagation(); openUserProfile(sender.id); }} className={`text-[11px] font-semibold mb-0.5 px-1 text-right ${nameColors[sender.displayName.charCodeAt(0) % nameColors.length]}`}>{sender.displayName}</button>}
                   <div
                     {...messageGestures(
                       () => { setReplyingTo(m); window.setTimeout(() => inputRef.current?.focus(), 30); },
@@ -2049,7 +2191,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     {m.text && <p className="whitespace-pre-wrap" dir="auto">{m.text}</p>}
                   </div>
                   <span className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
-                    {formatTime(m.timestamp)}
+                    {formatTime(m.timestamp)}{m.editedAt ? ' · معدّلة' : ''}
                     {mine && (seen.length === 0
                       ? <Check size={14} className="text-gray-500" aria-label="تم الإرسال" />
                       : <><CheckCheck size={14} className={everyone ? 'text-cyan-400' : 'text-gray-400'} aria-label="شوهدت" />
@@ -2079,6 +2221,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                         <button onClick={() => { void downloadFile(m.media!.url, m.media!.name || (m.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Download size={12} /> تحميل</button>
                       )}
                       {mine && <button onClick={() => setSeenFor(seenFor === m.id ? null : m.id)} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-cyan-300 text-xs flex items-center gap-1"><Eye size={12} /> من شاهدها</button>}
+                      {mine && m.media?.type !== 'voice' && <button onClick={() => { setEditing(m); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Pencil size={12} /> تعديل</button>}
                       {mine && <button onClick={() => void deleteMessage(m)} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-red-400 text-xs flex items-center gap-1"><Trash2 size={12} /> حذف</button>}
                     </div>
                   )}
@@ -2539,36 +2682,88 @@ function SplashScreen() {
 }
 
 // ============ Stories strip (design only, not wired up yet) ============
+interface StoryItem { id: string; userId: string; url: string; type: 'image' | 'video'; caption: string; createdAt: number }
+interface StoryGroup { userId: string; items: StoryItem[] }
+
 function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }) {
-  const [hint, setHint] = useState(false);
-  const people = users.filter(u => currentUser.following.includes(u.id)).slice(0, 14);
-  const soon = () => { setHint(true); window.setTimeout(() => setHint(false), 1600); };
+  const [stories, setStories] = useState<StoryItem[]>([]);
+  const [seen, setSeen] = useState<Set<string>>(new Set());
+  const [openAt, setOpenAt] = useState<number | null>(null);
+  const [composer, setComposer] = useState<File | null>(null);
+  const [hint, setHint] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const load = async () => {
+    const { data, error } = await supabase
+      .from('stories')
+      .select('id, user_id, media_url, media_type, caption, created_at')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: true })
+      .limit(400);
+    if (error) { console.error(error); return; }
+    const rows = (data ?? []) as { id: string; user_id: string; media_url: string; media_type: 'image' | 'video'; caption: string; created_at: string }[];
+    setStories(rows.map(r => ({ id: r.id, userId: r.user_id, url: r.media_url, type: r.media_type, caption: r.caption, createdAt: new Date(r.created_at).getTime() })));
+    const { data: v } = await supabase.from('story_views').select('story_id').eq('viewer_id', currentUser.id).gt('viewed_at', new Date(Date.now() - 86400000).toISOString());
+    setSeen(new Set((v ?? []).map(x => (x as { story_id: string }).story_id)));
+  };
+  useEffect(() => {
+    void load();
+    const t = window.setInterval(() => void load(), 60000);
+    return () => window.clearInterval(t);
+  }, [currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const flash = (msg: string) => { setHint(msg); window.setTimeout(() => setHint(''), 2200); };
+  const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    if (!f.type.startsWith('image/') && !f.type.startsWith('video/')) { flash('اختر صورة أو فيديو'); return; }
+    if (f.size > 80 * 1024 * 1024) { flash('الملف كبير جداً (الحد 80 ميجا)'); return; }
+    setComposer(f);
+  };
+
+  const allowed = new Set([currentUser.id, ...currentUser.following]);
+  const byUser = new Map<string, StoryItem[]>();
+  for (const s of stories) if (allowed.has(s.userId)) byUser.set(s.userId, [...(byUser.get(s.userId) ?? []), s]);
+  const hasUnseen = (g: StoryGroup) => g.items.some(i => !seen.has(i.id));
+  const others: StoryGroup[] = [...byUser.entries()]
+    .filter(([id]) => id !== currentUser.id && users.some(u => u.id === id))
+    .map(([userId, items]) => ({ userId, items }))
+    .sort((a, b) => Number(hasUnseen(b)) - Number(hasUnseen(a)) || b.items[b.items.length - 1].createdAt - a.items[a.items.length - 1].createdAt);
+  const mine = byUser.get(currentUser.id);
+  const viewerGroups: StoryGroup[] = [...(mine ? [{ userId: currentUser.id, items: mine }] : []), ...others];
+  const offset = mine ? 1 : 0;
+
   return (
     <div className="relative">
       <div className="flex items-center justify-between px-1 mb-2">
         <h3 className="text-sm font-semibold text-gray-200">القصص</h3>
-        <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-200 text-[10px] font-semibold ring-1 ring-violet-400/25">قريباً</span>
       </div>
+      <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={pick} />
       <div className="flex gap-3.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
-        <button onClick={soon} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
+        <button onClick={() => (mine ? setOpenAt(0) : fileRef.current?.click())} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
           <div className="relative">
-            <div className="w-[62px] h-[62px] rounded-full p-[2px] border-2 border-dashed border-violet-400/40">
-              <div className="w-full h-full rounded-full overflow-hidden"><Avatar src={currentUser.avatar} name={currentUser.displayName} size="lg" /></div>
+            <div className={`w-[62px] h-[62px] rounded-full p-[2.5px] ${mine ? 'bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400' : 'border-2 border-dashed border-violet-400/40'}`}>
+              <div className={`w-full h-full rounded-full overflow-hidden ${mine ? 'bg-gray-950 p-[2px]' : ''}`}><Avatar src={currentUser.avatar} name={currentUser.displayName} size="lg" /></div>
             </div>
-            <span className="absolute -bottom-0.5 -left-0.5 w-6 h-6 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 text-white flex items-center justify-center ring-2 ring-gray-950 shadow-md"><Plus size={14} /></span>
+            <span onClick={e => { e.stopPropagation(); fileRef.current?.click(); }} className="absolute -bottom-0.5 -left-0.5 w-6 h-6 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 text-white flex items-center justify-center ring-2 ring-gray-950 shadow-md"><Plus size={14} /></span>
           </div>
           <span className="text-[11px] text-gray-300 truncate w-full text-center">قصتك</span>
         </button>
-        {people.map(u => (
-          <button key={u.id} onClick={soon} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
-            <div className="w-[62px] h-[62px] rounded-full p-[2.5px] bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400">
-              <div className="w-full h-full rounded-full bg-gray-950 p-[2px]"><div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"><Avatar src={u.avatar} name={u.displayName} size="lg" /></div></div>
-            </div>
-            <span className="text-[11px] text-gray-400 truncate w-full text-center">{u.displayName}</span>
-          </button>
-        ))}
-        {people.length === 0 && [0, 1, 2, 3].map(i => (
-          <div key={i} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] opacity-60">
+        {others.map((g, i) => {
+          const u = users.find(x => x.id === g.userId)!;
+          const unseen = hasUnseen(g);
+          return (
+            <button key={g.userId} onClick={() => setOpenAt(offset + i)} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
+              <div className={`w-[62px] h-[62px] rounded-full p-[2.5px] ${unseen ? 'bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400' : 'bg-gray-700'}`}>
+                <div className="w-full h-full rounded-full bg-gray-950 p-[2px]"><div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"><Avatar src={u.avatar} name={u.displayName} size="lg" /></div></div>
+              </div>
+              <span className={`text-[11px] truncate w-full text-center ${unseen ? 'text-gray-200' : 'text-gray-500'}`}>{u.displayName}</span>
+            </button>
+          );
+        })}
+        {others.length === 0 && !mine && [0, 1, 2].map(i => (
+          <div key={i} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] opacity-50">
             <div className="w-[62px] h-[62px] rounded-full border-2 border-dashed border-white/15 bg-white/[0.03]" />
             <span className="h-2 w-10 rounded-full bg-white/10" />
           </div>
@@ -2576,10 +2771,253 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
       </div>
       <AnimatePresence>
         {hint && (
-          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute left-1/2 -translate-x-1/2 top-7 px-3.5 py-1.5 rounded-full bg-gray-800 border border-white/10 text-xs text-white shadow-lg">القصص قريباً ✨</motion.div>
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute left-1/2 -translate-x-1/2 top-7 px-3.5 py-1.5 rounded-full bg-gray-800 border border-white/10 text-xs text-white shadow-lg z-10">{hint}</motion.div>
         )}
       </AnimatePresence>
+      {composer && <StoryComposer file={composer} currentUser={currentUser} onClose={() => setComposer(null)} onDone={() => { setComposer(null); void load(); }} />}
+      {openAt !== null && viewerGroups[openAt] && (
+        <StoryViewer
+          groups={viewerGroups}
+          startGroup={openAt}
+          users={users}
+          currentUser={currentUser}
+          onSeen={id => setSeen(prev => (prev.has(id) ? prev : new Set(prev).add(id)))}
+          onChanged={() => void load()}
+          onClose={() => setOpenAt(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; currentUser: User; onClose: () => void; onDone: () => void }) {
+  useBackLayer(true, onClose);
+  const [previewUrl] = useState(() => URL.createObjectURL(file));
+  useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
+  const isVideo = file.type.startsWith('video/');
+  const [caption, setCaption] = useState('');
+  const [pct, setPct] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const publish = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    const path = `${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[file.type] ?? safeExt(file.name)}`;
+    try {
+      const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, file, file.type || 'application/octet-stream', '31536000', setPct);
+      if (upErr) throw upErr;
+      const url = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+      const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300) });
+      if (insErr) { void supabase.storage.from(POST_MEDIA_BUCKET).remove([path]); throw insErr; }
+      onDone();
+    } catch (e) {
+      console.error(e);
+      setErr('تعذّر نشر القصة، حاول مرة أخرى');
+      setBusy(false);
+    }
+  };
+  return createPortal(
+    <div dir="rtl" className="fixed inset-0 z-[140] bg-black flex flex-col">
+      <div className="flex items-center justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
+        <button onClick={onClose} disabled={busy} className="p-2 rounded-full bg-white/10 text-white" aria-label="إغلاق"><X size={20} /></button>
+        <span className="text-white font-semibold text-sm">قصة جديدة</span>
+        <span className="w-9" />
+      </div>
+      <div className="flex-1 min-h-0 flex items-center justify-center">
+        {isVideo
+          ? <video src={previewUrl} className="max-w-full max-h-full" controls playsInline muted />
+          : <img src={previewUrl} alt="" className="max-w-full max-h-full object-contain" />}
+      </div>
+      <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2">
+        <input value={caption} onChange={e => setCaption(e.target.value.slice(0, 300))} placeholder="أضف تعليقاً..." className="flex-1 px-4 py-2.5 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" />
+        <button onClick={() => void publish()} disabled={busy} className="px-5 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-70 active:scale-95 transition-transform">
+          {busy ? <><RefreshCw size={15} className="animate-spin" /> {pct}%</> : <><Send size={15} /> نشر</>}
+        </button>
+      </div>
+      {err && <div className="absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500/90 text-white text-xs">{err}</div>}
+    </div>,
+    document.body,
+  );
+}
+
+function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged, onClose }: {
+  groups: StoryGroup[]; startGroup: number; users: User[]; currentUser: User;
+  onSeen: (id: string) => void; onChanged: () => void; onClose: () => void;
+}) {
+  useBackLayer(true, onClose);
+  const [gi, setGi] = useState(startGroup);
+  const [si, setSi] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [duration, setDuration] = useState(5000);
+  const [viewers, setViewers] = useState<string[] | null>(null);
+  const [showViewers, setShowViewers] = useState(false);
+  const group = groups[gi];
+  const story = group?.items[si];
+  const author = users.find(u => u.id === group?.userId);
+  const isMine = story?.userId === currentUser.id;
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const downY = useRef(0);
+  const holdTimer = useRef<number | undefined>(undefined);
+  const held = useRef(false);
+
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prevOverflow; };
+  }, []);
+
+  const next = () => {
+    if (!group) return;
+    if (si < group.items.length - 1) setSi(si + 1);
+    else if (gi < groups.length - 1) { setGi(gi + 1); setSi(0); }
+    else onClose();
+  };
+  const prev = () => {
+    if (si > 0) setSi(si - 1);
+    else if (gi > 0) { setGi(gi - 1); setSi(Math.max(0, groups[gi - 1].items.length - 1)); }
+    else setProgress(0);
+  };
+
+  useEffect(() => {
+    setProgress(0);
+    setDuration(5000);
+    setShowViewers(false);
+    setViewers(null);
+    if (!story) return;
+    if (story.userId !== currentUser.id) {
+      onSeen(story.id);
+      void supabase.from('story_views').upsert({ story_id: story.id, viewer_id: currentUser.id }, { onConflict: 'story_id,viewer_id', ignoreDuplicates: true }).then(({ error }) => { if (error) console.error(error); });
+    } else {
+      let off = false;
+      void supabase.from('story_views').select('viewer_id').eq('story_id', story.id).then(({ data }) => {
+        if (!off) setViewers((data ?? []).map(r => (r as { viewer_id: string }).viewer_id));
+      });
+      return () => { off = true; };
+    }
+  }, [story?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pictures advance on a timer; videos report their own progress.
+  useEffect(() => {
+    if (!story || story.type !== 'image' || paused || showViewers) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = now - last;
+      last = now;
+      setProgress(p => p + dt / duration);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [story?.id, paused, showViewers, duration]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (progress >= 1) next(); }, [progress]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (paused || showViewers) v.pause(); else void v.play().catch(() => undefined);
+  }, [paused, showViewers, story?.id]);
+
+  const remove = async () => {
+    if (!story || !window.confirm('حذف هذه القصة؟')) return;
+    const { error } = await supabase.from('stories').delete().eq('id', story.id);
+    if (error) { console.error(error); return; }
+    const p = mediaPath(story.url);
+    if (p) void supabase.storage.from(POST_MEDIA_BUCKET).remove([p]);
+    onChanged();
+    onClose();
+  };
+
+  if (!story || !group) return null;
+  const ignore = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation(), onPointerUp: (e: React.PointerEvent) => e.stopPropagation() };
+
+  return createPortal(
+    <div
+      dir="rtl"
+      className="fixed inset-0 z-[140] bg-black flex items-center justify-center select-none"
+      onTouchStart={e => { downY.current = e.touches[0].clientY; }}
+      onTouchEnd={e => { if (e.changedTouches[0].clientY - downY.current > 110) onClose(); }}
+      onPointerDown={e => {
+        held.current = false;
+        window.clearTimeout(holdTimer.current);
+        holdTimer.current = window.setTimeout(() => { held.current = true; setPaused(true); }, 220);
+      }}
+      onPointerUp={e => {
+        window.clearTimeout(holdTimer.current);
+        if (held.current) { setPaused(false); held.current = false; return; }
+        const rect = e.currentTarget.getBoundingClientRect();
+        if (e.clientX - rect.left > rect.width / 3) next(); else prev();
+      }}
+      onPointerCancel={() => { window.clearTimeout(holdTimer.current); setPaused(false); }}
+    >
+      <div className="relative w-full h-full max-w-md bg-black overflow-hidden">
+        {story.type === 'image'
+          ? <img src={story.url} alt="" draggable={false} className="absolute inset-0 w-full h-full object-contain" />
+          : (
+            <video
+              key={story.id}
+              ref={videoRef}
+              src={story.url}
+              autoPlay
+              playsInline
+              className="absolute inset-0 w-full h-full object-contain"
+              onLoadedMetadata={e => setDuration((e.currentTarget.duration || 5) * 1000)}
+              onTimeUpdate={e => { const d = e.currentTarget.duration; if (d > 0) setProgress(e.currentTarget.currentTime / d); }}
+              onEnded={() => setProgress(1)}
+              onError={() => setProgress(1)}
+            />
+          )}
+        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 top-0 px-3 pt-[max(0.6rem,env(safe-area-inset-top))]">
+          <div className="flex gap-1">
+            {group.items.map((it, i) => (
+              <div key={it.id} className="h-[3px] flex-1 rounded-full bg-white/30 overflow-hidden">
+                <div className="h-full bg-white" style={{ width: `${i < si ? 100 : i === si ? Math.min(100, progress * 100) : 0}%` }} />
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-2.5 mt-2.5" {...ignore}>
+            {author && <Avatar src={author.avatar} name={author.displayName} size="md" />}
+            <div className="flex-1 min-w-0">
+              <div className="text-white text-sm font-semibold truncate">{isMine ? 'قصتك' : author?.displayName}</div>
+              <div className="text-white/70 text-[11px]">{formatTime(story.createdAt)}</div>
+            </div>
+            {isMine && <button onClick={() => void remove()} className="p-2 rounded-full bg-black/30 text-white" aria-label="حذف القصة"><Trash2 size={18} /></button>}
+            <button onClick={onClose} className="p-2 rounded-full bg-black/30 text-white" aria-label="إغلاق"><X size={20} /></button>
+          </div>
+        </div>
+        <div className="absolute inset-x-0 bottom-0 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 px-4 bg-gradient-to-t from-black/70 to-transparent">
+          {story.caption && <p className="text-white text-[15px] leading-6 text-center mb-3 whitespace-pre-wrap pointer-events-none" dir="auto">{story.caption}</p>}
+          {isMine && (
+            <div className="flex justify-center" {...ignore}>
+              <button onClick={() => setShowViewers(v => !v)} className="px-4 py-1.5 rounded-full bg-white/15 text-white text-sm flex items-center gap-2">
+                <Eye size={16} /> {viewers === null ? '...' : viewers.length}
+              </button>
+            </div>
+          )}
+        </div>
+        {showViewers && isMine && (
+          <div className="absolute inset-x-0 bottom-0 max-h-[55%] overflow-y-auto bg-gray-900 rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" {...ignore}>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-bold text-white text-sm">المشاهدات ({viewers?.length ?? 0})</h4>
+              <button onClick={() => setShowViewers(false)} className="p-1 text-gray-400"><X size={18} /></button>
+            </div>
+            {(viewers ?? []).length === 0 && <p className="text-center text-gray-500 text-sm py-4">لم يشاهدها أحد بعد</p>}
+            {(viewers ?? []).map(id => {
+              const u = users.find(x => x.id === id);
+              return u ? (
+                <div key={id} className="flex items-center gap-3 py-1.5">
+                  <Avatar src={u.avatar} name={u.displayName} size="md" />
+                  <span className="text-sm text-white">{u.displayName}</span>
+                </div>
+              ) : null;
+            })}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -3060,6 +3498,13 @@ export default function App() {
           return prev.map(x => x.id !== row.group_id ? x : { ...x, lastActivity: msg.timestamp, messages: [...x.messages, msg] });
         });
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_messages' }, payload => {
+        const row = payload.new as { id?: string; text?: string; edited_at?: string | null };
+        if (!row.id) return;
+        setGroups(prev => prev.map(g => g.messages.some(m => m.id === row.id)
+          ? { ...g, messages: g.messages.map(m => (m.id === row.id ? { ...m, text: row.text ?? m.text, editedAt: row.edited_at ? new Date(row.edited_at).getTime() : m.editedAt } : m)) }
+          : g));
+      })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'group_messages' }, payload => {
         const old = payload.old as { id?: string };
         if (!old.id) return;
@@ -3167,7 +3612,7 @@ export default function App() {
         setConversations(prev => prev.map(c =>
           c.id !== row.conversation_id
             ? c
-            : { ...c, messages: c.messages.map(m => (m.id === row.id ? { ...m, read: row.read_at !== null, delivered: row.read_at !== null || (row.delivered_at ?? null) !== null } : m)) }
+            : { ...c, messages: c.messages.map(m => (m.id === row.id ? { ...m, text: row.text ?? m.text, editedAt: row.edited_at ? new Date(row.edited_at).getTime() : m.editedAt, read: row.read_at !== null, delivered: row.read_at !== null || (row.delivered_at ?? null) !== null } : m)) }
         ));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions' }, payload => {
@@ -3233,9 +3678,34 @@ export default function App() {
     })();
   }, [currentUserId]);
 
-  const [viewedUserId, setViewedUserId] = useState<string | null>(null);
+  // Every profile / post you open goes on one stack, so Back (phone or arrow) returns to exactly where you were.
+  type Screen = { k: 'profile'; id: string; y: number } | { k: 'post'; postId: string; commentId?: string };
+  const [screens, setScreens] = useState<Screen[]>([]);
+  const screensRef = useRef<Screen[]>([]);
+  screensRef.current = screens;
+  const viewedUserId = (() => {
+    for (let i = screens.length - 1; i >= 0; i--) {
+      const sc = screens[i];
+      if (sc.k === 'profile') return sc.id;
+    }
+    return null;
+  })();
+  const topScreen = screens[screens.length - 1];
+  const viewPost = topScreen && topScreen.k === 'post' ? topScreen : null;
+  const pushScreen = (sc: Screen) => setScreens(prev => {
+    const last = prev[prev.length - 1];
+    if (last && last.k === 'profile' && sc.k === 'profile' && last.id === sc.id) return prev;
+    if (last && last.k === 'post' && sc.k === 'post' && last.postId === sc.postId && last.commentId === sc.commentId) return prev;
+    return [...prev.slice(-19), sc];
+  });
+  const popScreen = () => {
+    const top = screensRef.current[screensRef.current.length - 1];
+    if (!top) return;
+    setScreens(prev => prev.slice(0, -1));
+    if (top.k === 'profile') restoreScroll(top.y);
+  };
   const goTab = (tab: typeof activeTab) => {
-    setViewedUserId(null);
+    setScreens([]);
     setActiveTab(tab);
   };
   navRef.current = {
@@ -3246,8 +3716,7 @@ export default function App() {
   // Home button: already on the feed -> one tap scrolls to the top, a quick second tap refreshes it.
   const lastHomeTap = useRef(0);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
-  const [viewPost, setViewPost] = useState<{ postId: string; commentId?: string } | null>(null);
-  openPostHandler = (postId, commentId) => setViewPost({ postId, commentId });
+  openPostHandler = (postId, commentId) => pushScreen({ k: 'post', postId, commentId });
   const [introDone, setIntroDone] = useState(false);
   useEffect(() => {
     const t = window.setTimeout(() => setIntroDone(true), 1500);
@@ -3262,7 +3731,7 @@ export default function App() {
     return () => document.removeEventListener('pointerdown', onDown);
   }, [menuOpen]);
   // Phone back button: profile -> chat -> tab -> home, like any app.
-  useBackLayer(currentUserId !== null && viewedUserId !== null, () => setViewedUserId(null));
+  useBackLayer(currentUserId !== null && screens.length > 0, popScreen);
   useBackLayer(currentUserId !== null && selectedChat !== null, () => setSelectedChat(null));
   useBackLayer(currentUserId !== null && activeTab !== 'feed', () => setActiveTab('feed'));
   // Home, scrolled down: the phone's back button first takes you back to the top of the page.
@@ -3290,10 +3759,27 @@ export default function App() {
     if (id === currentUserId) {
       goTab('profile');
     } else {
-      setViewedUserId(id);
+      pushScreen({ k: 'profile', id, y: window.scrollY });
       window.scrollTo(0, 0);
     }
   };
+  openProfileHandler = openProfile;
+
+  // Links such as  .../#/post/<id>  or  .../#/u/<id>  open the post / profile straight away, from anywhere.
+  useEffect(() => {
+    if (!currentUserId) return;
+    const handle = () => {
+      const m = window.location.hash.match(/^#\/(post|u)\/([0-9a-f-]{36})(?:\/([0-9a-f-]{36}))?/i);
+      if (!m) return;
+      window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+      if (m[1] === 'post') pushScreen({ k: 'post', postId: m[2], commentId: m[3] });
+      else if (m[2] === currentUserId) goTab('profile');
+      else pushScreen({ k: 'profile', id: m[2], y: 0 });
+    };
+    handle();
+    window.addEventListener('hashchange', handle);
+    return () => window.removeEventListener('hashchange', handle);
+  }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const unreadCount = currentUser
     ? conversations
@@ -3338,7 +3824,7 @@ export default function App() {
   return (
     <div dir="rtl" className="min-h-screen bg-gray-950 text-white font-sans">
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
-      {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={() => setViewPost(null)} />}
+      {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={popScreen} />}
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/70 backdrop-blur-xl border-b border-white/5">
         <div className="w-full px-3 min-[400px]:px-4 md:px-6 py-3 flex items-center justify-between">
@@ -3424,7 +3910,7 @@ export default function App() {
                   setSelectedChat(otherUserId);
                   goTab('messages');
                 }}
-                onBack={() => setViewedUserId(null)}
+                onBack={popScreen}
               />
             </motion.div>
           )}
@@ -3819,7 +4305,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
   hasMore: boolean;
   loading: boolean;
   newCount: number;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<unknown>;
   onLoadMore: () => void;
 }) {
   const [mode, setMode] = useState<'all' | 'following' | 'files'>('all');
@@ -3842,37 +4328,85 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
     return () => observer.disconnect();
   }, [hasMore, loading, displayPosts.length]);
 
-  // Pull down at the top of the page to refresh.
+  // Pull down at the top of the page: a spinner follows your finger, release to refresh (like Instagram).
+  const [pull, setPull] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshRef = useRef(onRefresh);
+  refreshRef.current = onRefresh;
+  const busyRef = useRef(false);
+  const doRefresh = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setRefreshing(true);
+    setPull(54);
+    try { await refreshRef.current(); } catch (e) { console.error(e); }
+    window.setTimeout(() => { setRefreshing(false); setPull(0); busyRef.current = false; }, 350);
+  };
   useEffect(() => {
+    const TRIGGER = 64;
+    const MAX = 120;
     let startY = 0;
     let pulling = false;
+    let dist = 0;
+    document.documentElement.style.overscrollBehaviorY = 'contain';
     const onStart = (e: TouchEvent) => {
-      pulling = window.scrollY <= 0;
+      pulling = !busyRef.current && window.scrollY <= 0 && e.touches.length === 1;
       startY = e.touches[0].clientY;
+      dist = 0;
     };
-    const onEnd = (e: TouchEvent) => {
-      if (pulling && e.changedTouches[0].clientY - startY > 90) onRefresh();
+    const onMove = (e: TouchEvent) => {
+      if (!pulling) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy <= 0 || window.scrollY > 0) {
+        if (dist > 0) { dist = 0; setPull(0); setDragging(false); }
+        if (dy <= 0) pulling = false;
+        return;
+      }
+      dist = Math.min(MAX, dy * 0.5);
+      setDragging(true);
+      setPull(dist);
+    };
+    const onEnd = () => {
+      if (!pulling && dist === 0) return;
       pulling = false;
+      setDragging(false);
+      if (dist >= TRIGGER) void doRefresh(); else setPull(0);
+      dist = 0;
     };
     window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
     window.addEventListener('touchend', onEnd, { passive: true });
+    window.addEventListener('touchcancel', onEnd, { passive: true });
     return () => {
+      document.documentElement.style.overscrollBehaviorY = '';
       window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
+      window.removeEventListener('touchcancel', onEnd);
     };
-  }, []);
-
-  // New posts from other people slide in by themselves while you are at the top, no banner.
-  useEffect(() => {
-    if (newCount === 0) return;
-    const tryRefresh = () => { if (window.scrollY < 120) onRefresh(); };
-    tryRefresh();
-    window.addEventListener('scroll', tryRefresh, { passive: true });
-    return () => window.removeEventListener('scroll', tryRefresh);
-  }, [newCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="px-4 py-4 space-y-4">
+    <div className="px-4 py-4 space-y-4" style={{ transform: pull > 0 ? `translateY(${pull * 0.55}px)` : undefined, transition: dragging ? 'none' : 'transform 0.25s ease' }}>
+      {createPortal(
+        <>
+          <div className="pointer-events-none fixed left-0 right-0 z-40 flex justify-center" style={{ top: 64 }}>
+            <div
+              className="w-10 h-10 rounded-full bg-gray-800 border border-white/10 shadow-lg shadow-black/40 flex items-center justify-center"
+              style={{ transform: `translateY(${pull - 44}px)`, opacity: Math.min(1, pull / 40), transition: dragging ? 'none' : 'transform 0.25s ease, opacity 0.25s ease' }}
+            >
+              <RefreshCw size={18} className={`text-violet-300 ${refreshing ? 'animate-spin' : ''}`} style={refreshing ? undefined : { transform: `rotate(${pull * 4}deg)` }} />
+            </div>
+          </div>
+          {newCount > 0 && !refreshing && pull === 0 && (
+            <button onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); void doRefresh(); }} className="fixed top-[68px] left-1/2 -translate-x-1/2 z-40 px-4 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-xs font-semibold shadow-lg shadow-violet-900/40 flex items-center gap-1.5 active:scale-95 transition-transform">
+              <RefreshCw size={12} /> منشورات جديدة
+            </button>
+          )}
+        </>,
+        document.body,
+      )}
       <StoriesBar users={users} currentUser={currentUser} />
       <div className="seg flex gap-1 bg-gray-900/70 rounded-2xl p-1 border border-white/5">
         {([{ key: 'all', label: 'الكل', Icon: LayoutGrid }, { key: 'following', label: 'المتابَعون', Icon: Users }, { key: 'files', label: 'الملفات', Icon: FileText }] as const).map(t => (
@@ -3965,7 +4499,6 @@ function PostViewer({ target, posts, setPosts, users, currentUser, onOpenProfile
   onOpenProfile: (id: string) => void;
   onClose: () => void;
 }) {
-  useBackLayer(true, onClose);
   const post = posts.find(p => p.id === target.postId);
   const [missing, setMissing] = useState(false);
   useEffect(() => {
@@ -3988,7 +4521,7 @@ function PostViewer({ target, posts, setPosts, users, currentUser, onOpenProfile
       </div>
       <div className="flex-1 overflow-y-auto overscroll-contain p-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {post ? (
-          <PostCard post={post} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={id => { onClose(); onOpenProfile(id); }} focusCommentId={target.commentId} />
+          <PostCard post={post} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={onOpenProfile} focusCommentId={target.commentId} />
         ) : missing ? (
           <p className="text-center text-gray-500 py-16">هذا المنشور غير متاح، ربما تم حذفه</p>
         ) : (
@@ -4020,6 +4553,8 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   const [replyText, setReplyText] = useState('');
   const [shareOpen, setShareOpen] = useState(false);
   const [shareComment, setShareComment] = useState<{ id: string; text: string; authorName: string } | null>(null);
+  const [editPost, setEditPost] = useState(false);
+  const [editC, setEditC] = useState<{ id: string; text: string } | null>(null);
   useEffect(() => {
     if (!focusCommentId) return;
     const t = window.setTimeout(() => document.getElementById(`comment-${focusCommentId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 500);
@@ -4170,9 +4705,14 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
           </div>
         </button>
         {post.userId === currentUser.id && (
-          <button onClick={deletePost} className="p-2 text-gray-500 hover:text-red-400 transition-colors">
-            <Trash2 size={16} />
-          </button>
+          <>
+            <button onClick={() => setEditPost(true)} className="p-2 text-gray-500 hover:text-cyan-300 transition-colors" aria-label="تعديل المنشور">
+              <Pencil size={16} />
+            </button>
+            <button onClick={deletePost} className="p-2 text-gray-500 hover:text-red-400 transition-colors">
+              <Trash2 size={16} />
+            </button>
+          </>
         )}
       </div>
 
@@ -4258,6 +4798,36 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         </button>
         {shareOpen && <ShareSheet post={post} author={author} users={users} currentUser={currentUser} onClose={() => setShareOpen(false)} />}
         {shareComment && <ShareSheet post={post} author={author} users={users} currentUser={currentUser} comment={shareComment} onClose={() => setShareComment(null)} />}
+        {editPost && (
+          <EditTextModal
+            title="تعديل المنشور"
+            initial={post.text}
+            initialTitle={post.title !== undefined ? post.title : undefined}
+            maxLength={2000}
+            allowEmpty={!!post.media}
+            onClose={() => setEditPost(false)}
+            onSave={async (v, h) => {
+              const hasTitle = post.title !== undefined;
+              const { error } = await supabase.from('posts').update(hasTitle ? { text: v, title: h || null } : { text: v }).eq('id', post.id);
+              if (error) { console.error(error); return false; }
+              setPosts(prev => prev.map(p => (p.id === post.id ? { ...p, text: v, title: hasTitle ? (h || undefined) : p.title } : p)));
+              return true;
+            }}
+          />
+        )}
+        {editC && (
+          <EditTextModal
+            title="تعديل التعليق"
+            initial={editC.text}
+            maxLength={1000}
+            onClose={() => setEditC(null)}
+            onSave={async v => {
+              const ok = await updateText('comments', editC.id, v);
+              if (ok) setPosts(prev => prev.map(p => (p.id !== post.id ? p : { ...p, comments: p.comments.map(c => (c.id === editC.id ? { ...c, text: v } : { ...c, replies: c.replies.map(r => (r.id === editC.id ? { ...r, text: v } : r)) })) })));
+              return ok;
+            }}
+          />
+        )}
       </div>
 
       <AnimatePresence>
@@ -4297,6 +4867,11 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
                             <Share2 size={12} /> مشاركة
                           </button>
                           {comment.userId === currentUser.id && (
+                            <button onClick={() => setEditC({ id: comment.id, text: comment.text })} className="text-xs text-gray-500 hover:text-cyan-400 flex items-center gap-1">
+                              <Pencil size={12} /> تعديل
+                            </button>
+                          )}
+                          {comment.userId === currentUser.id && (
                             <button onClick={() => deleteComment(comment.id)} className="text-xs text-gray-500 hover:text-red-400 flex items-center gap-1">
                               <Trash2 size={12} /> حذف
                             </button>
@@ -4315,6 +4890,11 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
                                   <div>
                                     <button onClick={() => onOpenProfile(rAuthor.id)} className="text-xs font-medium text-white hover:underline">{rAuthor.displayName}</button>
                                     <span className="text-xs text-gray-500 mr-2">{formatTime(reply.timestamp)}</span>
+                                    {reply.userId === currentUser.id && (
+                                      <button onClick={() => setEditC({ id: reply.id, text: reply.text })} className="text-xs text-gray-500 hover:text-cyan-400 mr-2 align-middle" aria-label="تعديل الرد">
+                                        <Pencil size={11} className="inline" />
+                                      </button>
+                                    )}
                                     {reply.userId === currentUser.id && (
                                       <button onClick={() => deleteReply(comment.id, reply.id)} className="text-xs text-gray-500 hover:text-red-400 mr-2 align-middle" aria-label="حذف الرد">
                                         <Trash2 size={11} className="inline" />
@@ -5864,33 +6444,6 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
     ? conversations.find(c => c.participants.includes(currentUser.id) && c.participants.includes(selectedChat))
     : undefined;
 
-  const unreadInActive = activeConversation
-    ? activeConversation.messages.filter(m => m.senderId !== currentUser.id && !m.read).length
-    : 0;
-
-  const [pageVisible, setPageVisible] = useState(() => document.visibilityState === 'visible');
-  useEffect(() => {
-    const onVis = () => setPageVisible(document.visibilityState === 'visible');
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, []);
-
-  // Mark the other person's messages as read only while this chat is open AND the app is on screen.
-  useEffect(() => {
-    if (!activeConversation || unreadInActive === 0 || !pageVisible) return;
-    const cid = activeConversation.id;
-    setConversations(prev => prev.map(c =>
-      c.id === cid
-        ? { ...c, messages: c.messages.map(m => m.senderId !== currentUser.id ? { ...m, read: true } : m) }
-        : c
-    ));
-    void supabase
-      .from('messages')
-      .update({ read_at: new Date().toISOString() })
-      .eq('conversation_id', cid)
-      .neq('sender_id', currentUser.id)
-      .is('read_at', null);
-  }, [activeConversation?.id, unreadInActive, pageVisible]);
 
   if (activeGroup) {
     return (
@@ -6296,6 +6849,13 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const keepProgress = useRef(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Message | null>(null);
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState === 'visible');
+  useEffect(() => {
+    const onVis = () => setPageVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [reactingTo, setReactingTo] = useState<string | null>(null);
   const [coinMsgId, setCoinMsgId] = useState<string | null>(null);
@@ -6367,6 +6927,17 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const vp = useVisualViewport();
   const [viewer, setViewer] = useState<{ src: string; name?: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // A message turns "read" only after it has really been on screen (and the app is visible).
+  useSeenObserver(
+    scrollRef,
+    pageVisible && !!convId,
+    messages.filter(m => m.senderId !== currentUser.id && !m.read).map(m => m.id).join(','),
+    ids => {
+      if (!convId) return;
+      setConversations(prev => prev.map(c => c.id !== convId ? c : { ...c, messages: c.messages.map(m => (ids.includes(m.id) && m.senderId !== currentUser.id ? { ...m, read: true } : m)) }));
+      void supabase.from('messages').update({ read_at: new Date().toISOString() }).in('id', ids).neq('sender_id', currentUser.id).is('read_at', null).then(({ error }) => { if (error) console.error(error); });
+    },
+  );
   const stickUntil = useRef(Date.now() + 2500);
   const scrollToBottom = () => {
     const el = scrollRef.current;
@@ -6629,23 +7200,73 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     if (msg.media?.path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([msg.media.path]);
   };
 
+  // Files sent together (same sender, within two minutes, no text) are shown as one album bubble.
+  const albumMap = (() => {
+    const first = new Map<string, Message[]>();
+    const hidden = new Set<string>();
+    let run: Message[] = [];
+    const isVisual = (m: Message) => (m.media?.type === 'image' || m.media?.type === 'video') && !m.sharedPostId;
+    const flush = () => {
+      if (run.length > 1) { first.set(run[0].id, run); run.slice(1).forEach(m => hidden.add(m.id)); }
+      run = [];
+    };
+    for (const m of messages) {
+      const joins = run.length > 0 && isVisual(m) && !m.text && !m.replyToId && m.senderId === run[0].senderId && m.timestamp - run[run.length - 1].timestamp < 120000 && run.length < 10;
+      if (joins) run.push(m);
+      else { flush(); if (isVisual(m)) run = [m]; }
+    }
+    flush();
+    return { first, hidden };
+  })();
+  const deleteAlbum = async (items: Message[]) => {
+    if (!conversation || !window.confirm('حذف كل ملفات الألبوم للجميع؟')) return;
+    const convId = conversation.id;
+    const ids = items.map(i => i.id);
+    setActiveMsgId(null);
+    setConversations(prev => prev.map(c => (c.id === convId ? { ...c, messages: c.messages.filter(m => !ids.includes(m.id)) } : c)));
+    const { error: delErr } = await supabase.from('messages').delete().in('id', ids);
+    if (delErr) {
+      setConversations(prev => prev.map(c => (c.id === convId ? { ...c, messages: [...c.messages, ...items].sort((x, y) => x.timestamp - y.timestamp) } : c)));
+      setError('تعذّر حذف الألبوم، حاول مرة أخرى');
+      return;
+    }
+    const paths = items.map(i => i.media?.path).filter((p): p is string => !!p);
+    if (paths.length) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove(paths);
+  };
+
   const lastSeenId = [...messages].reverse().find(m => m.senderId === currentUser.id && m.read)?.id;
 
   return (
     <div className="fixed left-0 right-0 z-[70] flex justify-center bg-gray-950" style={{ top: vp.top, height: vp.height }}>
     <div className={`flex flex-col h-full w-full ${getBgClass()}`} style={!bg || bg.type !== 'gradient' ? getBgStyle() : {}}>
+      {editing && (
+        <EditTextModal
+          title="تعديل الرسالة"
+          initial={editing.text}
+          maxLength={2000}
+          allowEmpty={!!editing.media}
+          onClose={() => setEditing(null)}
+          onSave={async v => {
+            const ok = await updateText('messages', editing.id, v);
+            if (ok) setConversations(prev => prev.map(c => ({ ...c, messages: c.messages.map(m => (m.id === editing.id ? { ...m, text: v, editedAt: Date.now() } : m)) })));
+            return ok;
+          }}
+        />
+      )}
       {/* Chat Header */}
       <div className="flex items-center gap-3 p-4 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 relative z-10">
         <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors">
           <ChevronRight size={20} />
         </button>
-        <Avatar src={chatUser.avatar} name={chatUser.displayName} size="md" />
-        <div className="flex-1">
-          <div className="font-medium text-white">{chatUser.displayName}</div>
-          {peerTyping
-            ? <div className="text-xs text-cyan-400">يكتب الآن...</div>
-            : <div className="text-xs text-gray-500">@{chatUser.username}</div>}
-        </div>
+        <button onClick={() => openUserProfile(chatUser.id)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
+          <Avatar src={chatUser.avatar} name={chatUser.displayName} size="md" />
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-white truncate">{chatUser.displayName}</div>
+            {peerTyping
+              ? <div className="text-xs text-cyan-400">يكتب الآن...</div>
+              : <div className="text-xs text-gray-500">@{chatUser.username}</div>}
+          </div>
+        </button>
         <div className="relative">
           <button
             onClick={() => setShowBgPicker(!showBgPicker)}
@@ -6675,18 +7296,21 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           </div>
         )}
         {messages.map((msg, idx) => {
+          if (albumMap.hidden.has(msg.id)) return null;
           const isMine = msg.senderId === currentUser.id;
           const showAvatar = idx === 0 || messages[idx - 1]?.senderId !== msg.senderId;
           return (
             <motion.div
               key={msg.id}
               id={`msg-${msg.id}`}
+              data-unread={!isMine && !msg.read ? '1' : undefined}
+              data-mids={(albumMap.first.get(msg.id) ?? [msg]).map(x => x.id).join(',')}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className={`flex items-end gap-2 ${isMine ? 'flex-row-reverse' : ''}`}
             >
               {showAvatar && !isMine ? (
-                <Avatar src={chatUser.avatar} name={chatUser.displayName} size="sm" />
+                <button onClick={() => openUserProfile(chatUser.id)} className="shrink-0"><Avatar src={chatUser.avatar} name={chatUser.displayName} size="sm" /></button>
               ) : !isMine ? <div className="w-7" /> : null}
 
               <div className={`max-w-[88%] sm:max-w-[75%] ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
@@ -6717,7 +7341,21 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                       </button>
                     );
                   })()}
-                  {msg.media?.type === 'image' && (
+                  {albumMap.first.has(msg.id) && (() => {
+                    const items = albumMap.first.get(msg.id)!;
+                    return (
+                      <div className={`mb-2 grid gap-1 max-w-full ${items.length > 4 ? 'grid-cols-3 w-64' : 'grid-cols-2 w-56'}`}>
+                        {items.map(it => (
+                          <div key={it.id} className="relative aspect-square rounded-xl overflow-hidden bg-black/40">
+                            {it.media!.type === 'image'
+                              ? <img src={it.media!.url} alt="" onLoad={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }} onClick={e => { e.stopPropagation(); setViewer({ src: it.media!.url, name: it.media!.name }); }} className="w-full h-full object-cover cursor-zoom-in" />
+                              : <video src={it.media!.url} controls playsInline preload="metadata" onClick={e => e.stopPropagation()} className="w-full h-full object-cover" />}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  {!albumMap.first.has(msg.id) && msg.media?.type === 'image' && (
                     <div className="mb-2 relative">
                       <img
                         src={msg.media.url}
@@ -6735,13 +7373,13 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                       </button>
                     </div>
                   )}
-                  {msg.media?.type === 'video' && msg.sharedPostId && (
+                  {!albumMap.first.has(msg.id) && msg.media?.type === 'video' && msg.sharedPostId && (
                     <button onClick={e => { e.stopPropagation(); openPost(msg.sharedPostId!, msg.sharedCommentId); }} className="mb-2 relative block w-56 max-w-full rounded-xl overflow-hidden bg-black active:scale-[0.98] transition-transform" aria-label="عرض المنشور">
                       <video src={`${msg.media.url}#t=0.1`} preload="metadata" muted playsInline className="block w-full max-h-48 object-cover pointer-events-none" />
                       <span className="absolute inset-0 flex items-center justify-center bg-black/25"><span className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-600/90 to-cyan-500/90 flex items-center justify-center"><Play size={22} className="text-white" fill="white" /></span></span>
                     </button>
                   )}
-                  {msg.media?.type === 'video' && !msg.sharedPostId && (
+                  {!albumMap.first.has(msg.id) && msg.media?.type === 'video' && !msg.sharedPostId && (
                     <div className="mb-2" onClick={e => e.stopPropagation()}>
                       <video
                         src={`${msg.media.url}#t=0.1`}
@@ -6782,7 +7420,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   )}
                 </div>
                 <span className={`text-[10px] text-gray-500 mt-1 ${isMine ? 'text-left' : 'text-right'}`}>
-                  {formatTime(msg.timestamp)}
+                  {formatTime(msg.timestamp)}{msg.editedAt ? ' · معدّلة' : ''}
                   {isMine && (msg.read
                     ? <CheckCheck size={14} className="inline mr-1 text-cyan-400" aria-label="تمت المشاهدة" />
                     : <Check size={14} className="inline mr-1 text-gray-500" aria-label="تم الإرسال" />)}
@@ -6841,9 +7479,17 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                         <Download size={12} /> تحميل
                       </button>
                     )}
+                    {isMine && msg.media?.type !== 'voice' && !msg.sharedPostId && (
+                      <button
+                        onClick={() => { setEditing(msg); setActiveMsgId(null); }}
+                        className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"
+                      >
+                        <Pencil size={12} /> تعديل
+                      </button>
+                    )}
                     {isMine && (
                       <button
-                        onClick={() => deleteMessage(msg)}
+                        onClick={() => (albumMap.first.has(msg.id) ? void deleteAlbum(albumMap.first.get(msg.id)!) : deleteMessage(msg))}
                         className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-red-500/20 text-red-400 text-xs flex items-center gap-1"
                       >
                         <Trash2 size={12} /> حذف
