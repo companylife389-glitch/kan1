@@ -18,6 +18,9 @@ self.addEventListener('push', (event) => {
         body: data.body || '',
         tag: data.tag || 'kan-message',
         renotify: true,
+        silent: false,
+        vibrate: [200, 100, 200],
+        timestamp: Date.now(),
         icon: data.icon || 'icon-192.png', // the sender's profile picture when the server sends one
         badge: 'icon-192.png',
         dir: 'rtl',

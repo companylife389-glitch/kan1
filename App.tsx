@@ -9,7 +9,7 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -1846,7 +1846,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
 
   return (
     <div className="fixed left-0 right-0 z-[70] flex justify-center bg-gray-950" style={{ top: vp.top, height: vp.height }}>
-      <div className="flex flex-col h-full w-full max-w-2xl xl:max-w-3xl md:border-x md:border-gray-800 bg-gray-950">
+      <div className="flex flex-col h-full w-full bg-gray-950">
         <div className="flex items-center gap-3 px-3 py-3 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 relative z-10">
           <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors" aria-label="رجوع"><ChevronRight size={20} /></button>
           <button onClick={() => setInfoOpen(true)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
@@ -2142,7 +2142,37 @@ function NotificationsTab({ currentUser, users, notifications, setNotifications,
   const [prefs, setPrefs] = useState<NotifPrefs>({});
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [saveNote, setSaveNote] = useState('');
+  const [testNote, setTestNote] = useState('');
   const unread = notifications.filter(n => !n.read).length;
+
+  // Shows a real system notification (with your picture, sound and vibration) so you can tune the phone's settings.
+  const testPush = async () => {
+    setTestNote('');
+    if (!pushSupported()) { setTestNote('جهازك أو متصفحك لا يدعم إشعارات الهاتف'); return; }
+    const result = Notification.permission === 'granted' ? 'ok' : await enablePush();
+    if (result !== 'ok') { setTestNote(result === 'denied' ? 'الإشعارات محظورة، فعّلها من إعدادات المتصفح' : 'تعذّر تفعيل الإشعارات'); return; }
+    try {
+      const reg = await getServiceWorker();
+      await navigator.serviceWorker.ready;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const options = {
+        body: 'هكذا ستظهر لك الرسائل خارج التطبيق 👋',
+        icon: supabaseUrl ? `${supabaseUrl}/functions/v1/push?avatar=${currentUser.id}` : LOGO_URL,
+        badge: LOGO_URL,
+        tag: 'kan-test',
+        renotify: true,
+        silent: false,
+        vibrate: [200, 100, 200],
+        dir: 'rtl',
+        lang: 'ar',
+      };
+      await reg?.showNotification(currentUser.displayName, options as NotificationOptions);
+      setTestNote('أرسلت لك إشعاراً تجريبياً، اخرج من التطبيق لتراه');
+    } catch (e) {
+      console.error(e);
+      setTestNote('تعذّر عرض الإشعار');
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -2259,6 +2289,15 @@ function NotificationsTab({ currentUser, users, notifications, setNotifications,
               <div className="flex items-center justify-between pt-2 text-[11px] text-gray-500">
                 <span className="flex items-center gap-1"><BellOff size={12} /> لتصلك إشعارات الهاتف اسمح بالإشعارات في المتصفح</span>
                 {saveNote && <span className="text-cyan-300">{saveNote}</span>}
+              </div>
+              <div className="mt-3 pt-3 border-t border-white/5">
+                <button onClick={() => void testPush()} className="w-full py-2.5 rounded-full bg-gradient-to-r from-violet-600/25 to-cyan-500/20 border border-violet-400/30 text-white text-sm font-medium active:scale-[0.98] transition-transform">
+                  جرّب إشعار الهاتف
+                </button>
+                {testNote && <p className="text-xs text-cyan-300 mt-2 text-center">{testNote}</p>}
+                <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
+                  ليظهر الإشعار فوق الشاشة بصوت وأنت داخل تطبيق آخر: افتح إعدادات الهاتف ← التطبيقات ← KAN (أو المتصفح) ← الإشعارات، ثم فعّل الإشعارات المنبثقة والصوت والاهتزاز.
+                </p>
               </div>
             </div>
           </motion.div>
@@ -3079,6 +3118,25 @@ export default function App() {
     return () => window.clearTimeout(t);
   }, []);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [barsHidden, setBarsHidden] = useState(false);
+  useEffect(() => {
+    const onHome = activeTab === 'feed' && !viewedUserId && selectedChat === null;
+    if (!onHome || menuOpen) { setBarsHidden(false); return; }
+    let timer: number | undefined;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => { if (window.scrollY > 120) setBarsHidden(true); }, 3000);
+    };
+    const wake = () => { setBarsHidden(false); arm(); };
+    arm();
+    const events = ['scroll', 'touchstart', 'pointerdown', 'keydown'] as const;
+    events.forEach(ev => window.addEventListener(ev, wake, { passive: true }));
+    return () => {
+      window.clearTimeout(timer);
+      events.forEach(ev => window.removeEventListener(ev, wake));
+      setBarsHidden(false);
+    };
+  }, [activeTab, viewedUserId, selectedChat, menuOpen]);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!menuOpen) return;
@@ -3156,8 +3214,8 @@ export default function App() {
     <div dir="rtl" className="kan-enter min-h-screen bg-gray-950 text-white font-sans">
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/70 backdrop-blur-xl border-b border-white/5">
-        <div className="max-w-2xl xl:max-w-3xl mx-auto px-3 min-[400px]:px-4 py-3 flex items-center justify-between">
+      <header className={`fixed top-0 left-0 right-0 z-50 bg-gray-950/70 backdrop-blur-xl border-b border-white/5 transition-transform duration-300 ease-out ${barsHidden ? '-translate-y-full' : 'translate-y-0'}`}>
+        <div className="w-full px-3 min-[400px]:px-4 md:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src={LOGO_URL} alt="" className="w-8 h-8 rounded-lg" />
             <h1 className="text-xl font-bold kan-gradient-text">
@@ -3222,11 +3280,11 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <main className={`pt-16 pb-20 mx-auto min-h-screen ${activeTab === 'videos' && !viewedUserId ? 'max-w-5xl xl:max-w-7xl' : 'max-w-2xl xl:max-w-3xl'}`}>
+      <main className="pt-16 pb-20 w-full min-h-screen md:px-4 lg:px-8">
         <InstallBanner />
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait" initial={false}>
           {viewedUserId && (
-            <motion.div key={`user-${viewedUserId}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key={`user-${viewedUserId}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <UserProfile
                 userId={viewedUserId}
                 currentUser={currentUser}
@@ -3245,12 +3303,12 @@ export default function App() {
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'feed' && (
-            <motion.div key="feed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key="feed" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <Feed posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} frontier={feedFrontier} hasMore={feedHasMore} loading={feedLoading} newCount={newPostsCount} onRefresh={loadFeedFirst} onLoadMore={loadFeedMore} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'search' && (
-            <motion.div key="search" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key="search" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <SearchTab
                 users={users}
                 currentUser={currentUser}
@@ -3264,27 +3322,27 @@ export default function App() {
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'reels' && (
-            <motion.div key="reels" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key="reels" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <ReelsTab posts={posts} setPosts={setPosts} users={users} setUsers={setUsers} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'videos' && (
-            <motion.div key="videos" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key="videos" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <VideosTab posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} setUsers={setUsers} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'create' && (
-            <motion.div key="create" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key="create" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <CreatePost currentUser={currentUser} setPosts={setPosts} setActiveTab={goTab} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'profile' && (
-            <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <ProfileTab currentUser={currentUser} users={users} posts={posts} setUsers={setUsers} setPosts={setPosts} onOpenProfile={openProfile} onLoadPage={loadPostsPage} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'notifications' && (
-            <motion.div key="notifications" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key="notifications" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <NotificationsTab
                 currentUser={currentUser}
                 users={users}
@@ -3297,12 +3355,12 @@ export default function App() {
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'settings' && (
-            <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <SettingsTab currentUser={currentUser} setUsers={setUsers} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'messages' && (
-            <motion.div key="messages" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key="messages" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <MessagesTab
                 currentUser={currentUser}
                 users={users}
@@ -3323,8 +3381,8 @@ export default function App() {
       </main>
 
       {/* Bottom Nav */}
-      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} className="z-50 bg-gray-950/95 backdrop-blur-xl border-t border-white/10 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] transform-gpu will-change-transform">
-        <div className="max-w-2xl xl:max-w-3xl mx-auto grid grid-cols-[1fr_auto_1fr] items-end gap-1 px-[max(0.5rem,env(safe-area-inset-left))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} className={`z-50 bg-gray-950/95 backdrop-blur-xl border-t border-white/10 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] transform-gpu will-change-transform transition-transform duration-300 ease-out ${barsHidden ? 'translate-y-full' : 'translate-y-0'}`}>
+        <div className="w-full grid grid-cols-[1fr_auto_1fr] items-end gap-1 px-[max(0.5rem,env(safe-area-inset-left))] md:px-6 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
           {(() => {
             const tabs = {
               feed: { icon: Home, label: 'الرئيسية' },
@@ -3691,9 +3749,9 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
     <div className="px-4 py-4 space-y-4">
       <StoriesBar users={users} currentUser={currentUser} />
       <div className="flex gap-1 bg-gray-900/70 rounded-2xl p-1 border border-white/5">
-        {([{ key: 'all', label: 'الكل', Icon: Sparkles }, { key: 'following', label: 'المتابَعون', Icon: Users }, { key: 'files', label: 'الملفات', Icon: FileText }] as const).map(t => (
+        {([{ key: 'all', label: 'الكل', Icon: LayoutGrid }, { key: 'following', label: 'المتابَعون', Icon: Users }, { key: 'files', label: 'الملفات', Icon: FileText }] as const).map(t => (
           <button key={t.key} onClick={() => setMode(t.key)} className={`relative flex-1 basis-0 px-1 py-2 rounded-xl text-sm font-medium transition-colors ${mode === t.key ? 'text-violet-100' : 'text-gray-500 hover:text-gray-300'}`}>
-            {mode === t.key && <motion.span layoutId="feed-mode-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} className="absolute inset-0 rounded-xl bg-violet-500/15 ring-1 ring-violet-400/25" />}
+            {mode === t.key && <span className="absolute inset-0 rounded-xl bg-violet-500/15 ring-1 ring-violet-400/25" />}
             <span className="relative flex items-center justify-center gap-1.5 whitespace-nowrap">
               <t.Icon size={15} className="shrink-0" />
               <span>{t.label}</span>
@@ -4641,7 +4699,7 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
 
   return (
     <div className="px-4 py-4">
-      <div className="relative mb-5 max-w-xl mx-auto">
+      <div className="relative mb-5 w-full">
         <Search size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500" />
         <input
           value={query}
@@ -5042,7 +5100,7 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
       <div className="flex gap-1 mb-4 bg-gray-900/70 rounded-2xl p-1 border border-white/5">
         {[{ key: 'posts' as const, label: 'منشوراتي', Icon: FileText, n: myPosts.length }, { key: 'likes' as const, label: 'إعجاباتي', Icon: Heart, n: likedPosts.length }, { key: 'bookmarks' as const, label: 'محفوظاتي', Icon: Bookmark, n: bookmarkedPosts.length }].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} className={`relative flex-1 basis-0 px-1 py-2 rounded-xl text-sm font-medium transition-colors ${tab === t.key ? 'text-violet-100' : 'text-gray-500 hover:text-gray-300'}`}>
-            {tab === t.key && <motion.span layoutId="profile-tab-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} className="absolute inset-0 rounded-xl bg-violet-500/15 ring-1 ring-violet-400/25" />}
+            {tab === t.key && <span className="absolute inset-0 rounded-xl bg-violet-500/15 ring-1 ring-violet-400/25" />}
             <span className="relative flex items-center justify-center gap-1.5 whitespace-nowrap text-[13px] min-[400px]:text-sm">
               <t.Icon size={15} className="hidden min-[380px]:block shrink-0" />
               <span>{t.label}</span>
@@ -6271,7 +6329,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
   return (
     <div className="fixed left-0 right-0 z-[70] flex justify-center bg-gray-950" style={{ top: vp.top, height: vp.height }}>
-    <div className={`flex flex-col h-full w-full max-w-2xl xl:max-w-3xl md:border-x md:border-gray-800 ${getBgClass()}`} style={!bg || bg.type !== 'gradient' ? getBgStyle() : {}}>
+    <div className={`flex flex-col h-full w-full ${getBgClass()}`} style={!bg || bg.type !== 'gradient' ? getBgStyle() : {}}>
       {/* Chat Header */}
       <div className="flex items-center gap-3 p-4 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 relative z-10">
         <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors">
