@@ -54,6 +54,7 @@ interface Post {
   userId: string;
   text: string;
   media?: { type: 'image' | 'video' | 'file'; url: string; name?: string; size?: number };
+  extraMedia?: { type: 'image' | 'video' | 'file'; url: string; name?: string; size?: number }[];
   isReel?: boolean;
   isVideo?: boolean;
   title?: string;
@@ -304,6 +305,7 @@ interface PostRow {
   is_video: boolean;
   title: string | null;
   cover_url: string | null;
+  media_extra?: { type: 'image' | 'video' | 'file'; url: string; name?: string; size?: number }[] | null;
   created_at: string;
   post_likes: { user_id: string }[];
   bookmarks: { user_id: string }[];
@@ -317,7 +319,7 @@ interface PostRow {
   }[];
 }
 
-const POST_SELECT = 'id, user_id, text, media_url, media_type, media_name, media_size, is_reel, is_video, title, cover_url, created_at, post_likes(user_id), bookmarks(user_id), comments(id, parent_id, user_id, text, created_at, comment_likes(user_id))';
+const POST_SELECT = 'id, user_id, text, media_url, media_type, media_name, media_size, is_reel, is_video, title, cover_url, media_extra, created_at, post_likes(user_id), bookmarks(user_id), comments(id, parent_id, user_id, text, created_at, comment_likes(user_id))';
 
 function rowToPost(row: PostRow): Post {
   const repliesByParent = new Map<string, Reply[]>();
@@ -335,6 +337,7 @@ function rowToPost(row: PostRow): Post {
     media: row.media_url && row.media_type
       ? { type: row.media_type, url: row.media_url, name: row.media_name ?? undefined, size: row.media_size ?? undefined }
       : undefined,
+    extraMedia: Array.isArray(row.media_extra) && row.media_extra.length > 0 ? row.media_extra : undefined,
     isReel: row.is_reel,
     isVideo: row.is_video,
     title: row.title ?? undefined,
@@ -673,7 +676,7 @@ function fmtClock(t: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
 }
 
-const PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const PLAYER_SPEEDS = [1, 1.25, 1.5, 2, 0.5];
 
 // KAN video player: big play button, double-tap to skip 10s, scrub bar with buffering, speed, volume, fullscreen.
 function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
@@ -915,16 +918,9 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
             </button>
             <span className="text-[11px] tabular-nums text-white/80 mx-1">{fmtClock(cur)} / {fmtClock(dur)}</span>
             <div className="ml-auto flex items-center gap-1 relative">
-              <button onClick={e => { e.stopPropagation(); setSpeedMenu(o => !o); }} className="px-2 py-1 rounded-full hover:bg-white/10 text-xs font-semibold tabular-nums" aria-label="السرعة">
+              <button onClick={e => { e.stopPropagation(); changeSpeed(PLAYER_SPEEDS[(PLAYER_SPEEDS.indexOf(speed) + 1) % PLAYER_SPEEDS.length]); }} className="px-2 py-1 rounded-full hover:bg-white/10 text-xs font-semibold tabular-nums" aria-label="السرعة">
                 {speed}x
               </button>
-              {speedMenu && (
-                <div className="absolute bottom-full right-8 mb-2 bg-gray-900/95 backdrop-blur border border-white/10 rounded-xl py-1 min-w-[72px] shadow-xl" onClick={e => e.stopPropagation()}>
-                  {PLAYER_SPEEDS.map(r => (
-                    <button key={r} onClick={() => changeSpeed(r)} className={`w-full px-3 py-1.5 text-xs text-center tabular-nums ${r === speed ? 'text-cyan-300 font-bold' : 'text-gray-200 hover:bg-white/10'}`}>{r}x</button>
-                  ))}
-                </div>
-              )}
               <button onClick={e => { e.stopPropagation(); toggleFullscreen(); }} className="p-1.5 rounded-full hover:bg-white/10" aria-label="ملء الشاشة">
                 {fs ? <Minimize size={19} /> : <Maximize size={19} />}
               </button>
@@ -992,7 +988,7 @@ function QueueChip({ count, onClear }: { count: number; onClear: () => void }) {
 }
 
 function takeFiles(e: React.ChangeEvent<HTMLInputElement>, hasPreview: boolean, onError: (msg: string) => void): { first: File | null; rest: File[] } {
-  const files = Array.from(e.target.files ?? []);
+  const files = Array.from(e.target.files ?? []) as File[];
   e.target.value = '';
   const ok = files.filter(f => f.size <= MAX_FILE_MB * 1024 * 1024);
   if (ok.length < files.length) onError(`تم تجاهل ${files.length - ok.length} ملف لتجاوزه ${MAX_FILE_MB} ميجابايت`);
@@ -1039,7 +1035,7 @@ let backFallback: () => boolean = () => false;
 function setBackFallback(fn: () => boolean) { backFallback = fn; }
 
 function armSentinel() {
-  if (sentinelArmed) return;
+  if (sentinelArmed && window.history.state?.kanSentinel) return;
   sentinelArmed = true;
   window.history.pushState({ kanSentinel: true }, '');
 }
@@ -1050,6 +1046,7 @@ function ensureBackListener() {
   const arm = () => armSentinel();
   (['pointerup', 'click', 'keydown'] as const).forEach(ev => window.addEventListener(ev, arm, { capture: true, passive: true }));
   if ((navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive) armSentinel();
+  window.addEventListener('pageshow', () => { sentinelArmed = false; });
   window.addEventListener('popstate', () => {
     if (!sentinelArmed) return;
     sentinelArmed = false; // the sentinel was just consumed by this Back press
@@ -1912,14 +1909,14 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const sendMessage = async () => {
     if ((!text.trim() && !media && queue.length === 0) || sending) return;
     const rest = queue;
-    const total = (text.trim() || media ? 1 : 0) + rest.length;
+    const total = (media ? 1 : 0) + rest.length;
     let done = 0;
     keepProgress.current = true;
-    setUpload({ done: 0, total, pct: 0 });
+    if (total > 0) setUpload({ done: 0, total, pct: 0 });
     let ok = true;
     if (text.trim() || media) {
       ok = await send({ text, file: media?.file, mediaType: media?.type, fileName: media?.file.name });
-      if (ok) { done++; setText(''); setMedia(null); setReplyingTo(null); }
+      if (ok) { if (media) done++; setText(''); setMedia(null); setReplyingTo(null); }
     }
     for (const f of ok ? rest : []) {
       setUpload({ done, total, pct: 0 });
@@ -2068,9 +2065,9 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     </div>
                   )}
                   {active && reactingTo === m.id && (
-                    <div className={`flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
+                    <div className={`kan-pop flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full shadow-lg ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
                       {QUICK_REACTIONS.map(em => (
-                        <button key={em} onClick={() => { void react(m, em); setReactingTo(null); setActiveMsgId(null); }} className="w-8 h-8 text-lg rounded-full hover:bg-gray-700 hover:scale-110 transition-transform">{em}</button>
+                        <button key={em} onClick={() => { void react(m, em); setReactingTo(null); setActiveMsgId(null); }} className="w-9 h-9 text-xl rounded-full hover:bg-gray-700 active:scale-125 transition-transform">{em}</button>
                       ))}
                     </div>
                   )}
@@ -2133,12 +2130,8 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             )}
             <AnimatePresence>
               {toolsOpen && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-2 pb-2">
+                <motion.div initial={{ opacity: 0, y: 10, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.94 }} transition={{ type: 'spring', damping: 22, stiffness: 420 }} className="absolute bottom-full right-2 mb-2 z-20 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur border border-white/10 shadow-xl origin-bottom-right">
                   <button onClick={() => { fileRef.current?.click(); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95"><Paperclip size={16} /> صورة / فيديو / ملف</button>
-                  <div className="relative">
-                    <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setEmojiOpen(o => !o)} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-yellow-300 active:scale-95" aria-label="إيموجي"><Smile size={16} /> إيموجي</button>
-                    {emojiOpen && <EmojiPicker onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} />}
-                  </div>
                   <button
                     onPointerDown={e => e.preventDefault()}
                     onMouseDown={e => e.preventDefault()}
@@ -2155,6 +2148,13 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             {upload && <UploadBar upload={upload} />}
             <div className="flex items-center gap-1.5">
               <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setToolsOpen(o => !o)} className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${toolsOpen ? 'bg-violet-600 text-white rotate-45' : 'bg-gray-800 text-gray-300 hover:text-white'}`} aria-label="المزيد"><Plus size={20} /></button>
+              <button
+                onPointerDown={e => e.preventDefault()}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => { if (emojiOpen) { setEmojiOpen(false); inputRef.current?.focus(); } else { setToolsOpen(false); inputRef.current?.blur(); setEmojiOpen(true); } }}
+                className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors active:scale-90 ${emojiOpen ? 'bg-yellow-400/20 text-yellow-300' : 'bg-gray-800 text-gray-300 hover:text-white'}`}
+                aria-label="إيموجي"
+              ><Smile size={20} /></button>
               <input
                 ref={inputRef}
                 enterKeyHint="send"
@@ -2163,6 +2163,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 onChange={e => setText(e.target.value)}
                 placeholder="اكتب رسالة للمجموعة..."
                 className="flex-1 min-w-0 h-10 px-4 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                onFocus={() => setEmojiOpen(false)}
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && void sendMessage()}
               />
               {text.trim() || media || queue.length > 0 ? (
@@ -2175,6 +2176,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 </motion.button>
               )}
             </div>
+          {emojiOpen && <EmojiPicker docked onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} />}
           </div>
         )}
         {recording && (
@@ -2642,10 +2644,10 @@ function messageGestures(onReply: () => void, onLongPress: () => void) {
   };
 }
 
-function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
+function EmojiPicker({ onPick, onClose, docked = false }: { onPick: (emoji: string) => void; onClose: () => void; docked?: boolean }) {
   const [group, setGroup] = useState(0);
   return (
-    <div dir="rtl" onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} className="absolute bottom-full mb-2 right-0 z-30 w-72 max-w-[92vw] bg-gray-900 border border-gray-700 rounded-2xl shadow-xl">
+    <div dir="rtl" onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} className={docked ? 'kan-pop mt-2 w-full bg-gray-900/70 border-t border-white/10' : 'absolute bottom-full mb-2 right-0 z-30 w-72 max-w-[92vw] bg-gray-900 border border-gray-700 rounded-2xl shadow-xl'}>
       <div className="flex items-center justify-between px-2 pt-2 border-b border-gray-800">
         <div className="flex">
           {EMOJI_GROUPS.map((g, i) => (
@@ -2656,9 +2658,9 @@ function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onC
         </div>
         <button onClick={onClose} className="p-1 text-gray-400 hover:text-white" aria-label="إغلاق"><X size={16} /></button>
       </div>
-      <div className="grid grid-cols-8 gap-0.5 p-2 max-h-52 overflow-y-auto">
+      <div className={`grid gap-0.5 p-2 overflow-y-auto overscroll-contain ${docked ? 'grid-cols-8 min-[420px]:grid-cols-10 sm:grid-cols-14 h-60' : 'grid-cols-8 max-h-52'}`}>
         {EMOJI_GROUPS[group].items.map(e => (
-          <button key={e} onClick={() => onPick(e)} className="h-8 text-xl rounded-lg hover:bg-gray-800">{e}</button>
+          <button key={e} onClick={() => onPick(e)} className="h-9 text-2xl rounded-lg hover:bg-gray-800 active:scale-125 transition-transform">{e}</button>
         ))}
       </div>
     </div>
@@ -3521,10 +3523,10 @@ export default function App() {
                 <button
                   key={tab}
                   onClick={() => (tab === 'feed' ? onHomeTap() : goTab(tab))}
-                  className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-0.5 py-2 rounded-2xl transition-colors active:scale-95 ${active ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                  className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-0.5 py-2 rounded-2xl transition-colors active:scale-95 ${active ? 'text-white' : 'text-gray-300 hover:text-white'}`}
                 >
-                  <Icon size={23} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'animate-spin' : ''}`} />
-                  <span className={`text-[11px] leading-none truncate max-w-full ${active ? "font-bold" : "font-medium"}`}>{label}</span>
+                  <Icon size={24} strokeWidth={active ? 2.4 : 2} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'animate-spin' : ''}`} />
+                  <span className={`text-[12px] leading-tight max-w-full ${active ? "font-bold text-white" : "font-semibold"}`}>{label}</span>
                   <span className={`h-0.5 w-5 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
                 </button>
               );
@@ -3903,6 +3905,57 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
 }
 
 // ============ Post Card ============
+function PostAlbum({ items }: { items: NonNullable<Post['extraMedia']> }) {
+  const [downloading, setDownloading] = useState(false);
+  const [viewer, setViewer] = useState<{ src: string; name?: string } | null>(null);
+  return (
+    <div className="mt-3">
+      <div className="grid grid-cols-2 gap-1.5">
+        {items.map((m, i) => (
+          <div key={`${m.url}-${i}`} className={`relative rounded-xl overflow-hidden bg-gray-800 ${items.length % 2 === 1 && i === items.length - 1 ? 'col-span-2' : ''}`}>
+            {m.type === 'image' ? (
+              <img src={m.url} alt="" loading="lazy" onClick={() => setViewer({ src: m.url, name: m.name })} className="w-full h-44 object-cover cursor-zoom-in" />
+            ) : m.type === 'video' ? (
+              <VideoPlayer src={m.url} className="h-44" />
+            ) : (
+              <button onClick={() => { void downloadFile(m.url, m.name || 'file'); }} className="w-full h-24 flex items-center gap-3 px-3 text-right">
+                <FileText size={26} className="text-cyan-400 shrink-0" />
+                <span className="min-w-0 flex-1"><span className="block text-sm text-white truncate" dir="auto">{m.name || 'ملف'}</span><span className="block text-[11px] text-gray-400">{formatBytes(m.size)}</span></span>
+                <Download size={16} className="text-gray-300 shrink-0" />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}
+    </div>
+  );
+}
+
+function DownloadAllButton({ post }: { post: Post }) {
+  const [busy, setBusy] = useState(false);
+  const all = [...(post.media ? [post.media] : []), ...(post.extraMedia ?? [])];
+  if (all.length < 2) return null;
+  return (
+    <button
+      onClick={async () => {
+        if (busy) return;
+        setBusy(true);
+        for (let i = 0; i < all.length; i++) {
+          const m = all[i];
+          await downloadFile(m.url, m.name || `kan-${i + 1}.${m.type === 'video' ? 'mp4' : m.type === 'image' ? 'jpg' : 'bin'}`);
+          await new Promise(r => window.setTimeout(r, 350)); // browsers drop downloads fired all at once
+        }
+        setBusy(false);
+      }}
+      className="mt-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600/25 to-cyan-500/20 border border-violet-400/30 text-white text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60"
+      disabled={busy}
+    >
+      {busy ? <RefreshCw size={15} className="animate-spin" /> : <Download size={15} />} {busy ? 'جارٍ التحميل...' : `تحميل الكل (${all.length})`}
+    </button>
+  );
+}
+
 function PostViewer({ target, posts, setPosts, users, currentUser, onOpenProfile, onClose }: {
   target: { postId: string; commentId?: string };
   posts: Post[];
@@ -4176,6 +4229,8 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
                 </button>
               </div>
             )}
+            {post.extraMedia && <PostAlbum items={post.extraMedia} />}
+            <DownloadAllButton post={post} />
           </div>
         )}
       </div>
@@ -4937,6 +4992,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
   const [error, setError] = useState('');
   const [posting, setPosting] = useState(false);
   const [postPct, setPostPct] = useState(0);
+  const [extra, setExtra] = useState<File[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
   const videoOnly = kind !== 'post';
@@ -4949,19 +5005,22 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
   };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const picked = Array.from(e.target.files ?? []) as File[];
     e.target.value = '';
-    if (!file) return;
+    if (picked.length === 0) return;
     setError('');
-    if (file.size > MAX_FILE_MB * 1024 * 1024) {
-      setError(`حجم الملف يجب أن لا يتجاوز ${MAX_FILE_MB} ميجابايت`);
+    const usable = picked.filter(f => f.size <= MAX_FILE_MB * 1024 * 1024);
+    if (usable.length < picked.length) setError(`تم تجاهل ${picked.length - usable.length} ملف لتجاوزه ${MAX_FILE_MB} ميجابايت`);
+    if (usable.length === 0) return;
+    if (videoOnly) {
+      if (detectMediaKind(usable[0]) !== 'video') { setError('اختر ملف فيديو'); return; }
+    } else if (media) {
+      setExtra(prev => [...prev, ...usable]); // an album: they all go into one post
       return;
     }
+    const file = usable[0];
+    if (!videoOnly && usable.length > 1) setExtra(prev => [...prev, ...usable.slice(1)]);
     const fileKind = detectMediaKind(file);
-    if (videoOnly && fileKind !== 'video') {
-      setError('اختر ملف فيديو');
-      return;
-    }
     if (media && media.url) URL.revokeObjectURL(media.url);
     setMedia({ type: fileKind, url: fileKind === 'file' ? '' : URL.createObjectURL(file), file });
     if (kind === 'video') {
@@ -5010,10 +5069,19 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       let coverUrl: string | null = null;
       if (media) {
         const path = `${currentUser.id}/${crypto.randomUUID()}.${MEDIA_EXT[media.file.type] ?? safeExt(media.file.name)}`;
-        const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, media.file, media.file.type || 'application/octet-stream', '31536000', setPostPct);
+        const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, media.file, media.file.type || 'application/octet-stream', '31536000', pct => setPostPct(Math.round((pct / 100 / (extra.length + 1)) * 100)));
         if (upErr) throw upErr;
         uploaded.push(path);
         mediaUrl = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+      }
+      const extraMedia: { type: 'image' | 'video' | 'file'; url: string; name: string; size: number }[] = [];
+      for (let i = 0; i < extra.length; i++) {
+        const f = extra[i];
+        const p = `${currentUser.id}/${crypto.randomUUID()}.${MEDIA_EXT[f.type] ?? safeExt(f.name)}`;
+        const { error: exErr } = await uploadWithProgress(POST_MEDIA_BUCKET, p, f, f.type || 'application/octet-stream', '31536000', pct => setPostPct(Math.round(((i + 1 + pct / 100) / (extra.length + 1)) * 100)));
+        if (exErr) throw exErr;
+        uploaded.push(p);
+        extraMedia.push({ type: detectMediaKind(f), url: supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(p).data.publicUrl, name: f.name.slice(0, 200), size: f.size });
       }
       if (kind === 'video' && cover) {
         const coverPath = `${currentUser.id}/${crypto.randomUUID()}-cover.${cover.blob.type === 'image/png' ? 'png' : cover.blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
@@ -5037,6 +5105,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         is_video: kind === 'video',
         title: kind === 'video' ? title.trim().slice(0, 120) : null,
         cover_url: coverUrl,
+        media_extra: extraMedia,
       });
       if (insErr) throw insErr;
       const newPost: Post = {
@@ -5046,6 +5115,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         isVideo: kind === 'video',
         title: kind === 'video' ? title.trim().slice(0, 120) : undefined,
         coverUrl: coverUrl ?? undefined,
+        extraMedia: extraMedia.length > 0 ? extraMedia : undefined,
         cursor: new Date().toISOString(),
         timestamp: Date.now(), likes: [], comments: [], bookmarks: [],
       };
@@ -5055,6 +5125,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       setText('');
       setTitle('');
       setMedia(null);
+      setExtra([]);
       // Everything you publish shows up on the home feed first.
       setActiveTab('feed');
     } catch (e) {
@@ -5119,6 +5190,22 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
             </button>
           </div>
         )}
+        {extra.length > 0 && (
+          <div className="mb-4 rounded-xl bg-gray-800/60 border border-gray-700 p-3">
+            <div className="flex items-center justify-between mb-2 text-xs text-gray-300">
+              <span>+{extra.length} ملفات ستُنشر في نفس المنشور</span>
+              <button onClick={() => setExtra([])} className="text-gray-400 hover:text-red-400">إزالة الكل</button>
+            </div>
+            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+              {extra.map((f, i) => (
+                <div key={`${f.name}-${i}`} className="relative shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-900 flex items-center justify-center">
+                  {detectMediaKind(f) === 'image' ? <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" /> : detectMediaKind(f) === 'video' ? <Play size={20} className="text-white" fill="white" /> : <FileText size={22} className="text-cyan-400" />}
+                  <button onClick={() => setExtra(prev => prev.filter((_, j) => j !== i))} className="absolute top-0.5 left-0.5 p-0.5 rounded-full bg-black/70 text-white" aria-label="إزالة"><X size={11} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {kind === 'video' && media && (
           <div className="mb-4">
             <div className="text-sm text-gray-400 mb-2">صورة الغلاف</div>
@@ -5138,7 +5225,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
         <div className="flex items-center justify-between border-t border-gray-800 pt-3">
           <div className="flex items-center gap-2">
-            <input ref={fileRef} type="file" accept={videoOnly ? 'video/*' : undefined} onChange={handleFile} className="hidden" />
+            <input ref={fileRef} type="file" multiple={!videoOnly} accept={videoOnly ? 'video/*' : undefined} onChange={handleFile} className="hidden" />
             {!videoOnly && (
               <button onClick={() => fileRef.current?.click()} className="p-2 text-cyan-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="صورة">
                 <ImageIcon size={20} />
@@ -6134,7 +6221,7 @@ function ChatBgPicker({ current, onChange, onImageUpload }: {
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="absolute top-full left-0 right-0 mt-2 bg-gray-900 border border-gray-700 rounded-xl p-4 z-50 shadow-xl"
+      className="fixed inset-x-3 top-[4.5rem] mx-auto max-w-sm bg-gray-900 border border-gray-700 rounded-2xl p-4 z-[80] shadow-2xl"
     >
       <div className="flex items-center justify-between mb-3">
         <h4 className="font-medium text-white text-sm">خلفية المحادثة</h4>
@@ -6374,14 +6461,14 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const sendMessage = async () => {
     if (!text.trim() && !media && queue.length === 0) return;
     const rest = queue;
-    const total = (text.trim() || media ? 1 : 0) + rest.length;
+    const total = (media ? 1 : 0) + rest.length;
     let done = 0;
     keepProgress.current = true;
-    setUpload({ done: 0, total, pct: 0 });
+    if (total > 0) setUpload({ done: 0, total, pct: 0 });
     let ok = true;
     if (text.trim() || media) {
       ok = await send({ text, file: media?.file, mediaType: media?.type, fileName: media?.file.name, replyToId: replyingTo?.id });
-      if (ok) { done++; setText(''); setMedia(null); setReplyingTo(null); }
+      if (ok) { if (media) done++; setText(''); setMedia(null); setReplyingTo(null); }
     }
     for (const f of ok ? rest : []) {
       setUpload({ done, total, pct: 0 });
@@ -6720,12 +6807,12 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   );
                 })()}
                 {activeMsgId === msg.id && reactingTo === msg.id && (
-                  <div className={`flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full ${isMine ? 'flex-row-reverse' : ''}`}>
+                  <div className={`kan-pop flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full shadow-lg ${isMine ? 'flex-row-reverse' : ''}`}>
                     {QUICK_REACTIONS.map(e => (
                       <button
                         key={e}
                         onClick={() => { void setReaction(msg, e); setReactingTo(null); setActiveMsgId(null); }}
-                        className="w-8 h-8 text-lg rounded-full hover:bg-gray-700 hover:scale-110 transition-transform"
+                        className="w-9 h-9 text-xl rounded-full hover:bg-gray-700 active:scale-125 transition-transform"
                       >
                         {e}
                       </button>
@@ -6837,18 +6924,13 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           <AnimatePresence>
             {toolsOpen && (
               <motion.div
-                initial={{ opacity: 0, y: 8, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: 8, height: 0 }}
-                className="flex items-center gap-2 pb-2"
+                initial={{ opacity: 0, y: 10, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.94 }}
+                transition={{ type: 'spring', damping: 22, stiffness: 420 }}
+                className="absolute bottom-full right-2 mb-2 z-20 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur border border-white/10 shadow-xl origin-bottom-right"
               >
                 <button onClick={() => { fileRef.current?.click(); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95">
                   <Paperclip size={16} /> إرفاق
                 </button>
-                <div className="relative">
-                  <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setEmojiOpen(o => !o)} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-yellow-300 active:scale-95" aria-label="إيموجي">
-                    <Smile size={16} /> إيموجي
-                  </button>
-                  {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
-                </div>
                 <button
                   onPointerDown={e => e.preventDefault()}
                   onMouseDown={e => e.preventDefault()}
@@ -6871,8 +6953,14 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${toolsOpen ? 'bg-violet-600 text-white rotate-45' : 'bg-gray-800 text-gray-300 hover:text-white'}`}
               aria-label="المزيد"
             >
-              <Plus size={20} />
-            </button>
+              <Plus size={20} /></button>
+              <button
+                onPointerDown={e => e.preventDefault()}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => { if (emojiOpen) { setEmojiOpen(false); inputRef.current?.focus(); } else { setToolsOpen(false); inputRef.current?.blur(); setEmojiOpen(true); } }}
+                className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors active:scale-90 ${emojiOpen ? 'bg-yellow-400/20 text-yellow-300' : 'bg-gray-800 text-gray-300 hover:text-white'}`}
+                aria-label="إيموجي"
+              ><Smile size={20} /></button>
             <input
               ref={inputRef}
               enterKeyHint="send"
@@ -6880,6 +6968,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               value={text} onChange={e => { setText(e.target.value); if (e.target.value) notifyTyping(); }}
               placeholder="اكتب رسالة..."
               className="flex-1 min-w-0 h-10 px-4 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              onFocus={() => setEmojiOpen(false)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             />
             {text.trim() || media || queue.length > 0 ? (
@@ -6892,6 +6981,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               </motion.button>
             )}
           </div>
+          {emojiOpen && <EmojiPicker docked onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
         </div>
       )}
       {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}

@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 // Files that sit next to index.html and are copied into the build as they are
 // (service worker, install manifest and icons), so the project needs no sub-folders.
-const staticFiles = ["sw.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
+const staticFiles = ["sw.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "badge-96.png"];
 
 function copyStaticFiles() {
   return {
