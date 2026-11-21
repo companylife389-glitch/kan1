@@ -73,6 +73,8 @@ interface Message {
   read: boolean;
   delivered?: boolean;
   replyToId?: string;
+  sharedPostId?: string;
+  sharedCommentId?: string;
   reactions?: { userId: string; emoji: string }[];
   media?: { type: 'image' | 'video' | 'voice' | 'file'; url: string; duration?: number; name?: string; size?: number; path?: string };
 }
@@ -411,6 +413,8 @@ interface MessageRow {
   media_name: string | null;
   media_size: number | null;
   reply_to_id: string | null;
+  shared_post_id?: string | null;
+  shared_comment_id?: string | null;
   message_reactions?: { user_id: string; emoji: string }[];
   read_at: string | null;
   delivered_at?: string | null;
@@ -443,6 +447,8 @@ function rowToMessage(r: MessageRow, urls: Map<string, string>): Message {
     read: r.read_at !== null,
     delivered: r.read_at !== null || (r.delivered_at ?? null) !== null,
     replyToId: r.reply_to_id ?? undefined,
+    sharedPostId: r.shared_post_id ?? undefined,
+    sharedCommentId: r.shared_comment_id ?? undefined,
     reactions: (r.message_reactions ?? []).map(x => ({ userId: x.user_id, emoji: x.emoji })),
     media: r.media_type && url
       ? { type: r.media_type, url, duration: r.media_duration ?? undefined, name: r.media_name ?? undefined, size: r.media_size ?? undefined, path: r.media_path ?? undefined }
@@ -462,7 +468,7 @@ async function loadConversations(me: string): Promise<Conversation[]> {
     supabase.from('conversations').select('id, user_a, user_b, last_activity'),
     supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, text, media_path, media_type, media_duration, media_name, media_size, reply_to_id, read_at, delivered_at, created_at, message_reactions(user_id, emoji)')
+      .select('id, conversation_id, sender_id, text, media_path, media_type, media_duration, media_name, media_size, reply_to_id, shared_post_id, shared_comment_id, read_at, delivered_at, created_at, message_reactions(user_id, emoji)')
       .order('created_at', { ascending: false })
       .limit(500),
     supabase.from('chat_backgrounds').select('conversation_id, type, value').eq('user_id', me),
@@ -931,6 +937,10 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
 }
 
 // ============ Full-screen image viewer ============
+// Any screen can open a post (optionally scrolled to one comment); the App draws it.
+let openPostHandler: (postId: string, commentId?: string) => void = () => undefined;
+function openPost(postId: string, commentId?: string) { openPostHandler(postId, commentId); }
+
 // ============ Back button: closes the top screen/sheet instead of leaving the app ============
 interface BackLayer { id: number; close: () => void; popped: boolean }
 const backStack: BackLayer[] = [];
@@ -1200,8 +1210,8 @@ function postShareText(post: Post, author: User): string {
   return [`${author.displayName} (@${author.username}) على KAN`, post.title, post.text].filter(Boolean).join('\n').trim();
 }
 
-function ShareSheet({ post, author, users, currentUser, onClose }: {
-  post: Post; author: User; users: User[]; currentUser: User; onClose: () => void;
+function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
+  post: Post; author: User; users: User[]; currentUser: User; comment?: { id: string; text: string; authorName: string }; onClose: () => void;
 }) {
   useBackLayer(true, onClose);
   const [q, setQ] = useState('');
@@ -1214,14 +1224,14 @@ function ShareSheet({ post, author, users, currentUser, onClose }: {
     return filePromise.current;
   };
   // Start fetching the media now, so the native share sheet can open instantly on tap.
-  useEffect(() => { void getFile(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!comment) void getFile(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const text = postShareText(post, author);
+  const text = comment ? `${comment.authorName}: ${comment.text}\n— ${author.displayName} (@${author.username}) على KAN` : postShareText(post, author);
   const people = users
     .filter(u => u.id !== currentUser.id && (u.displayName + ' ' + u.username).toLowerCase().includes(q.trim().toLowerCase()))
     .sort((a, b) => Number(currentUser.following.includes(b.id)) - Number(currentUser.following.includes(a.id)))
@@ -1231,7 +1241,7 @@ function ShareSheet({ post, author, users, currentUser, onClose }: {
     if (busy) return;
     setBusy('native');
     setNote('');
-    const f = await getFile();
+    const f = comment ? null : await getFile();
     try {
       if (f && typeof navigator.canShare === 'function' && navigator.canShare({ files: [f] })) {
         await navigator.share({ files: [f], text });
@@ -1256,9 +1266,9 @@ function ShareSheet({ post, author, users, currentUser, onClose }: {
     let path: string | null = null;
     try {
       const convId = await getOrCreateConversation(currentUser.id, u.id);
-      const f = await getFile();
-      const head = author.id === currentUser.id ? '↪️ منشور مني' : `↪️ منشور من ${author.displayName}`;
-      const body = [head, post.title, post.text].filter(Boolean).join('\n').slice(0, 1000);
+      const f = comment ? null : await getFile();
+      const head = comment ? `↪️ تعليق من ${comment.authorName}` : author.id === currentUser.id ? '↪️ منشور مني' : `↪️ منشور من ${author.displayName}`;
+      const body = (comment ? [head, comment.text] : [head, post.title, post.text]).filter(Boolean).join('\n').slice(0, 1000);
       if (f && post.media) {
         path = `${convId}/${crypto.randomUUID()}.${CHAT_EXT[f.type] ?? safeExt(f.name)}`;
         const { error: upErr } = await supabase.storage.from(CHAT_MEDIA_BUCKET).upload(path, f, { contentType: f.type || 'application/octet-stream', cacheControl: '3600' });
@@ -1275,6 +1285,8 @@ function ShareSheet({ post, author, users, currentUser, onClose }: {
         media_name: path && f ? f.name.slice(0, 200) : null,
         media_size: path && f ? f.size : null,
         reply_to_id: null,
+        shared_post_id: post.id,
+        shared_comment_id: comment?.id ?? null,
       });
       if (insErr) throw insErr;
       setSentTo(prev => [...prev, u.id]);
@@ -1303,8 +1315,8 @@ function ShareSheet({ post, author, users, currentUser, onClose }: {
 
         {/* what is being shared */}
         <div className="mx-4 mb-3 flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10">
-          {post.media?.type === 'image' && <img src={post.media.url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" />}
-          {post.media?.type === 'video' && (
+          {!comment && post.media?.type === 'image' && <img src={post.media.url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" />}
+          {!comment && post.media?.type === 'video' && (
             <div className="w-14 h-14 rounded-xl bg-black/60 flex items-center justify-center shrink-0 overflow-hidden relative">
               {post.coverUrl ? <img src={post.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" /> : null}
               <Play size={20} className="text-white relative" fill="white" />
@@ -1312,7 +1324,7 @@ function ShareSheet({ post, author, users, currentUser, onClose }: {
           )}
           <div className="min-w-0 flex-1">
             <div className="text-sm text-white font-medium truncate">{author.displayName}</div>
-            <div className="text-xs text-gray-400 line-clamp-2" dir="auto">{post.title || post.text || (post.media ? (post.media.type === 'image' ? 'صورة' : post.media.type === 'video' ? 'فيديو' : 'ملف') : '')}</div>
+            <div className="text-xs text-gray-400 line-clamp-2" dir="auto">{comment ? comment.text : post.title || post.text || (post.media ? (post.media.type === 'image' ? 'صورة' : post.media.type === 'video' ? 'فيديو' : 'ملف') : '')}</div>
           </div>
         </div>
 
@@ -1323,7 +1335,7 @@ function ShareSheet({ post, author, users, currentUser, onClose }: {
           <button onClick={() => void copyText()} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white/5 border border-white/10 text-gray-200 text-xs font-medium active:scale-95 transition-transform">
             <Copy size={20} /> نسخ النص
           </button>
-          {post.media ? (
+          {post.media && !comment ? (
             <button onClick={() => { void downloadFile(post.media!.url, post.media!.name || (post.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); }} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white/5 border border-white/10 text-gray-200 text-xs font-medium active:scale-95 transition-transform">
               <Download size={20} /> حفظ
             </button>
@@ -2074,20 +2086,20 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
 // ============ Notifications ============
 type NotifType = 'like' | 'comment' | 'reply' | 'follow' | 'group_add';
 interface AppNotification {
-  id: string; type: NotifType; actorId: string | null; postId: string | null; groupId: string | null;
+  id: string; type: NotifType; actorId: string | null; postId: string | null; groupId: string | null; commentId: string | null;
   snippet: string; createdAt: number; read: boolean;
 }
 type NotificationRow = {
-  id: string; type: NotifType; actor_id: string | null; post_id: string | null; group_id: string | null;
+  id: string; type: NotifType; actor_id: string | null; post_id: string | null; group_id: string | null; comment_id: string | null;
   snippet: string; created_at: string; read_at: string | null;
 };
 function rowToNotification(r: NotificationRow): AppNotification {
-  return { id: r.id, type: r.type, actorId: r.actor_id, postId: r.post_id, groupId: r.group_id, snippet: r.snippet, createdAt: new Date(r.created_at).getTime(), read: r.read_at !== null };
+  return { id: r.id, type: r.type, actorId: r.actor_id, postId: r.post_id, groupId: r.group_id, commentId: r.comment_id, snippet: r.snippet, createdAt: new Date(r.created_at).getTime(), read: r.read_at !== null };
 }
 async function loadNotifications(): Promise<AppNotification[]> {
   const { data, error } = await supabase
     .from('notifications')
-    .select('id, type, actor_id, post_id, group_id, snippet, created_at, read_at')
+    .select('id, type, actor_id, post_id, group_id, comment_id, snippet, created_at, read_at')
     .order('created_at', { ascending: false })
     .limit(100);
   if (error) throw error;
@@ -2215,6 +2227,7 @@ function NotificationsTab({ currentUser, users, notifications, setNotifications,
     markOne(n.id);
     if (n.type === 'group_add' && n.groupId) onOpenGroup(n.groupId);
     else if (n.type === 'follow' && n.actorId) onOpenProfile(n.actorId);
+    else if (n.postId) openPost(n.postId, n.commentId ?? undefined);
     else onOpenMine();
   };
 
@@ -2979,7 +2992,7 @@ export default function App() {
           const ui = uiRef.current;
           if (document.visibilityState === 'visible' && ui.tab !== 'notifications') {
             const actor = n.actorId ? ui.users.find(x => x.id === n.actorId) : undefined;
-            toastRef.current({ title: actor?.displayName ?? 'إشعار جديد', body: notificationText(n), avatar: actor?.avatar, onOpen: () => navRef.current.openNotifs() });
+            toastRef.current({ title: actor?.displayName ?? 'إشعار جديد', body: notificationText(n), avatar: actor?.avatar, onOpen: () => (n.postId ? openPost(n.postId, n.commentId ?? undefined) : navRef.current.openNotifs()) });
           }
         }
         setNotifications(prev => (prev.some(x => x.id === n.id) ? prev : [n, ...prev].slice(0, 100)));
@@ -3112,6 +3125,8 @@ export default function App() {
   // Home button: already on the feed -> one tap scrolls to the top, a quick second tap refreshes it.
   const lastHomeTap = useRef(0);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [viewPost, setViewPost] = useState<{ postId: string; commentId?: string } | null>(null);
+  openPostHandler = (postId, commentId) => setViewPost({ postId, commentId });
   const [introDone, setIntroDone] = useState(false);
   useEffect(() => {
     const t = window.setTimeout(() => setIntroDone(true), 1500);
@@ -3129,6 +3144,18 @@ export default function App() {
   useBackLayer(currentUserId !== null && viewedUserId !== null, () => setViewedUserId(null));
   useBackLayer(currentUserId !== null && selectedChat !== null, () => setSelectedChat(null));
   useBackLayer(currentUserId !== null && activeTab !== 'feed', () => setActiveTab('feed'));
+  // Home, scrolled down: the phone's back button first takes you back to the top of the page.
+  const [scrolledDown, setScrolledDown] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolledDown(window.scrollY > 300);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  useBackLayer(
+    currentUserId !== null && activeTab === 'feed' && !viewedUserId && selectedChat === null && scrolledDown,
+    () => window.scrollTo({ top: 0, behavior: 'smooth' }),
+  );
   const onHomeTap = () => {
     if (activeTab !== 'feed' || viewedUserId) { goTab('feed'); return; }
     const now = Date.now();
@@ -3194,6 +3221,7 @@ export default function App() {
   return (
     <div dir="rtl" className="min-h-screen bg-gray-950 text-white font-sans">
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
+      {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={() => setViewPost(null)} />}
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/70 backdrop-blur-xl border-b border-white/5">
         <div className="w-full px-3 min-[400px]:px-4 md:px-6 py-3 flex items-center justify-between">
@@ -3760,12 +3788,57 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
 }
 
 // ============ Post Card ============
-function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
+function PostViewer({ target, posts, setPosts, users, currentUser, onOpenProfile, onClose }: {
+  target: { postId: string; commentId?: string };
+  posts: Post[];
+  setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
+  users: User[];
+  currentUser: User;
+  onOpenProfile: (id: string) => void;
+  onClose: () => void;
+}) {
+  useBackLayer(true, onClose);
+  const post = posts.find(p => p.id === target.postId);
+  const [missing, setMissing] = useState(false);
+  useEffect(() => {
+    if (post) return;
+    let cancelled = false;
+    void fetchPosts({ ids: [target.postId], limit: 1 })
+      .then(page => {
+        if (cancelled) return;
+        if (page.length === 0) setMissing(true);
+        else setPosts(prev => mergePosts(prev, page));
+      })
+      .catch(() => { if (!cancelled) setMissing(true); });
+    return () => { cancelled = true; };
+  }, [target.postId]); // eslint-disable-line react-hooks/exhaustive-deps
+  return createPortal(
+    <div dir="rtl" className="fixed inset-0 z-[125] flex flex-col bg-gray-950">
+      <div className="flex items-center gap-3 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] bg-gray-900/95 backdrop-blur-md border-b border-gray-800">
+        <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full transition-colors" aria-label="رجوع"><ChevronRight size={20} /></button>
+        <h2 className="font-bold text-white">{target.commentId ? 'التعليق' : 'المنشور'}</h2>
+      </div>
+      <div className="flex-1 overflow-y-auto overscroll-contain p-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {post ? (
+          <PostCard post={post} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={id => { onClose(); onOpenProfile(id); }} focusCommentId={target.commentId} />
+        ) : missing ? (
+          <p className="text-center text-gray-500 py-16">هذا المنشور غير متاح، ربما تم حذفه</p>
+        ) : (
+          <div className="flex justify-center py-16"><RefreshCw size={22} className="text-violet-300 animate-spin" /></div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusCommentId }: {
   post: Post;
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
   users: User[];
   currentUser: User;
   onOpenProfile: (id: string) => void;
+  focusCommentId?: string;
 }) {
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const [coinId, setCoinId] = useState(0);
@@ -3773,11 +3846,17 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
   const coinTimer = useRef<number | undefined>(undefined);
   const tapTimer = useRef<number | undefined>(undefined);
   const lastTap = useRef(0);
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(!!focusCommentId);
   const [commentText, setCommentText] = useState('');
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareComment, setShareComment] = useState<{ id: string; text: string; authorName: string } | null>(null);
+  useEffect(() => {
+    if (!focusCommentId) return;
+    const t = window.setTimeout(() => document.getElementById(`comment-${focusCommentId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 500);
+    return () => window.clearTimeout(t);
+  }, [focusCommentId]);
   const author = users.find(u => u.id === post.userId);
   const isLiked = post.likes.includes(currentUser.id);
   const isBookmarked = post.bookmarks.includes(currentUser.id);
@@ -4008,6 +4087,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
           <Share2 size={18} />
         </button>
         {shareOpen && <ShareSheet post={post} author={author} users={users} currentUser={currentUser} onClose={() => setShareOpen(false)} />}
+        {shareComment && <ShareSheet post={post} author={author} users={users} currentUser={currentUser} comment={shareComment} onClose={() => setShareComment(null)} />}
       </div>
 
       <AnimatePresence>
@@ -4018,7 +4098,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
                 const cAuthor = users.find(u => u.id === comment.userId);
                 if (!cAuthor) return null;
                 return (
-                  <div key={comment.id} className="space-y-2">
+                  <div key={comment.id} id={`comment-${comment.id}`} className={`space-y-2 rounded-xl transition-shadow ${focusCommentId === comment.id ? 'ring-2 ring-cyan-400/70 p-1' : ''}`}>
                     <div className="flex gap-2">
                       <button onClick={() => onOpenProfile(cAuthor.id)} className="self-start">
                         <Avatar src={cAuthor.avatar} name={cAuthor.displayName} size="sm" />
@@ -4043,6 +4123,9 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
                           <button onClick={() => setReplyTo(replyTo === comment.id ? null : comment.id)} className="text-xs text-gray-500 hover:text-violet-400 flex items-center gap-1">
                             <Reply size={12} /> رد
                           </button>
+                          <button onClick={() => setShareComment({ id: comment.id, text: comment.text, authorName: cAuthor.displayName })} className="text-xs text-gray-500 hover:text-cyan-400 flex items-center gap-1" aria-label="مشاركة التعليق">
+                            <Share2 size={12} /> مشاركة
+                          </button>
                           {comment.userId === currentUser.id && (
                             <button onClick={() => deleteComment(comment.id)} className="text-xs text-gray-500 hover:text-red-400 flex items-center gap-1">
                               <Trash2 size={12} /> حذف
@@ -4055,7 +4138,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile }: {
                               const rAuthor = users.find(u => u.id === reply.userId);
                               if (!rAuthor) return null;
                               return (
-                                <div key={reply.id} className="flex gap-2">
+                                <div key={reply.id} id={`comment-${reply.id}`} className={`flex gap-2 rounded-lg ${focusCommentId === reply.id ? 'ring-2 ring-cyan-400/70 p-1' : ''}`}>
                                   <button onClick={() => onOpenProfile(rAuthor.id)} className="self-start">
                                     <Avatar src={rAuthor.avatar} name={rAuthor.displayName} size="sm" />
                                   </button>
@@ -6443,14 +6526,20 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                     </button>
                   )}
                   {msg.text && <p className="text-sm leading-relaxed">{msg.text}</p>}
+                  {msg.sharedPostId && (
+                    <button
+                      onClick={e => { e.stopPropagation(); openPost(msg.sharedPostId!, msg.sharedCommentId); }}
+                      className="mt-2 w-full py-2 rounded-xl bg-black/25 hover:bg-black/40 text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                    >
+                      {msg.sharedCommentId ? 'عرض التعليق' : 'عرض المنشور'} ‹
+                    </button>
+                  )}
                 </div>
                 <span className={`text-[10px] text-gray-500 mt-1 ${isMine ? 'text-left' : 'text-right'}`}>
                   {formatTime(msg.timestamp)}
                   {isMine && (msg.read
                     ? <CheckCheck size={14} className="inline mr-1 text-cyan-400" aria-label="تمت المشاهدة" />
-                    : msg.delivered
-                      ? <CheckCheck size={14} className="inline mr-1 text-gray-400" aria-label="وصلت" />
-                      : <Check size={14} className="inline mr-1 text-gray-500" aria-label="تم الإرسال" />)}
+                    : <Check size={14} className="inline mr-1 text-gray-500" aria-label="تم الإرسال" />)}
                   {isMine && msg.id === lastSeenId && <span className="mr-1 text-cyan-400">تمت المشاهدة</span>}
                 </span>
                 {msg.reactions && msg.reactions.length > 0 && (() => {
