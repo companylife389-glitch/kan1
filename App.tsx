@@ -724,6 +724,18 @@ function setSoundEnabled(on: boolean) {
 function toastsEnabled(): boolean {
   try { return localStorage.getItem('kan_toasts') !== 'off'; } catch { return true; }
 }
+// System notification (like WhatsApp) when the app is in the background, plus the unread count on the app icon.
+function askNotifyPermission() {
+  try { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission(); } catch { /* ignore */ }
+}
+function systemNotify(title: string, body: string, tag: string, onOpen: () => void, icon?: string) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted' || !toastsEnabled()) return;
+    const n = new Notification(title, { body, tag, icon: icon && /^(https?:|data:)/.test(icon) ? icon : undefined });
+    n.onclick = () => { window.focus(); onOpen(); n.close(); };
+  } catch { /* some phones only allow notifications through a service worker */ }
+}
+
 function setToastsEnabled(on: boolean) {
   try { localStorage.setItem('kan_toasts', on ? 'on' : 'off'); } catch { /* ignore */ }
 }
@@ -4181,6 +4193,11 @@ export default function App() {
         if (row.sender_id !== currentUserId && !row.is_system) {
           playSound('receive');
           const ui = uiRef.current;
+          if (document.visibilityState === 'hidden') {
+            const g = ui.groups.find(x => x.id === row.group_id);
+            const who = ui.users.find(x => x.id === row.sender_id)?.displayName ?? '';
+            systemNotify(g?.name ?? 'مجموعة', `${who}: ${messagePreviewText(row.text, row.media_type)}`, `g-${row.group_id}`, () => navRef.current.openGroup(row.group_id), g?.avatar);
+          }
           if (document.visibilityState === 'visible' && !(ui.tab === 'messages' && ui.groupId === row.group_id)) {
             const g = ui.groups.find(x => x.id === row.group_id);
             const who = ui.users.find(x => x.id === row.sender_id)?.displayName ?? '';
@@ -4288,6 +4305,10 @@ export default function App() {
           playSound('receive');
           markDelivered(currentUserId);
           const ui = uiRef.current;
+          if (document.visibilityState === 'hidden') {
+            const sender = ui.users.find(x => x.id === row.sender_id);
+            systemNotify(sender?.displayName ?? 'رسالة جديدة', messagePreviewText(row.text, row.media_type), `dm-${row.sender_id}`, () => navRef.current.openChat(row.sender_id), sender?.avatar);
+          }
           if (document.visibilityState === 'visible' && !(ui.tab === 'messages' && ui.chatWith === row.sender_id)) {
             const sender = ui.users.find(x => x.id === row.sender_id);
             toastRef.current({ title: sender?.displayName ?? 'رسالة جديدة', body: messagePreviewText(row.text, row.media_type), avatar: sender?.avatar, onOpen: () => navRef.current.openChat(row.sender_id) });
@@ -4505,7 +4526,16 @@ export default function App() {
   const baseTitleRef = useRef(document.title);
   useEffect(() => {
     document.title = unreadCount > 0 ? `(${unreadCount}) ${baseTitleRef.current}` : baseTitleRef.current;
+    try {
+      const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+      if (unreadCount > 0) void nav.setAppBadge?.(unreadCount); else void nav.clearAppBadge?.();
+    } catch { /* ignore */ }
   }, [unreadCount]);
+  useEffect(() => {
+    const ask = () => askNotifyPermission();
+    window.addEventListener('pointerdown', ask, { once: true });
+    return () => window.removeEventListener('pointerdown', ask);
+  }, []);
 
   if (!isConfigured) {
     return <StatusScreen text="لم يتم ضبط اتصال Supabase (VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY)." />;
