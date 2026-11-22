@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import type React from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -1108,31 +1108,26 @@ const B2_MIN_MB = 20;
 const B2_PART_MB = 32;
 const B2_PARALLEL = 8;
 
-// Background publishing: uploads keep running while you move around the app; a small pill shows the progress.
-const pubJobs = new Map<string, number>();
-let pubEl: HTMLDivElement | null = null;
-let pubTimer: number | undefined;
-function pubRender(msg?: string) {
-  if (typeof document === 'undefined') return;
-  if (!pubEl) {
-    pubEl = document.createElement('div');
-    pubEl.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 10px);z-index:400;padding:7px 16px;border-radius:999px;color:#fff;font-size:13px;font-weight:600;pointer-events:none;background:linear-gradient(90deg,#7c3aed,#06b6d4);box-shadow:0 6px 20px rgba(124,58,237,.35)';
-    document.body.appendChild(pubEl);
-  }
-  if (msg) { pubEl.textContent = msg; pubEl.style.display = 'block'; return; }
-  if (pubJobs.size === 0) { pubEl.style.display = 'none'; return; }
-  const vals = [...pubJobs.values()];
-  const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
-  pubEl.textContent = `${t('جارٍ النشر...')} ${avg}%${vals.length > 1 ? ` (${vals.length})` : ''}`;
-  pubEl.style.display = 'block';
-}
-const trackJob = (id: string, pct: number) => { window.clearTimeout(pubTimer); pubJobs.set(id, pct); pubRender(); };
-const endJob = (id: string, ok: boolean) => {
-  pubJobs.delete(id);
-  if (ok) { pubRender(); return; }
-  pubRender(t('تعذّر النشر، حاول مرة أخرى'));
-  window.clearTimeout(pubTimer);
-  pubTimer = window.setTimeout(() => pubRender(), 3500);
+// Background publishing: uploads keep running while you move around; the progress shows inside the publish box.
+type PubExtra = { type: 'image' | 'video' | 'file'; url: string; name: string; size: number };
+type PubJob = { id: string; label: string; pct: number; status: 'run' | 'done' | 'fail'; postId?: string; extra: PubExtra[]; music: PubExtra | null };
+let pubList: PubJob[] = [];
+const pubSubs = new Set<() => void>();
+const pubSet = (fn: (l: PubJob[]) => PubJob[]) => { pubList = fn(pubList); pubSubs.forEach(f => f()); };
+const pubSubscribe = (cb: () => void) => { pubSubs.add(cb); return () => { pubSubs.delete(cb); }; };
+const pubSnapshot = () => pubList;
+const trackJob = (id: string, pct: number, label = '') => pubSet(l => {
+  const j = l.find(x => x.id === id);
+  if (!j) return [...l, { id, label, pct, status: 'run', extra: [], music: null }];
+  return j.pct === pct ? l : l.map(x => (x.id === id ? { ...x, pct } : x));
+});
+const endJob = (id: string, ok: boolean, patch: Partial<PubJob> = {}) =>
+  pubSet(l => l.map(j => (j.id === id ? { ...j, ...patch, pct: ok ? 100 : j.pct, status: ok ? 'done' : 'fail' } : j)));
+const dropJob = (id: string) => pubSet(l => l.filter(j => j.id !== id));
+const pathOfUrl = (u: string): string | null => {
+  const m = /post-media\/([^?#]+)/.exec(u);
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return null; }
 };
 
 const kanPath = (path: string, size: number) => (size > B2_MIN_MB * 1024 * 1024 ? `b2/${path}` : path);
@@ -1180,6 +1175,7 @@ async function signMediaUrls(urls: (string | null | undefined)[]): Promise<Map<s
     try {
       const { urls: signed } = await b2Call<{ urls: Record<string, string> }>({ action: 'get', bucket: POST_MEDIA_BUCKET, paths: missing.slice(i, i + 100), seconds: SIGNED_URL_SECONDS });
       for (const [p, u] of Object.entries(signed)) b2UrlCache.set(p, { url: u, exp: now + (SIGNED_URL_SECONDS - 3600) * 1000 });
+  if (b2UrlCache.size > 400) for (const key of [...b2UrlCache.keys()].slice(0, b2UrlCache.size - 300)) b2UrlCache.delete(key);
     } catch (e) { console.error(e); }
   }
   const out = new Map<string, string>();
@@ -5774,6 +5770,8 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
   const [scrub, setScrub] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
+  const [near, setNear] = useState(false);
+  const activeRef = useRef(false);
   const [landscape, setLandscape] = useState(false);
   const [coinId, setCoinId] = useState(0);
   const coinTimer = useRef<number | undefined>(undefined);
@@ -5803,15 +5801,26 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
     if (!box || !video) return;
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+        activeRef.current = true;
         setPaused(false);
         void video.play().catch(() => undefined);
       } else {
+        activeRef.current = false;
         video.pause();
         video.currentTime = 0;
       }
     }, { threshold: [0, 0.6, 1] });
     observer.observe(box);
     return () => observer.disconnect();
+  }, []);
+
+  // Only reels near the screen keep their video loaded: less memory, smoother swiping.
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const io = new IntersectionObserver(([en]) => setNear(en.isIntersecting), { rootMargin: '120% 0px' });
+    io.observe(box);
+    return () => io.disconnect();
   }, []);
 
   const togglePlay = () => {
@@ -5871,9 +5880,9 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       onPointerDown={startHold} onPointerUp={endHold} onPointerLeave={endHold} onPointerCancel={endHold} onContextMenu={e => e.preventDefault()}>
       <video
         ref={videoRef}
-        src={post.media?.url}
+        src={near ? post.media?.url : undefined}
         className={`absolute inset-0 w-full h-full ${landscape ? 'object-contain' : 'object-cover md:object-contain'}`}
-        onLoadedMetadata={e => { setLandscape(e.currentTarget.videoWidth > e.currentTarget.videoHeight); setDur(e.currentTarget.duration || 0); }}
+        onLoadedMetadata={e => { if (activeRef.current) void e.currentTarget.play().catch(() => undefined); setLandscape(e.currentTarget.videoWidth > e.currentTarget.videoHeight); setDur(e.currentTarget.duration || 0); }}
         onTimeUpdate={e => { const v = e.currentTarget; if (!scrub && v.duration) setProg(v.currentTime / v.duration); }}
         loop
         muted={muted}
@@ -5908,32 +5917,32 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       )}
 
       {/* Side actions */}
-      <div className="absolute bottom-[5.5rem] end-3 flex flex-col items-center gap-5 z-20" onClick={stop} onPointerDown={stop}>
+      <div className="absolute bottom-[5.5rem] end-3 flex flex-col items-center gap-4 z-20" onClick={stop} onPointerDown={stop}>
         <div className="flex flex-col items-center">
-          <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-2 rounded-full bg-black/40 ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}>
-            <Heart size={24} className={isLiked ? 'fill-red-400' : ''} />
+          <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}>
+            <Heart size={21} className={isLiked ? 'fill-red-400' : ''} />
           </button>
           {post.likes.length > 0 && (
-            <button onClick={onShowLikes} className="text-xs text-white mt-0.5 font-medium">{post.likes.length}</button>
+            <button onClick={onShowLikes} className="text-[11px] text-white font-semibold drop-shadow">{post.likes.length}</button>
           )}
         </div>
         <div className="flex flex-col items-center">
-          <button onClick={onOpenComments} className="p-2 rounded-full bg-black/40 text-white" aria-label={t('التعليقات')}>
-            <MessageCircle size={24} />
+          <button onClick={onOpenComments} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white" aria-label={t('التعليقات')}>
+            <MessageCircle size={21} />
           </button>
-          <span className="text-xs text-white mt-0.5 font-medium">{commentCount > 0 ? commentCount : ''}</span>
+          <span className="text-[11px] text-white font-semibold drop-shadow">{commentCount > 0 ? commentCount : ''}</span>
         </div>
         <div className="flex flex-col items-center">
-          <button onClick={() => void toggleSave()} className={`p-2 rounded-full bg-black/40 active:scale-90 ${isSaved ? 'text-yellow-400' : 'text-white'}`} aria-label={t('حفظ')}>
-            <BookmarkIcon size={23} className={isSaved ? 'fill-yellow-400' : ''} />
+          <button onClick={() => void toggleSave()} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90 ${isSaved ? 'text-yellow-400' : 'text-white'}`} aria-label={t('حفظ')}>
+            <BookmarkIcon size={20} className={isSaved ? 'fill-yellow-400' : ''} />
           </button>
-          <span className="text-xs text-white mt-0.5 font-medium">{isSaved ? t('محفوظ') : t('حفظ')}</span>
+          <span className="text-[11px] text-white font-semibold drop-shadow">{isSaved ? t('محفوظ') : t('حفظ')}</span>
         </div>
         <div className="flex flex-col items-center">
-          <button onClick={() => setShareOpen(true)} className="p-2 rounded-full bg-black/40 text-white active:scale-90" aria-label={t('مشاركة')}>
-            <Share2 size={22} />
+          <button onClick={() => setShareOpen(true)} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white active:scale-90" aria-label={t('مشاركة')}>
+            <Share2 size={20} />
           </button>
-          <span className="text-xs text-white mt-0.5 font-medium">{t('مشاركة')}</span>
+          <span className="text-[11px] text-white font-semibold drop-shadow">{t('مشاركة')}</span>
         </div>
       </div>
 
@@ -6437,7 +6446,91 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
 }
 
 // ============ Create Post ============
-function CreatePost({ currentUser, setPosts, setActiveTab }: {
+function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.SetStateAction<Post[]>>; userId: string }) {
+  const jobs = useSyncExternalStore(pubSubscribe, pubSnapshot);
+  const musicRef = useRef<HTMLInputElement>(null);
+  const [target, setTarget] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  if (jobs.length === 0) return null;
+
+  const save = async (job: PubJob, extra: PubExtra[], music: PubExtra | null): Promise<boolean> => {
+    if (!job.postId) return false;
+    const { error } = await supabase.from('posts').update({ media_extra: music ? [...extra, music] : extra }).eq('id', job.postId);
+    if (error) return false;
+    pubSet(l => l.map(j => (j.id === job.id ? { ...j, extra, music } : j)));
+    const [s] = await signPostsMedia([{ extraMedia: extra.length ? extra : undefined, music: music ? { url: music.url, name: music.name.slice(10) } : undefined } as Post]);
+    setPosts(prev => prev.map(p => (p.id === job.postId ? { ...p, extraMedia: s.extraMedia, music: s.music } : p)));
+    return true;
+  };
+  const rmPath = (u?: string) => { const p = u ? pathOfUrl(u) : null; if (p) void kanRemove(POST_MEDIA_BUCKET, [p]); };
+  const rmExtra = async (job: PubJob, i: number) => {
+    setBusy(job.id);
+    const gone = job.extra[i];
+    if (await save(job, job.extra.filter((_, k) => k !== i), job.music)) rmPath(gone.url);
+    setBusy(null);
+  };
+  const rmMusic = async (job: PubJob) => {
+    setBusy(job.id);
+    const old = job.music;
+    if (await save(job, job.extra, null)) rmPath(old?.url);
+    setBusy(null);
+  };
+  const addMusic = async (job: PubJob, f: File) => {
+    setBusy(job.id);
+    try {
+      const mp = kanPath(`${userId}/${crypto.randomUUID()}-music.${safeExt(f.name)}`, f.size);
+      const { error } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, f, f.type || 'audio/mpeg', '31536000');
+      if (error) throw error;
+      const item: PubExtra = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${f.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: f.size };
+      const old = job.music;
+      if (await save(job, job.extra, item)) rmPath(old?.url); else rmPath(item.url);
+    } catch (e) { console.error(e); }
+    setBusy(null);
+  };
+
+  return (
+    <div className="mb-3 space-y-2">
+      <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => {
+        const f = e.target.files?.[0]; e.target.value = '';
+        const j = jobs.find(x => x.id === target);
+        if (f && j) void addMusic(j, f);
+      }} />
+      {jobs.map(job => (
+        <div key={job.id} className="rounded-xl bg-gray-800/60 border border-gray-700 p-3">
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="truncate text-gray-200" dir="auto">
+              {job.status === 'run' ? t('جارٍ النشر...') : job.status === 'done' ? t('تم النشر') : t('تعذّر النشر، حاول مرة أخرى')}{job.label ? ` · ${job.label}` : ''}
+            </span>
+            {job.status === 'run'
+              ? <span className="tabular-nums font-bold text-cyan-300">{job.pct}%</span>
+              : <button onClick={() => dropJob(job.id)} aria-label="إغلاق" className="p-1 text-gray-400 hover:text-white"><X size={14} /></button>}
+          </div>
+          {job.status === 'run' && (
+            <div className="mt-2 h-1.5 rounded-full bg-white/10 overflow-hidden" role="progressbar" aria-valuenow={job.pct} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-[width] duration-150" style={{ width: `${job.pct}%` }} />
+            </div>
+          )}
+          {job.status === 'done' && job.postId && (
+            <div className={`mt-2 flex flex-wrap items-center gap-2 ${busy === job.id ? 'opacity-50 pointer-events-none' : ''}`}>
+              <button onClick={() => { setTarget(job.id); musicRef.current?.click(); }} className="px-3 py-1.5 rounded-full bg-gray-900 text-xs text-fuchsia-300 flex items-center gap-1.5">
+                <Music size={13} /> {job.music ? 'تغيير الموسيقى' : 'إضافة موسيقى'}
+              </button>
+              {job.music && <button onClick={() => void rmMusic(job)} className="px-3 py-1.5 rounded-full bg-gray-900 text-xs text-gray-300 hover:text-red-400">حذف الموسيقى</button>}
+              {job.extra.map((x, i) => (
+                <span key={`${x.url}-${i}`} className="flex items-center gap-1 ps-3 pe-1.5 py-1 rounded-full bg-gray-900 text-xs text-gray-300 max-w-[10rem]">
+                  <span className="truncate" dir="auto">{x.name}</span>
+                  <button onClick={() => void rmExtra(job, i)} aria-label="إزالة" className="text-gray-400 hover:text-red-400"><X size={12} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CreatePost({ currentUser, setPosts }: {
   currentUser: User;
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
   setActiveTab: (tab: 'feed' | 'reels' | 'videos' | 'search' | 'create' | 'profile' | 'settings' | 'messages') => void;
@@ -6520,11 +6613,10 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
     if (kind === 'video' && !title.trim()) { setError('اكتب عنواناً للفيديو'); return; }
     if (!text.trim() && !media && !music) { setError('اكتب شيئاً أو أضف صورة أو فيديو أو ملف'); return; }
     const jobId = crypto.randomUUID();
-    trackJob(jobId, 0);
+    trackJob(jobId, 0, (text.trim() || title.trim() || media?.file.name || music?.name || '').slice(0, 40));
     setError('');
     // Publishing continues in the background: the form is free right away and you can post something else.
     setText(''); setTitle(''); setMedia(null); setExtra([]); setMusic(null); clearCover();
-    setActiveTab('feed');
     const uploaded: string[] = [];
     try {
       let mediaUrl: string | null = null;
@@ -6601,7 +6693,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       const [shownPost] = await signPostsMedia([newPost]);
       setPosts(prev => [shownPost, ...prev.filter(p => p.id !== id)]);
       if (media && media.url) URL.revokeObjectURL(media.url);
-      endJob(jobId, true);
+      endJob(jobId, true, { postId: id, extra: extraMedia, music: musicItem });
     } catch (e) {
       console.error(e);
       if (uploaded.length > 0) void kanRemove(POST_MEDIA_BUCKET, uploaded);
@@ -6626,6 +6718,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         ))}
       </div>
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+        <PublishQueue setPosts={setPosts} userId={currentUser.id} />
         {kind === 'video' && (
           <input
             value={title}
