@@ -151,6 +151,7 @@ if (LANG === 'en' && typeof window !== 'undefined') {
 interface ChatBackground {
   type: 'color' | 'gradient' | 'image';
   value: string;
+  key?: string;
 }
 
 interface User {
@@ -184,7 +185,7 @@ interface Reply {
 }
 
 interface Post {
-  music?: { url: string; name: string };
+  music?: { url: string; name: string; start?: number };
   id: string;
   userId: string;
   text: string;
@@ -486,7 +487,7 @@ function rowToPost(row: PostRow): Post {
       : undefined,
     music: (() => {
       const m = (Array.isArray(row.media_extra) ? row.media_extra : []).find(x => (x.name ?? '').startsWith('kan-music|'));
-      return m ? { url: m.url, name: (m.name ?? '').slice(10) || 'موسيقى' } : undefined;
+      return m ? { url: m.url, name: (m.name ?? '').slice(10) || 'موسيقى', start: typeof (m as { start?: number }).start === 'number' ? (m as { start?: number }).start : undefined } : undefined;
     })(),
     isReel: row.is_reel,
     isVideo: row.is_video,
@@ -652,7 +653,7 @@ async function loadConversations(me: string): Promise<Conversation[]> {
   const backgrounds = new Map<string, ChatBackground>();
   for (const b of bgRows) {
     const value = b.type === 'image' ? urls.get(imagePath(b.value)) : b.value;
-    if (value) backgrounds.set(b.conversation_id, { type: b.type, value });
+    if (value) backgrounds.set(b.conversation_id, { type: b.type, value, key: b.type === 'image' ? imagePath(b.value) : undefined });
   }
   const byConversation = new Map<string, Message[]>();
   for (const r of rows) {
@@ -1109,7 +1110,7 @@ const B2_PART_MB = 32;
 const B2_PARALLEL = 8;
 
 // Background publishing: uploads keep running while you move around; the progress shows inside the publish box.
-type PubExtra = { type: 'image' | 'video' | 'file'; url: string; name: string; size: number };
+type PubExtra = { type: 'image' | 'video' | 'file'; url: string; name: string; size: number; start?: number };
 type PubJob = { id: string; label: string; pct: number; status: 'run' | 'done' | 'fail'; postId?: string; extra: PubExtra[]; music: PubExtra | null };
 let pubList: PubJob[] = [];
 const pubSubs = new Set<() => void>();
@@ -1495,15 +1496,21 @@ interface BackLayer { id: number; prio: number; close: () => void }
 const backStack: BackLayer[] = [];
 let backSeq = 0;
 let backListening = false;
-let sentinelArmed = false;
+let sentinelDepth = 0;
 let backFallback: () => boolean = () => false;
 
 function setBackFallback(fn: () => boolean) { backFallback = fn; }
 
+// Several history entries are pushed at once (during a real tap, so the browser never skips them);
+// every Back press consumes one, and the next tap tops them up again.
+const SENTINELS = 4;
 function armSentinel() {
-  if (sentinelArmed && window.history.state?.kanSentinel) return;
-  sentinelArmed = true;
-  window.history.pushState({ kanSentinel: true }, '');
+  const cur = window.history.state?.kanSentinel ? Number(window.history.state.n) || 0 : 0;
+  sentinelDepth = cur;
+  while (sentinelDepth < SENTINELS) {
+    sentinelDepth++;
+    window.history.pushState({ kanSentinel: true, n: sentinelDepth }, '');
+  }
 }
 
 function ensureBackListener() {
@@ -1512,16 +1519,18 @@ function ensureBackListener() {
   const arm = () => armSentinel();
   (['pointerup', 'click', 'keydown'] as const).forEach(ev => window.addEventListener(ev, arm, { capture: true, passive: true }));
   if ((navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive) armSentinel();
-  window.addEventListener('pageshow', () => { sentinelArmed = false; });
+  window.addEventListener('pageshow', () => { sentinelDepth = window.history.state?.kanSentinel ? Number(window.history.state.n) || 0 : 0; });
   window.addEventListener('popstate', () => {
-    if (window.history.state?.kanSentinel) return; // we only moved onto the sentinel: nothing was pressed
+    const n = window.history.state?.kanSentinel ? Number(window.history.state.n) || 0 : 0;
+    const wasBack = n < sentinelDepth;
+    sentinelDepth = n;
+    if (!wasBack) return; // forward move: nothing was pressed
     if (/^#\/(post|u)\//i.test(window.location.hash)) return; // a shared link opening, not the Back button
-    sentinelArmed = false; // the sentinel was just consumed by this Back press
     const top = backStack.pop();
-    if (top) { top.close(); armSentinel(); return; }
-    if (backFallback()) { armSentinel(); return; }
+    if (top) { top.close(); return; }
+    if (backFallback()) return;
     // Nothing left to close and Home is already at the top: only now may Back leave the app.
-    window.history.back();
+    window.history.go(-(n + 1));
   });
 }
 
@@ -1821,6 +1830,8 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
   const [busy, setBusy] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string[]>([]);
   const [note, setNote] = useState('');
+  const [storyAsk, setStoryAsk] = useState(false);
+  const [storyCaption, setStoryCaption] = useState('');
   const filePromise = useRef<Promise<File | null> | null>(null);
   const getFile = () => {
     if (!filePromise.current) filePromise.current = postToFile(post);
@@ -1871,7 +1882,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
         user_id: currentUser.id,
         media_url: hasVisual ? stableUrl(url) : '',
         media_type: hasVisual ? type : 'image',
-        caption: (captionSource || `${author.displayName} (@${author.username})`).slice(0, 300),
+        caption: (storyCaption.trim() || captionSource || `${author.displayName} (@${author.username})`).slice(0, 300),
         shared_post_id: post.id,
       });
       if (error) throw error;
@@ -1885,7 +1896,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
     setBusy(null);
   };
   const actions: { key: string; label: string; Icon: typeof Copy; cls: string; run: () => void }[] = [
-    { key: 'story', label: 'قصتك', Icon: Plus, cls: 'from-violet-600 via-fuchsia-500 to-cyan-400', run: () => void shareToStory() },
+    { key: 'story', label: 'قصتك', Icon: Plus, cls: 'from-violet-600 via-fuchsia-500 to-cyan-400', run: () => setStoryAsk(true) },
     { key: 'link', label: 'نسخ الرابط', Icon: Copy, cls: 'from-violet-600 to-fuchsia-500', run: () => void copyLink() },
     { key: 'wa', label: 'واتساب', Icon: MessageCircle, cls: 'from-emerald-500 to-green-600', run: () => openExternal(`https://wa.me/?text=${encodeURIComponent(text)}`) },
     { key: 'tg', label: 'تيليجرام', Icon: Send, cls: 'from-sky-500 to-cyan-500', run: () => openExternal(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text.replace(`\n${link}`, '').slice(0, 300))}`) },
@@ -1995,7 +2006,23 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
             })}
           </div>
         </div>
-        {note && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-gray-800 border border-white/10 text-xs text-white shadow-lg">{note}</div>}
+        {storyAsk && (
+          <div className="absolute inset-0 z-20 bg-gray-900 flex flex-col p-4 gap-3">
+            <h3 className="font-bold kan-gradient-text">نشر في قصتك؟</h3>
+            <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 border border-white/10">
+              {(post.media?.type === 'image' || post.coverUrl) && <img src={post.media?.type === 'image' ? post.media.url : post.coverUrl} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0" />}
+              <div className="min-w-0 flex-1 text-xs text-gray-300 line-clamp-3" dir="auto">{comment ? comment.text : post.title || post.text || author.displayName}</div>
+            </div>
+            <input value={storyCaption} onChange={e => setStoryCaption(e.target.value.slice(0, 300))} placeholder="اكتب شيئاً على القصة (اختياري)" className="w-full px-4 py-2.5 bg-gray-800 rounded-xl text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-400/50" />
+            <div className="flex gap-2 mt-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+              <button onClick={() => void shareToStory()} disabled={busy === 'story'} className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2">
+                {busy === 'story' ? <RefreshCw size={15} className="animate-spin" /> : <Check size={15} />} نشر في القصة
+              </button>
+              <button onClick={() => setStoryAsk(false)} disabled={busy === 'story'} className="px-5 py-2.5 rounded-full bg-white/5 text-gray-300 text-sm">رجوع</button>
+            </div>
+          </div>
+        )}
+        {note && <div className="absolute z-30 bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-gray-800 border border-white/10 text-xs text-white shadow-lg">{note}</div>}
       </motion.div>
     </div>,
     document.body,
@@ -2416,7 +2443,8 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
     void (async () => {
       try {
         if (opts.file && path) {
-          const { error: upErr } = await uploadWithProgress(CHAT_MEDIA_BUCKET, path, opts.file, mime || 'application/octet-stream', '3600', pct => { if (opts.mediaType !== 'voice' && !isStickerName(opts.fileName)) trackUp(id, pct); });
+          const upFile = opts.mediaType === 'image' && opts.file instanceof File && !isStickerName(opts.fileName) ? await shrinkPhoto(opts.file) : opts.file;
+          const { error: upErr } = await uploadWithProgress(CHAT_MEDIA_BUCKET, path, upFile, upFile.type || mime || 'application/octet-stream', '3600', pct => { if (opts.mediaType !== 'voice' && !isStickerName(opts.fileName)) trackUp(id, pct); });
           trackUp(id, null);
           if (upErr) throw upErr;
         }
@@ -3252,6 +3280,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
           onSeen={id => setSeen(prev => (prev.has(id) ? prev : new Set(prev).add(id)))}
           onChanged={() => void load()}
           onClose={() => setOpenAt(null)}
+          onAdd={() => { setOpenAt(null); fileRef.current?.click(); }}
         />
       )}
     </div>
@@ -3310,9 +3339,9 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   );
 }
 
-function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged, onClose }: {
+function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged, onClose, onAdd }: {
   groups: StoryGroup[]; startGroup: number; users: User[]; currentUser: User;
-  onSeen: (id: string) => void; onChanged: () => void; onClose: () => void;
+  onSeen: (id: string) => void; onChanged: () => void; onClose: () => void; onAdd?: () => void;
 }) {
   useBackLayer(true, onClose);
   useEffect(() => () => { window.dispatchEvent(new Event('kan-stories-changed')); }, []);
@@ -3548,6 +3577,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
                 <div className="text-white/70 text-[11px]">{formatTime(story.createdAt)}</div>
               </div>
             </button>
+            {isMine && onAdd && <button onClick={onAdd} className="p-2 rounded-full bg-black/30 text-white" aria-label="إضافة قصة"><Plus size={20} /></button>}
             {isMine && <button onClick={() => void remove()} className="p-2 rounded-full bg-black/30 text-white" aria-label="حذف القصة"><Trash2 size={18} /></button>}
             <button onClick={onClose} className="p-2 rounded-full bg-black/30 text-white" aria-label="إغلاق"><X size={20} /></button>
           </div>
@@ -4067,20 +4097,22 @@ export default function App() {
         console.error(e);
       }
     };
-    const schedule = () => {
+    let usersDirty = false;
+    const schedule = (withUsers = false) => {
+      if (withUsers) usersDirty = true;
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => { if (document.visibilityState !== 'visible') return; void refreshExisting(); void refreshUsers(); }, 2500);
+      timer = window.setTimeout(() => { if (document.visibilityState !== 'visible') return; void refreshExisting(); if (usersDirty) { usersDirty = false; void refreshUsers(); } }, 2500);
     };
     const channel = supabase.channel('kan-live');
     for (const table of ['profiles', 'follows', 'comments', 'post_likes', 'comment_likes']) {
-      channel.on('postgres_changes', { event: '*', schema: 'public', table }, schedule);
+      channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => schedule(table === 'profiles' || table === 'follows'));
     }
     channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'posts' }, payload => {
       const id = (payload.old as { id?: string }).id;
       if (id) setPosts(prev => prev.filter(p => p.id !== id));
     });
     channel.subscribe();
-    const onVisible = () => { if (document.visibilityState === 'visible') schedule(); };
+    const onVisible = () => { if (document.visibilityState === 'visible') schedule(true); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       window.clearTimeout(timer);
@@ -5246,8 +5278,10 @@ function sortComments(list: Comment[], me: User, focusId?: string | null): Comme
   return [...list].sort((a, b) => score(b) - score(a) || b.timestamp - a.timestamp);
 }
 
-function MusicBar({ music }: { music: { url: string; name: string } }) {
+function MusicBar({ music }: { music: { url: string; name: string; start?: number } }) {
   const ref = useRef<HTMLAudioElement>(null);
+  const start = music.start ?? 0;
+  const win = music.start !== undefined ? 30 : Infinity;
   const [on, setOn] = useState(false);
   useEffect(() => () => { const a = ref.current; if (a) { a.pause(); if (playingAudio === a) playingAudio = null; } }, []);
   const toggle = () => {
@@ -5256,12 +5290,13 @@ function MusicBar({ music }: { music: { url: string; name: string } }) {
     if (a.paused) {
       if (playingAudio && playingAudio !== a) playingAudio.pause();
       playingAudio = a;
-      void a.play().catch(() => undefined);
+      const go = () => { if (a.currentTime < start || a.currentTime >= start + win) a.currentTime = start; void a.play().catch(() => undefined); };
+      if (a.readyState >= 1) go(); else { a.addEventListener('loadedmetadata', go, { once: true }); a.load(); }
     } else a.pause();
   };
   return (
     <div className="px-4 pb-3" onClick={e => e.stopPropagation()}>
-      <audio ref={ref} src={music.url} loop preload="none" onPlay={() => setOn(true)} onPause={() => setOn(false)} />
+      <audio ref={ref} src={music.url} preload="none" onPlay={() => setOn(true)} onPause={() => setOn(false)} onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= start + win) a.currentTime = start; }} onEnded={e => { const a = e.currentTarget; a.currentTime = start; void a.play().catch(() => undefined); }} />
       <button onClick={toggle} className="w-full flex items-center gap-3 p-2.5 rounded-2xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25 active:scale-[0.99] transition-transform text-right">
         <span className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white">{on ? <Pause size={18} fill="white" /> : <Play size={18} fill="white" className="translate-x-px" />}</span>
         <span className="min-w-0 flex-1">
@@ -5731,7 +5766,7 @@ function ReportSheet({ post, me, onClose }: { post: Post; me: string; onClose: (
     if (!msg || state === 'busy') return;
     setState('busy');
     const { error } = await supabase.from('reports').insert({ post_id: post.id, reporter_id: me, reason: msg.slice(0, 500) });
-    if (error && error.code !== '23505') { setState('fail'); return; }
+    if (error && error.code !== '23505') { console.error(error); setState('fail'); return; }
     setState('done');
     window.setTimeout(onClose, 1200);
   };
@@ -5790,7 +5825,7 @@ function EditPostSheet({ post, setPosts, onClose }: { post: Post; setPosts: Reac
         uploadedPath = mp;
         musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${newMusic.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: newMusic.size };
       } else if (music) {
-        musicItem = oldRow ?? { type: 'file', url: rawUrl(music.url), name: `kan-music|${music.name}`, size: 0 };
+        musicItem = oldRow ?? { type: 'file', url: rawUrl(music.url), name: `kan-music|${music.name}`, size: 0, start: music.start };
       }
       const kept = items.map(it => ({ ...it, url: rawUrl(it.url) }));
       const [main, ...rest] = kept;
@@ -5817,7 +5852,7 @@ function EditPostSheet({ post, setPosts, onClose }: { post: Post; setPosts: Reac
         title: hasTitle ? (newTitle || undefined) : post.title,
         media: main ? { type: main.type, url: main.url, name: main.name, size: main.size } : undefined,
         extraMedia: rest.length ? rest.map(x => ({ type: x.type, url: x.url, name: x.name, size: x.size })) : undefined,
-        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10) } : undefined,
+        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10), start: musicItem.start } : undefined,
       };
       const [shown] = await signPostsMedia([base]);
       setPosts(prev => prev.map(p => (p.id === post.id ? shown : p)));
@@ -6104,7 +6139,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       )}
 
       {/* Side actions */}
-      <div className="absolute end-3 bottom-[calc(env(safe-area-inset-bottom)+3.75rem)] flex flex-col items-center gap-3.5 z-20" onClick={stop} onPointerDown={stop}>
+      <div className="absolute end-3 bottom-[calc(env(safe-area-inset-bottom)+2rem)] flex flex-col items-center gap-3 z-20" onClick={stop} onPointerDown={stop}>
         <div className="flex flex-col items-center">
           <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90 ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}>
             <Heart size={24} className={isLiked ? 'fill-red-400' : ''} />
@@ -6126,7 +6161,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       </div>
 
       {/* Author + caption */}
-      <div className="absolute start-4 end-16 bottom-[calc(env(safe-area-inset-bottom)+3.75rem)] text-start z-20" onClick={stop} onPointerDown={stop}>
+      <div className="absolute start-4 end-16 bottom-[calc(env(safe-area-inset-bottom)+2rem)] text-start z-20" onClick={stop} onPointerDown={stop}>
         <div className="flex items-center gap-2 mb-1.5">
           <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2 min-w-0">
             <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="sm" />
@@ -6672,7 +6707,7 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
     const { error } = await supabase.from('posts').update({ media_extra: music ? [...extra, music] : extra }).eq('id', job.postId);
     if (error) return false;
     pubSet(l => l.map(j => (j.id === job.id ? { ...j, extra, music } : j)));
-    const [s] = await signPostsMedia([{ extraMedia: extra.length ? extra : undefined, music: music ? { url: music.url, name: music.name.slice(10) } : undefined } as Post]);
+    const [s] = await signPostsMedia([{ extraMedia: extra.length ? extra : undefined, music: music ? { url: music.url, name: music.name.slice(10), start: music.start } : undefined } as Post]);
     setPosts(prev => prev.map(p => (p.id === job.postId ? { ...p, extraMedia: s.extraMedia, music: s.music } : p)));
     return true;
   };
@@ -6744,6 +6779,33 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
   );
 }
 
+// Pick the part of the song that plays with the post (like Instagram): preview it and slide to the start you like.
+function MusicTrimmer({ file, start, onStart }: { file: File; start: number; onStart: (n: number) => void }) {
+  const [url] = useState(() => URL.createObjectURL(file));
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  const ref = useRef<HTMLAudioElement>(null);
+  const [dur, setDur] = useState(0);
+  const [on, setOn] = useState(false);
+  const fmt = (n: number) => `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}`;
+  const play = (from: number) => { const a = ref.current; if (!a) return; a.currentTime = from; void a.play().catch(() => undefined); };
+  return (
+    <div className="mb-4 -mt-2 p-3 rounded-xl bg-gray-800/60 border border-gray-700">
+      <audio ref={ref} src={url} preload="metadata" onLoadedMetadata={e => setDur(e.currentTarget.duration || 0)} onPlay={() => setOn(true)} onPause={() => setOn(false)}
+        onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= start + 30) a.pause(); }} />
+      <div className="flex items-center gap-3">
+        <button onClick={() => { const a = ref.current; if (!a) return; if (on) a.pause(); else play(start); }} className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 text-white flex items-center justify-center" aria-label="تشغيل المقطع">
+          {on ? <Pause size={16} fill="white" /> : <Play size={16} fill="white" className="translate-x-px" />}
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs text-gray-300 mb-1">يبدأ من {fmt(start)} · يشتغل {dur ? Math.min(30, Math.max(1, Math.round(dur - start))) : 30} ثانية</div>
+          <input type="range" min={0} max={Math.max(0, Math.floor(dur) - 1)} step={1} value={Math.min(start, Math.max(0, Math.floor(dur) - 1))} dir="ltr" disabled={!dur}
+            onChange={e => { const v = Number(e.target.value); onStart(v); if (on) play(v); }} className="w-full accent-violet-500" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CreatePost({ currentUser, setPosts }: {
   currentUser: User;
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
@@ -6762,6 +6824,7 @@ function CreatePost({ currentUser, setPosts }: {
   const [error, setError] = useState('');
   const [extra, setExtra] = useState<File[]>([]);
   const [music, setMusic] = useState<File | null>(null);
+  const [musicStart, setMusicStart] = useState(0);
   useEffect(() => { if (music) setRemoteMusic(null); }, [music]);
   const musicRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -6863,13 +6926,13 @@ function CreatePost({ currentUser, setPosts }: {
       if (media) mediaUrl = results[0];
       const extraMedia: { type: 'image' | 'video' | 'file'; url: string; name: string; size: number }[] =
         files.slice(offset).map((f, k) => ({ type: detectMediaKind(f), url: results[offset + k], name: f.name.slice(0, 200), size: f.size }));
-      let musicItem: { type: 'file'; url: string; name: string; size: number } | null = null;
+      let musicItem: { type: 'file'; url: string; name: string; size: number; start?: number } | null = null;
       if (music) {
         const mp = kanPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
         if (mErr) throw mErr;
         uploaded.push(mp);
-        musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size };
+        musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size, start: musicStart };
       } else if (remoteMusic) {
         musicItem = { type: 'file', url: remoteMusic.url, name: `kan-music|${remoteMusic.name}`, size: 0 };
       }
@@ -6906,7 +6969,7 @@ function CreatePost({ currentUser, setPosts }: {
         title: kind === 'video' ? title.trim().slice(0, 120) : undefined,
         coverUrl: coverUrl ?? undefined,
         extraMedia: extraMedia.length > 0 ? extraMedia : undefined,
-        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10) } : undefined,
+        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10), start: musicItem.start } : undefined,
         cursor: new Date().toISOString(),
         timestamp: Date.now(), likes: [], comments: [], bookmarks: [],
       };
@@ -7014,6 +7077,7 @@ function CreatePost({ currentUser, setPosts }: {
             <button onClick={() => setMusic(null)} className="p-1.5 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
           </div>
         )}
+        {music && <MusicTrimmer file={music} start={musicStart} onStart={setMusicStart} />}
         {!music && remoteMusic && (
           <div className="mb-4 flex items-center gap-3 p-2.5 rounded-xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25">
             <span className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white shrink-0"><Music size={16} /></span>
@@ -7047,7 +7111,7 @@ function CreatePost({ currentUser, setPosts }: {
                 <Paperclip size={20} />
               </button>
             )}
-            <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (!f.type.startsWith('audio/') && !/\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(f.name)) { setError('اختر ملف صوت'); return; } if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); }} />
+            <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (!f.type.startsWith('audio/') && !/\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(f.name)) { setError('اختر ملف صوت'); return; } if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); setMusicStart(0); }} />
             <button onClick={() => setEditOpen(o => !o)} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${editOpen || music || remoteMusic ? 'text-fuchsia-300' : 'text-fuchsia-400'}`} aria-label="تعديلات">
               <Sparkles size={20} />
             </button>
@@ -8020,6 +8084,19 @@ function VoicePlayer({ url, knownDuration = 0 }: { url: string; knownDuration?: 
   );
 }
 
+// The chat wallpaper is kept on the device, so it shows at once instead of loading in front of you every time.
+async function cachedBgUrl(key: string, url: string): Promise<string> {
+  try {
+    const c = await caches.open('kan-bg');
+    const req = new Request(`https://kan.local/bg/${encodeURIComponent(key)}`);
+    const hit = await c.match(req);
+    if (hit) return URL.createObjectURL(await hit.blob());
+    const r = await fetch(url);
+    if (r.ok) { await c.put(req, r.clone()); return URL.createObjectURL(await r.blob()); }
+  } catch { /* fall back to the link */ }
+  return url;
+}
+
 // ============ Chat Background Picker ============
 function ChatBgPicker({ current, onChange, onImageUpload }: {
   current: ChatBackground | undefined;
@@ -8385,6 +8462,16 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
   const messages = conversation?.messages || [];
   const bg = conversation?.background;
+  const [bgSrc, setBgSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let off = false;
+    setBgSrc(null);
+    if (bg?.type === 'image') {
+      if (bg.key) void cachedBgUrl(bg.key, bg.value).then(u => { if (!off) setBgSrc(u); });
+      else setBgSrc(bg.value);
+    }
+    return () => { off = true; };
+  }, [bg?.type, bg?.key ?? bg?.value]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // "Typing..." indicator: a lightweight live signal between the two people (nothing is stored).
   const [peerTyping, setPeerTyping] = useState(false);
@@ -8426,7 +8513,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
   const getBgStyle = () => {
     if (!bg) return { background: '#0b0b1a' };
-    if (bg.type === 'image') return { backgroundImage: `url("${bg.value}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
+    if (bg.type === 'image') return bgSrc ? { backgroundImage: `url("${bgSrc}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: '#0b0b1a' };
     if (bg.type === 'color') return { background: bg.value };
     return {};
   };
@@ -8515,7 +8602,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     void (async () => {
       try {
         if (opts.file && path) {
-          const { error: upErr } = await uploadWithProgress(CHAT_MEDIA_BUCKET, path, opts.file, opts.file.type || 'application/octet-stream', '3600', pct => { if (opts.mediaType !== 'voice' && !isStickerName(opts.fileName)) trackUp(id, pct); });
+          const upFile = opts.mediaType === 'image' && opts.file instanceof File && !isStickerName(opts.fileName) ? await shrinkPhoto(opts.file) : opts.file;
+          const { error: upErr } = await uploadWithProgress(CHAT_MEDIA_BUCKET, path, upFile, upFile.type || 'application/octet-stream', '3600', pct => { if (opts.mediaType !== 'voice' && !isStickerName(opts.fileName)) trackUp(id, pct); });
           trackUp(id, null);
           if (upErr) throw upErr;
         }
