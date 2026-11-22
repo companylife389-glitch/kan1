@@ -215,3 +215,7 @@ img { content-visibility: auto; }
 .post-card { content-visibility: auto; contain-intrinsic-size: auto 520px; }
 button, a { transition-property: color, background-color, border-color, opacity, box-shadow, transform; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } button:active:not(:disabled) { transform: none; } }
+
+
+/* English (LTR): right-aligned Arabic-first text flips to the left. */
+html[dir='ltr'] .text-right { text-align: left; }
