@@ -726,14 +726,26 @@ function toastsEnabled(): boolean {
 }
 // System notification (like WhatsApp) when the app is in the background, plus the unread count on the app icon.
 function askNotifyPermission() {
-  try { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission(); } catch { /* ignore */ }
+  // After the person allows notifications, attach this phone to push right away (before, it waited for the next reload, so closed-app notifications never arrived).
+  try { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission().then(p => { if (p === 'granted') void enablePush(); }); } catch { /* ignore */ }
 }
 function systemNotify(title: string, body: string, tag: string, onOpen: () => void, icon?: string) {
   try {
     if (!('Notification' in window) || Notification.permission !== 'granted' || !toastsEnabled()) return;
-    const n = new Notification(title, { body, tag, icon: icon && /^(https?:|data:)/.test(icon) ? icon : undefined });
-    n.onclick = () => { window.focus(); onOpen(); n.close(); };
-  } catch { /* some phones only allow notifications through a service worker */ }
+    const opts = { body, tag, renotify: true, silent: false, vibrate: [200, 100, 200], dir: 'rtl', lang: 'ar', badge: LOGO_URL, icon: icon && /^(https?:|data:)/.test(icon) ? icon : LOGO_URL } as NotificationOptions;
+    // Phones (Android Chrome / installed app) only allow notifications through the service worker.
+    const viaWorker = (): Promise<boolean> => {
+      if (!('serviceWorker' in navigator)) return Promise.resolve(false);
+      return navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL as string)
+        .then(reg => (reg ? reg.showNotification(title, opts).then(() => true) : false))
+        .catch(() => false);
+    };
+    void viaWorker().then(ok => {
+      if (ok) return;
+      const n = new Notification(title, opts);
+      n.onclick = () => { window.focus(); onOpen(); n.close(); };
+    }).catch(() => { /* blocked */ });
+  } catch { /* notifications unavailable */ }
 }
 
 function setToastsEnabled(on: boolean) {
@@ -3487,6 +3499,11 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
     return () => cancelAnimationFrame(raf);
   }, [story?.id, paused, showViewers, replyFocus, duration]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (progress >= 1) next(); }, [progress]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Preload the next pictures so stories open instantly instead of waiting on each image.
+  useEffect(() => {
+    const upcoming = [...(group?.items.slice(si + 1, si + 4) ?? []), ...(groups[gi + 1]?.items.slice(0, 2) ?? [])];
+    for (const s of upcoming) if (s.url && s.type === 'image') { const im = new window.Image(); im.src = s.url; }
+  }, [gi, si]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -3636,7 +3653,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
           )}
         </div>
         {showViewers && isMine && (
-          <div className="absolute inset-x-0 bottom-0 max-h-[55%] overflow-y-auto bg-gray-900 rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" {...ignore}>
+          <div className="absolute inset-x-0 bottom-0 max-h-[55%] overflow-y-auto bg-[#15152b] text-white rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" {...ignore}>
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-bold text-white text-sm">المشاهدات ({viewers?.length ?? 0})</h4>
               <button onClick={() => setShowViewers(false)} className="p-1 text-gray-400"><X size={18} /></button>
@@ -4533,8 +4550,8 @@ export default function App() {
   }, [unreadCount]);
   useEffect(() => {
     const ask = () => askNotifyPermission();
-    window.addEventListener('pointerdown', ask, { once: true });
-    return () => window.removeEventListener('pointerdown', ask);
+    window.addEventListener('click', ask, { once: true }); // iPhone only accepts the permission prompt from a real tap
+    return () => window.removeEventListener('click', ask);
   }, []);
 
   if (!isConfigured) {
@@ -4756,7 +4773,7 @@ export default function App() {
                   onClick={() => (tab === 'feed' ? onHomeTap() : goTab(tab))}
                   className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-0.5 py-2 rounded-2xl transition-colors active:scale-95 ${active ? 'text-white' : 'text-gray-300 hover:text-white'}`}
                 >
-                  <Icon size={24} strokeWidth={active ? 2.4 : 2} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'animate-spin' : ''}`} />
+                  <Icon size={tab === 'reels' ? 31 : 24} strokeWidth={active ? 2.4 : 2} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'animate-spin' : ''}`} />
                   <span className={`text-[12px] leading-tight max-w-full ${active ? "font-bold text-white" : "font-semibold"}`}>{label}</span>
                   <span className={`h-0.5 w-5 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
                 </button>
@@ -5454,11 +5471,15 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   };
 
   const toggleCommentLike = async (commentId: string) => {
-    const was = post.comments.find(c => c.id === commentId)?.likes.includes(me) ?? false;
+    const was = post.comments.some(c => (c.id === commentId ? c.likes.includes(me) : c.replies.some(r => r.id === commentId && r.likes.includes(me))));
     const apply = (on: boolean) =>
       mutatePost(p => ({
         ...p,
-        comments: p.comments.map(c => (c.id === commentId ? { ...c, likes: setIn(c.likes, on) } : c)),
+        comments: p.comments.map(c => ({
+          ...c,
+          likes: c.id === commentId ? setIn(c.likes, on) : c.likes,
+          replies: c.replies.map(r => (r.id === commentId ? { ...r, likes: setIn(r.likes, on) } : r)),
+        })),
       }));
     apply(!was);
     const { error } = was
@@ -5705,6 +5726,19 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
                                       </button>
                                     )}
                                     <CommentText text={reply.text} cls="text-xs text-gray-300" />
+                                    <div className="flex items-center gap-3 mt-0.5">
+                                      <span className="flex items-center gap-1">
+                                        <button onClick={() => toggleCommentLike(reply.id)} className={`text-xs ${reply.likes.includes(currentUser.id) ? 'text-red-400' : 'text-gray-500'}`} aria-label="إعجاب">
+                                          <Heart size={12} className={reply.likes.includes(currentUser.id) ? 'fill-red-400' : ''} />
+                                        </button>
+                                        {reply.likes.length > 0 && (
+                                          <button onClick={() => setListModal({ title: 'الإعجابات', ids: reply.likes })} className="text-xs text-gray-400 hover:text-white">{reply.likes.length}</button>
+                                        )}
+                                      </span>
+                                      <button onClick={() => { setReplyTo(comment.id); setReplyText(`@${rAuthor.username} `); }} className="text-xs text-gray-500 hover:text-violet-400 flex items-center gap-1">
+                                        <Reply size={11} /> رد
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
                               );
@@ -6291,10 +6325,28 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
     }
   };
 
-  const rows: { id: string; top: string; userId: string; text: string; timestamp: number; reply: boolean }[] = [];
+  const likeRow = async (id: string) => {
+    const was = post.comments.some(c => (c.id === id ? c.likes.includes(me) : c.replies.some(r => r.id === id && r.likes.includes(me))));
+    const toggle = (l: string[], on: boolean) => (on ? [...l.filter(x => x !== me), me] : l.filter(x => x !== me));
+    const apply = (on: boolean) => mutate(p => ({
+      ...p,
+      comments: p.comments.map(c => ({
+        ...c,
+        likes: c.id === id ? toggle(c.likes, on) : c.likes,
+        replies: c.replies.map(r => (r.id === id ? { ...r, likes: toggle(r.likes, on) } : r)),
+      })),
+    }));
+    apply(!was);
+    const { error } = was
+      ? await supabase.from('comment_likes').delete().eq('comment_id', id).eq('user_id', me)
+      : await supabase.from('comment_likes').insert({ comment_id: id, user_id: me });
+    if (error) apply(was);
+  };
+
+  const rows: { id: string; top: string; userId: string; text: string; timestamp: number; reply: boolean; likes: string[]; username?: string }[] = [];
   for (const c of post.comments) {
-    rows.push({ id: c.id, top: c.id, userId: c.userId, text: c.text, timestamp: c.timestamp, reply: false });
-    for (const r of c.replies) rows.push({ id: r.id, top: c.id, userId: r.userId, text: r.text, timestamp: r.timestamp, reply: true });
+    rows.push({ id: c.id, top: c.id, userId: c.userId, text: c.text, timestamp: c.timestamp, reply: false, likes: c.likes });
+    for (const r of c.replies) rows.push({ id: r.id, top: c.id, userId: r.userId, text: r.text, timestamp: r.timestamp, reply: true, likes: r.likes });
   }
 
   return createPortal(
@@ -6321,7 +6373,13 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
                     )}
                   </div>
                   <CommentText text={r.text} cls="text-sm text-gray-200 whitespace-pre-wrap break-words" />
-                  <button onClick={() => setReplyTo({ parentId: r.top, name: u.displayName })} className="mt-1 text-xs text-gray-500 hover:text-cyan-300">رد</button>
+                  <div className="mt-1 flex items-center gap-4">
+                    <span className="flex items-center gap-1">
+                      <button onClick={() => void likeRow(r.id)} className={r.likes.includes(me) ? 'text-red-400' : 'text-gray-500'} aria-label="إعجاب"><Heart size={13} className={r.likes.includes(me) ? 'fill-red-400' : ''} /></button>
+                      {r.likes.length > 0 && <span className="text-xs text-gray-400">{r.likes.length}</span>}
+                    </span>
+                    <button onClick={() => { setReplyTo({ parentId: r.top, name: u.displayName }); if (r.reply) setText(`@${u.username} `); }} className="text-xs text-gray-500 hover:text-cyan-300">رد</button>
+                  </div>
                 </div>
               </div>
             );
@@ -6356,6 +6414,96 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
   );
 }
 
+// A post shown full-screen, reels style: swipe up for the next post, double tap to love it, side buttons like reels.
+function PostSlide({ post, author, currentUser, setPosts, onOpenProfile, onOpenComments, onShare, onShowLikes, users, setUsers }: {
+  post: Post; author: User; currentUser: User; users: User[];
+  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
+  setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
+  onOpenProfile: (id: string) => void; onOpenComments: () => void; onShare: () => void; onShowLikes: () => void;
+}) {
+  void users;
+  const isLiked = post.likes.includes(currentUser.id);
+  const isSaved = post.bookmarks.includes(currentUser.id);
+  const commentCount = post.comments.reduce((n, c) => n + 1 + c.replies.length, 0);
+  const toggleFollow = makeToggleFollow(currentUser, setUsers);
+  const isFollowing = currentUser.following.includes(author.id);
+  const [coinId, setCoinId] = useState(0);
+  const lastTap = useRef(0);
+  const [cur, setCur] = useState(0);
+  const items = [...(post.media ? [post.media] : []), ...(post.extraMedia ?? [])].filter(m => m.type === 'image');
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  const toggleSave = async () => {
+    const me = currentUser.id;
+    const was = isSaved;
+    const apply = (on: boolean) => setPosts(prev => prev.map(p => (p.id === post.id ? { ...p, bookmarks: on ? [...p.bookmarks.filter(i => i !== me), me] : p.bookmarks.filter(i => i !== me) } : p)));
+    apply(!was);
+    const { error } = was
+      ? await supabase.from('bookmarks').delete().eq('post_id', post.id).eq('user_id', me)
+      : await supabase.from('bookmarks').insert({ post_id: post.id, user_id: me });
+    if (error) apply(was);
+  };
+  const tap = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 320) {
+      lastTap.current = 0;
+      setCoinId(n => n + 1);
+      window.setTimeout(() => setCoinId(0), 1100);
+      if (!isLiked) togglePostLike(post, currentUser.id, setPosts);
+    } else lastTap.current = now;
+  };
+  return (
+    <div className="relative h-full w-full snap-start snap-always bg-black overflow-hidden select-none kan-always-white" onClick={tap}>
+      {items.length > 0 ? (
+        <div dir="ltr" className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
+          onScroll={e => { const el = e.currentTarget; if (el.clientWidth) setCur(Math.round(el.scrollLeft / el.clientWidth)); }}>
+          {items.map((m, i) => (
+            <div key={`${m.url}-${i}`} className="relative w-full h-full shrink-0 snap-center flex items-center justify-center">
+              <img src={m.url} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110" />
+              <img src={m.url} alt="" draggable={false} loading={i === 0 ? 'eager' : 'lazy'} className="relative max-w-full max-h-full object-contain" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center p-8 bg-gradient-to-br from-violet-700 via-fuchsia-600 to-cyan-500">
+          <p className="text-white text-2xl font-bold leading-10 text-center whitespace-pre-wrap break-words line-clamp-[12]" dir="auto">{post.text}</p>
+        </div>
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/35 pointer-events-none" />
+      {coinId > 0 && <CoinBurst key={coinId} />}
+      {items.length > 1 && (
+        <div className="absolute top-[max(5.5rem,calc(env(safe-area-inset-top)+4.5rem))] inset-x-0 flex justify-center gap-1.5 pointer-events-none z-20">
+          {items.map((_, i) => <span key={i} className={`h-1.5 rounded-full transition-all ${i === cur ? 'w-5 bg-white' : 'w-1.5 bg-white/40'}`} />)}
+        </div>
+      )}
+      <div className="absolute end-3 bottom-[calc(env(safe-area-inset-bottom)+2rem)] flex flex-col items-center gap-3 z-20" onClick={stop} onPointerDown={stop}>
+        <div className="flex flex-col items-center">
+          <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90 ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}><Heart size={26} className={isLiked ? 'fill-red-400' : ''} /></button>
+          {post.likes.length > 0 && <button onClick={onShowLikes} className="text-[11px] text-white font-semibold drop-shadow">{post.likes.length}</button>}
+        </div>
+        <div className="flex flex-col items-center">
+          <button onClick={onOpenComments} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white active:scale-90" aria-label={t('التعليقات')}><MessageCircle size={26} /></button>
+          {commentCount > 0 && <span className="text-[11px] text-white font-semibold drop-shadow">{commentCount}</span>}
+        </div>
+        <button onClick={onShare} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white active:scale-90" aria-label={t('مشاركة')}><Share2 size={25} /></button>
+        <button onClick={() => void toggleSave()} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90 ${isSaved ? 'text-yellow-300' : 'text-white'}`} aria-label={t('حفظ')}><Bookmark size={25} className={isSaved ? 'fill-yellow-300' : ''} /></button>
+        <PostMenu post={post} author={author} currentUser={currentUser} setPosts={setPosts} saved={isSaved} onToggleSave={() => void toggleSave()} dark />
+      </div>
+      <div className="absolute start-4 end-16 bottom-[calc(env(safe-area-inset-bottom)+2rem)] text-start z-20" onClick={stop} onPointerDown={stop}>
+        <div className="flex items-center gap-2 mb-1.5">
+          <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2 min-w-0">
+            <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="sm" />
+            <span className="text-white font-bold text-sm truncate max-w-[10rem]">{author.displayName}</span>
+          </button>
+          {author.id !== currentUser.id && (
+            <button onClick={() => toggleFollow(author.id)} className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition-all ${isFollowing ? 'bg-white/15 text-white border border-white/25' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}>{isFollowing ? t('متابَع') : t('متابعة')}</button>
+          )}
+        </div>
+        {post.text && items.length > 0 && <p className="text-white text-sm leading-snug line-clamp-3 whitespace-pre-wrap" dir="auto">{post.text}</p>}
+      </div>
+    </div>
+  );
+}
+
 function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile, onCreate, onLoadPage, onBack, startId }: {
   startId: string | null;
   onBack: () => void;
@@ -6371,8 +6519,23 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   const [muted, setMuted] = useState(true);
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
+  const [mode, setMode] = useState<'reels' | 'posts'>('reels');
+  const [shareFor, setShareFor] = useState<string | null>(null);
   const reels = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
+  const photoPosts = posts.filter(p => !p.isReel && !p.isVideo && (p.media?.type === 'image' || (!p.media && !!p.text.trim()))).sort((a, b) => b.timestamp - a.timestamp);
   const commentPost = commentsFor ? posts.find(p => p.id === commentsFor) : undefined;
+  const sharePost = shareFor ? posts.find(p => p.id === shareFor) : undefined;
+  const postsBusy = useRef(false);
+  const [postsMore, setPostsMore] = useState(true);
+  const loadMorePosts = async () => {
+    if (postsBusy.current || !postsMore) return;
+    postsBusy.current = true;
+    try {
+      const all = posts.slice().sort((a, b) => a.timestamp - b.timestamp);
+      const page = await onLoadPage({ before: all[0]?.cursor, limit: 12 });
+      if (page.length < 12) setPostsMore(false);
+    } catch (e) { console.error(e); } finally { postsBusy.current = false; }
+  };
 
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
@@ -6403,11 +6566,11 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
     return () => { cancelAnimationFrame(r); window.clearTimeout(t); };
   }, [startId, reels.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (reels.length === 0 && hasMore) {
+  if (mode === 'reels' && reels.length === 0 && hasMore) {
     return <div className="py-20 text-center text-gray-500 text-sm">جارٍ التحميل...</div>;
   }
 
-  if (reels.length === 0) {
+  if (mode === 'reels' && reels.length === 0) {
     return (
       <div className="px-4 py-16 text-center">
         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl kan-fab flex items-center justify-center"><Film size={30} className="text-white" /></div>
@@ -6424,10 +6587,21 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
         className="h-full overflow-y-scroll overscroll-contain snap-y snap-mandatory no-scrollbar"
         onScroll={e => {
           const el = e.currentTarget;
-          if (el.scrollTop + el.clientHeight * 2.5 >= el.scrollHeight) void loadMore();
+          if (el.scrollTop + el.clientHeight * 2.5 >= el.scrollHeight) void (mode === 'reels' ? loadMore() : loadMorePosts());
         }}
       >
-        {reels.map(post => {
+        {mode === 'posts' && photoPosts.length === 0 && <div className="h-full flex items-center justify-center text-gray-400 text-sm">لا توجد منشورات بعد</div>}
+        {mode === 'posts' && photoPosts.map(post => {
+          const author = users.find(u => u.id === post.userId);
+          if (!author) return null;
+          return (
+            <div key={post.id} className="h-full">
+              <PostSlide post={post} author={author} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile}
+                onOpenComments={() => setCommentsFor(post.id)} onShare={() => setShareFor(post.id)} onShowLikes={() => setListModal({ title: 'الإعجابات', ids: post.likes })} users={users} setUsers={setUsers} />
+            </div>
+          );
+        })}
+        {mode === 'reels' && reels.map(post => {
           const author = users.find(u => u.id === post.userId);
           if (!author) return null;
           return (
@@ -6452,8 +6626,16 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
       <div className="absolute inset-x-0 top-0 z-20 flex items-center px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-8 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
         <button onClick={onBack} className="pointer-events-auto p-2 rounded-full bg-black/40 text-white active:scale-90 transition-transform" aria-label="رجوع"><ChevronRight size={22} /></button>
         <span className="mx-3 text-lg font-extrabold tracking-[0.25em] kan-gradient-text">KAN</span>
-        <span className="text-xs text-white/80 font-medium">ريلز</span>
+        <div className="pointer-events-auto mx-auto flex gap-1 p-1 rounded-full bg-black/45 backdrop-blur">
+          {([['reels', 'ريلز'], ['posts', 'منشورات']] as const).map(([k, label]) => (
+            <button key={k} onClick={() => setMode(k)} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${mode === k ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-white/80'}`}>{label}</button>
+          ))}
+        </div>
+        <span className="w-10" />
       </div>
+      {sharePost && users.find(u => u.id === sharePost.userId) && (
+        <ShareSheet post={sharePost} author={users.find(u => u.id === sharePost.userId)!} users={users} currentUser={currentUser} onClose={() => setShareFor(null)} />
+      )}
       {commentPost && (
         <ReelComments post={commentPost} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} onClose={() => setCommentsFor(null)} />
       )}

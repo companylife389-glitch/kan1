@@ -14,12 +14,12 @@ self.addEventListener('push', (event) => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       // The app is open and in front: it plays its own sound, so no system notification.
       if (windows.some((w) => w.visibilityState === 'visible' && w.focused)) return;
-      // Warm the sender's picture first (the phone gives up quickly on a slow icon), else fall back to the app icon.
+      // Try the sender's picture briefly (a slow icon must never delay the notification), else the app icon.
       let icon = 'icon-192.png';
       if (data.icon) {
         try {
           const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), 4000);
+          const timer = setTimeout(() => ctrl.abort(), 2000);
           const res = await fetch(data.icon, { signal: ctrl.signal });
           clearTimeout(timer);
           if (res.ok) icon = data.icon;
@@ -32,13 +32,20 @@ self.addEventListener('push', (event) => {
         silent: false,
         vibrate: [200, 100, 200],
         timestamp: Date.now(),
-        icon, // the sender's profile picture when it could be loaded
-        badge: 'badge-96.png', // small white app mark in the status bar, like WhatsApp
+        icon,
+        badge: 'badge-96.png',
         dir: 'rtl',
         lang: 'ar',
-        data: { url: self.registration.scope },
+        data: { url: data.url || self.registration.scope },
       });
     })()
+  );
+});
+
+// If the browser renews the push subscription, tell the open app so it saves the new one.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ws) => ws.forEach((w) => w.postMessage({ kan: 'resubscribe' })))
   );
 });
 
