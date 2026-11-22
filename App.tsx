@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import type React from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -3683,11 +3683,20 @@ function EmojiPicker({ onPick, onClose, docked = false, onSticker, startOnSticke
 }
 
 // ============ Double-tap love: the burst follows the "like style" chosen in Settings ============
-// Double-tap like: one heart in the KAN colours (violet to cyan) that pops and fades.
+// Double-tap like: one heart in the KAN colours (violet to cyan) that pops where you tapped and fades.
+const lastPointer = { x: -1, y: -1 };
+if (typeof window !== 'undefined') window.addEventListener('pointerdown', e => { lastPointer.x = e.clientX; lastPointer.y = e.clientY; }, true);
 function CoinBurst({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
   const dim = size === 'lg' ? 96 : 48;
+  const ref = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  useLayoutEffect(() => {
+    const r = ref.current?.parentElement?.getBoundingClientRect();
+    const { x, y } = lastPointer;
+    if (r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) setAt({ x: x - r.left, y: y - r.top });
+  }, []);
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+    <div ref={ref} className="pointer-events-none absolute z-20" style={at ? { left: at.x, top: at.y, transform: 'translate(-50%,-50%)' } : { inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <motion.div initial={{ scale: 0.3, opacity: 0 }} animate={{ scale: [0.3, 1.2, 1, 1], opacity: [0, 1, 1, 0] }} transition={{ duration: 0.9, ease: 'easeOut', times: [0, 0.3, 0.55, 1] }}
         style={{ filter: 'drop-shadow(0 4px 14px rgba(124,58,237,.55))' }}>
         <svg width={dim} height={dim} viewBox="0 0 24 24" aria-hidden>
@@ -5859,8 +5868,15 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
 
       {boost && <div className="absolute top-[max(4rem,calc(env(safe-area-inset-top)+3.25rem))] inset-x-0 flex justify-center pointer-events-none z-30"><span className="px-3 py-1 rounded-full bg-black/60 backdrop-blur text-white text-sm font-bold">2x</span></div>}
       {paused && !failed && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-          <span className="w-20 h-20 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white"><Pause size={34} fill="white" /></span>
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none">
+          <span className="w-24 h-24 rounded-full bg-gradient-to-br from-violet-600/70 to-cyan-500/70 backdrop-blur-md ring-2 ring-white/30 shadow-2xl shadow-violet-500/30 flex items-center justify-center text-white">
+            <Pause size={40} fill="white" strokeWidth={0} />
+          </span>
+          <button onClick={e => { e.stopPropagation(); onToggleMute(); }} onPointerDown={stop}
+            className="mt-6 w-12 h-12 rounded-full bg-black/55 backdrop-blur ring-1 ring-white/20 text-white flex items-center justify-center pointer-events-auto active:scale-90"
+            aria-label={muted ? t('تشغيل الصوت') : t('كتم الصوت')}>
+            {muted ? <VolumeX size={22} /> : <Volume2 size={22} />}
+          </button>
         </div>
       )}
 
@@ -5916,20 +5932,15 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
 
       {/* Bottom bar: thin line while playing, full seek bar while paused */}
       <div dir="ltr" className="absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))]" onClick={stop} onPointerDown={stop}>
-        <div className="flex justify-start mb-1">
-          <button onClick={onToggleMute} className="w-10 h-10 rounded-full bg-black/55 backdrop-blur text-white flex items-center justify-center active:scale-90" aria-label={muted ? t('تشغيل الصوت') : t('كتم الصوت')}>
-            {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-          </button>
-        </div>
         {paused && <div className="flex justify-between text-[11px] text-white/80 font-medium mb-0.5 px-0.5"><span>{fmt(prog * dur)}</span><span>{fmt(dur)}</span></div>}
-        <div ref={barRef} className={`relative flex items-center touch-none ${paused ? 'h-7 cursor-pointer' : 'h-3 pointer-events-none'}`}
-          onPointerDown={e => { if (!paused) return; (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId); setScrub(true); seekTo(e.clientX); }}
+        <div ref={barRef} className={`relative flex items-center touch-none h-6 cursor-pointer`}
+          onPointerDown={e => { (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId); setScrub(true); seekTo(e.clientX); }}
           onPointerMove={e => { if (scrub) seekTo(e.clientX); }}
           onPointerUp={() => setScrub(false)} onPointerCancel={() => setScrub(false)}>
-          <div className={`w-full rounded-full bg-white/30 overflow-hidden ${paused ? (scrub ? 'h-2' : 'h-1.5') : 'h-[2px]'} transition-all`}>
+          <div className={`w-full rounded-full bg-white/30 overflow-hidden ${scrub ? 'h-2' : paused ? 'h-1.5' : 'h-1'} transition-all`}>
             <div className="h-full bg-gradient-to-r from-violet-400 to-cyan-300" style={{ width: `${prog * 100}%` }} />
           </div>
-          {paused && <div className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-white shadow ${scrub ? 'w-4 h-4' : 'w-3 h-3'}`} style={{ left: `${prog * 100}%` }} />}
+          {(paused || scrub) && <div className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-white shadow ${scrub ? 'w-4 h-4' : 'w-3 h-3'}`} style={{ left: `${prog * 100}%` }} />}
         </div>
       </div>
       {shareOpen && <ShareSheet post={post} author={author} users={users} currentUser={currentUser} onClose={() => setShareOpen(false)} />}
