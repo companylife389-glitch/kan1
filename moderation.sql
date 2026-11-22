@@ -5,6 +5,7 @@ create table if not exists public.reports (
   id uuid primary key default gen_random_uuid(),
   post_id uuid not null references public.posts(id) on delete cascade,
   reporter_id uuid not null references public.profiles(id) on delete cascade,
+  reason text,                              -- what the reporter wrote
   created_at timestamptz not null default now(),
   unique (post_id, reporter_id)            -- one report per person per post
 );
@@ -36,3 +37,6 @@ create policy "report as myself" on public.reports
 
 -- Then in the Supabase dashboard: Database > Webhooks > new webhook on table `reports`, event INSERT,
 -- type "Supabase Edge Functions" -> function `moderate`, add header  x-webhook-secret: <same value as WEBHOOK_SECRET>.
+
+-- If `reports` already exists from an earlier run:
+alter table public.reports add column if not exists reason text;

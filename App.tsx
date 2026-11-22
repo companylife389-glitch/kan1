@@ -9,7 +9,7 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, Bookmark as BookmarkIcon
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -5305,7 +5305,6 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   const [cEmoji, setCEmoji] = useState<string | null>(null); // 'main' or a comment id (reply box)
   const [shareOpen, setShareOpen] = useState(false);
   const [shareComment, setShareComment] = useState<{ id: string; text: string; authorName: string } | null>(null);
-  const [editPost, setEditPost] = useState(false);
   const [editC, setEditC] = useState<{ id: string; text: string } | null>(null);
   useEffect(() => {
     if (!focusCommentId) return;
@@ -5444,19 +5443,6 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
     }
   };
 
-  const deletePost = async () => {
-    const removed = post;
-    setPosts(prev => prev.filter(p => p.id !== post.id));
-    const { error } = await supabase.from('posts').delete().eq('id', post.id);
-    if (error) {
-      setPosts(prev => [removed, ...prev]);
-      window.alert('تعذّر حذف المنشور، حاول مرة أخرى');
-      return;
-    }
-    const path = removed.media ? mediaPath(removed.media.url) : null;
-    if (path) void kanRemove(POST_MEDIA_BUCKET, [path]);
-  };
-
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }} className="post-card bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden [contain:layout_paint] [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
       <div className="p-4 flex items-center gap-3">
@@ -5467,16 +5453,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
             <div className="text-xs text-gray-500">@{author.username} · {formatTime(post.timestamp)}</div>
           </div>
         </button>
-        {post.userId === currentUser.id && (
-          <>
-            <button onClick={() => setEditPost(true)} className="p-2 text-gray-500 hover:text-cyan-300 transition-colors" aria-label="تعديل المنشور">
-              <Pencil size={16} />
-            </button>
-            <button onClick={deletePost} className="p-2 text-gray-500 hover:text-red-400 transition-colors">
-              <Trash2 size={16} />
-            </button>
-          </>
-        )}
+        <PostMenu post={post} author={author} currentUser={currentUser} setPosts={setPosts} saved={isBookmarked} onToggleSave={() => void toggleBookmark()} />
       </div>
 
       <div onClick={() => handleContentTap()} className="relative select-none touch-manipulation">
@@ -5577,23 +5554,6 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         </button>
         {shareOpen && <ShareSheet post={post} author={author} users={users} currentUser={currentUser} onClose={() => setShareOpen(false)} />}
         {shareComment && <ShareSheet post={post} author={author} users={users} currentUser={currentUser} comment={shareComment} onClose={() => setShareComment(null)} />}
-        {editPost && (
-          <EditTextModal
-            title="تعديل المنشور"
-            initial={post.text}
-            initialTitle={post.title !== undefined ? post.title : undefined}
-            maxLength={2000}
-            allowEmpty={!!post.media}
-            onClose={() => setEditPost(false)}
-            onSave={async (v, h) => {
-              const hasTitle = post.title !== undefined;
-              const { error } = await supabase.from('posts').update(hasTitle ? { text: v, title: h || null } : { text: v }).eq('id', post.id);
-              if (error) { console.error(error); return false; }
-              setPosts(prev => prev.map(p => (p.id === post.id ? { ...p, text: v, title: hasTitle ? (h || undefined) : p.title } : p)));
-              return true;
-            }}
-          />
-        )}
         {editC && (
           <EditTextModal
             title="تعديل التعليق"
@@ -5731,6 +5691,228 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         document.body,
       )}
     </motion.div>
+  );
+}
+
+// ============ Post menu (three dots): my post -> edit / delete; someone else's -> use audio / save / report ============
+const swallow = (e: React.SyntheticEvent) => e.stopPropagation();
+const swallowProps = { onClick: swallow, onPointerDown: swallow, onPointerUp: swallow, onPointerCancel: swallow, onPointerLeave: swallow };
+const rawUrl = (u: string) => { const p = pathOfUrl(u); return p && p.startsWith('b2/') ? kanPublicUrl(POST_MEDIA_BUCKET, p) : u; };
+
+function startReelWithAudio(post: Post, authorName: string) {
+  const src = post.music?.url ?? post.media?.url;
+  if (!src) return;
+  pendingAudio = { url: rawUrl(src), name: (post.music?.name ?? `${t('الصوت الأصلي')} · ${authorName}`).slice(0, 80) };
+  createFromAudio();
+}
+
+async function deleteMyPost(post: Post, setPosts: React.Dispatch<React.SetStateAction<Post[]>>) {
+  setPosts(prev => prev.filter(p => p.id !== post.id));
+  const { error } = await supabase.from('posts').delete().eq('id', post.id);
+  if (error) { setPosts(prev => [post, ...prev]); window.alert('تعذّر حذف المنشور، حاول مرة أخرى'); return; }
+  const paths = [post.media?.url, ...(post.extraMedia ?? []).map(x => x.url)].map(u => (u ? mediaPath(u) : null)).filter((x): x is string => !!x);
+  if (paths.length) void kanRemove(POST_MEDIA_BUCKET, paths);
+}
+
+function MenuRow({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-base active:bg-white/10 ${danger ? 'text-red-400' : 'text-white'}`}>
+      {icon}<span>{label}</span>
+    </button>
+  );
+}
+
+function ReportSheet({ post, me, onClose }: { post: Post; me: string; onClose: () => void }) {
+  useBackLayer(true, onClose);
+  const [reason, setReason] = useState('');
+  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'fail'>('idle');
+  const send = async () => {
+    const msg = reason.trim();
+    if (!msg || state === 'busy') return;
+    setState('busy');
+    const { error } = await supabase.from('reports').insert({ post_id: post.id, reporter_id: me, reason: msg.slice(0, 500) });
+    if (error && error.code !== '23505') { setState('fail'); return; }
+    setState('done');
+    window.setTimeout(onClose, 1200);
+  };
+  return createPortal(
+    <div dir={DIR} {...swallowProps} className="fixed inset-0 z-[160] bg-black/60 flex items-end justify-center" onClick={e => { e.stopPropagation(); onClose(); }}>
+      <div className="w-full max-w-md bg-gray-900 rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={swallow}>
+        {state === 'done' ? (
+          <div className="py-8 flex flex-col items-center gap-2 text-white"><Check size={30} className="text-emerald-300" /><span className="font-bold">تم الإبلاغ</span></div>
+        ) : (
+          <>
+            <h3 className="font-bold text-white mb-3">إبلاغ عن المنشور</h3>
+            <textarea value={reason} onChange={e => setReason(e.target.value.slice(0, 500))} rows={4} autoFocus placeholder="اكتب سبب البلاغ"
+              className="w-full px-3 py-2.5 bg-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none" />
+            {state === 'fail' && <p className="text-red-400 text-sm mt-2">تعذّر إرسال البلاغ، حاول مرة أخرى</p>}
+            <div className="flex gap-2 mt-3">
+              <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-200 text-sm">إلغاء</button>
+              <button onClick={() => void send()} disabled={!reason.trim() || state === 'busy'} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-medium disabled:opacity-50">إرسال البلاغ</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function EditPostSheet({ post, setPosts, onClose }: { post: Post; setPosts: React.Dispatch<React.SetStateAction<Post[]>>; onClose: () => void }) {
+  useBackLayer(true, onClose);
+  type EditItem = { type: 'image' | 'video' | 'file'; url: string; name?: string; size?: number };
+  const original: EditItem[] = [...(post.media ? [post.media] : []), ...(post.extraMedia ?? [])];
+  const hasTitle = post.title !== undefined;
+  const locked = !!(post.isReel || post.isVideo); // a reel or a video post keeps its video
+  const [title, setTitle] = useState(post.title ?? '');
+  const [text, setText] = useState(post.text);
+  const [items, setItems] = useState<EditItem[]>(original);
+  const [music, setMusic] = useState<{ url: string; name: string } | null>(post.music ?? null);
+  const [newMusic, setNewMusic] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const musicRef = useRef<HTMLInputElement>(null);
+
+  const save = async () => {
+    if (busy) return;
+    if (!text.trim() && items.length === 0 && !music && !newMusic) { setErr('لا يمكن ترك المنشور فارغاً'); return; }
+    setBusy(true); setErr('');
+    let uploadedPath: string | null = null;
+    try {
+      const { data: row } = await supabase.from('posts').select('media_extra').eq('id', post.id).maybeSingle();
+      const rows = Array.isArray(row?.media_extra) ? (row!.media_extra as PubExtra[]) : [];
+      const oldRow = rows.find(x => (x.name ?? '').startsWith('kan-music|'));
+      let musicItem: PubExtra | null = null;
+      if (newMusic) {
+        const mp = kanPath(`${post.userId}/${crypto.randomUUID()}-music.${safeExt(newMusic.name)}`, newMusic.size);
+        const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, newMusic, newMusic.type || 'audio/mpeg', '31536000');
+        if (upErr) throw upErr;
+        uploadedPath = mp;
+        musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${newMusic.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: newMusic.size };
+      } else if (music) {
+        musicItem = oldRow ?? { type: 'file', url: rawUrl(music.url), name: `kan-music|${music.name}`, size: 0 };
+      }
+      const kept = items.map(it => ({ ...it, url: rawUrl(it.url) }));
+      const [main, ...rest] = kept;
+      const extraRows = rest.map(x => ({ type: x.type, url: x.url, name: (x.name ?? '').slice(0, 200), size: x.size ?? 0 }));
+      const newTitle = title.trim().slice(0, 120);
+      const patch = {
+        text: text.trim(),
+        ...(hasTitle ? { title: newTitle || null } : {}),
+        media_url: main ? main.url : null,
+        media_type: main ? main.type : null,
+        media_name: main ? (main.name ?? '').slice(0, 200) : null,
+        media_size: main ? (main.size ?? 0) : null,
+        media_extra: musicItem ? [...extraRows, musicItem] : extraRows,
+      };
+      const { error } = await supabase.from('posts').update(patch).eq('id', post.id);
+      if (error) throw error;
+      const keptSet = new Set(kept.map(k => k.url));
+      const gone = original.map(i => rawUrl(i.url)).filter(u => !keptSet.has(u)).map(u => pathOfUrl(u)).filter((x): x is string => !!x);
+      if (oldRow && oldRow !== musicItem && oldRow.size > 0) { const op = pathOfUrl(oldRow.url); if (op) gone.push(op); }
+      if (gone.length) void kanRemove(POST_MEDIA_BUCKET, gone);
+      const base: Post = {
+        ...post,
+        text: patch.text,
+        title: hasTitle ? (newTitle || undefined) : post.title,
+        media: main ? { type: main.type, url: main.url, name: main.name, size: main.size } : undefined,
+        extraMedia: rest.length ? rest.map(x => ({ type: x.type, url: x.url, name: x.name, size: x.size })) : undefined,
+        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10) } : undefined,
+      };
+      const [shown] = await signPostsMedia([base]);
+      setPosts(prev => prev.map(p => (p.id === post.id ? shown : p)));
+      onClose();
+    } catch (e) {
+      console.error(e);
+      if (uploadedPath) void kanRemove(POST_MEDIA_BUCKET, [uploadedPath]);
+      setErr('تعذّر حفظ التعديل، حاول مرة أخرى');
+      setBusy(false);
+    }
+  };
+
+  return createPortal(
+    <div dir={DIR} {...swallowProps} className="fixed inset-0 z-[160] bg-black/60 flex items-end justify-center" onClick={e => { e.stopPropagation(); onClose(); }}>
+      <div className="w-full max-w-md max-h-[88vh] overflow-y-auto bg-gray-900 rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={swallow}>
+        <h3 className="font-bold text-white mb-3">تعديل المنشور</h3>
+        {hasTitle && <input value={title} onChange={e => setTitle(e.target.value.slice(0, 120))} placeholder="عنوان الفيديو" className="w-full px-3 py-2.5 mb-2 bg-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />}
+        <textarea value={text} onChange={e => setText(e.target.value.slice(0, 2000))} rows={4} placeholder="النص" dir="auto"
+          className="w-full px-3 py-2.5 bg-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none" />
+        {items.length > 0 && (
+          <div className="mt-3">
+            <div className="text-xs text-gray-400 mb-1.5">الملفات ({items.length}) · احذف ما تريد منها</div>
+            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+              {items.map((it, i) => (
+                <div key={`${it.url}-${i}`} className="relative shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-gray-800 flex items-center justify-center">
+                  {it.type === 'image' ? <img src={it.url} alt="" className="w-full h-full object-cover" /> : it.type === 'video' ? <Play size={22} className="text-white" fill="white" /> : <FileText size={24} className="text-cyan-300" />}
+                  {!(locked && i === 0) && (
+                    <button onClick={() => setItems(prev => prev.filter((_, k) => k !== i))} className="absolute top-1 left-1 p-1 rounded-full bg-black/70 text-white" aria-label="حذف هذا الملف"><X size={12} /></button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="mt-3 flex items-center gap-2 p-2.5 rounded-xl bg-gray-800/60">
+          <Music size={16} className="text-fuchsia-300 shrink-0" />
+          <span className="flex-1 min-w-0 truncate text-sm text-gray-200" dir="auto">{newMusic ? newMusic.name : music ? music.name : 'بدون موسيقى'}</span>
+          <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => {
+            const f = e.target.files?.[0]; e.target.value = '';
+            if (!f) return;
+            if (!f.type.startsWith('audio/') && !/\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(f.name)) { setErr('اختر ملفاً صوتياً'); return; }
+            setErr(''); setNewMusic(f); setMusic(null);
+          }} />
+          <button onClick={() => musicRef.current?.click()} className="px-3 py-1.5 rounded-full bg-gray-900 text-xs text-fuchsia-300">{newMusic || music ? 'تغيير' : 'من الجهاز'}</button>
+          {(newMusic || music) && <button onClick={() => { setNewMusic(null); setMusic(null); }} className="p-1 text-gray-400 hover:text-red-400" aria-label="حذف الموسيقى"><X size={14} /></button>}
+        </div>
+        {err && <p className="text-red-400 text-sm mt-2">{err}</p>}
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-200 text-sm">إلغاء</button>
+          <button onClick={() => void save()} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-medium disabled:opacity-60">{busy ? 'جارٍ الحفظ...' : 'حفظ'}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function PostMenu({ post, author, currentUser, setPosts, saved, onToggleSave, dark = false }: {
+  post: Post; author: User; currentUser: User;
+  setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
+  saved: boolean; onToggleSave: () => void; dark?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [sheet, setSheet] = useState<'edit' | 'report' | null>(null);
+  const mine = post.userId === currentUser.id;
+  const hasAudio = !!post.music || post.media?.type === 'video';
+  const pick = (fn: () => void) => () => { setOpen(false); fn(); };
+  return (
+    <>
+      <button onClick={e => { e.stopPropagation(); setOpen(true); }} onPointerDown={swallow}
+        className={dark ? 'p-1.5 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90' : 'p-2 text-gray-500 hover:text-white transition-colors'} aria-label="المزيد">
+        <MoreHorizontal size={dark ? 24 : 20} />
+      </button>
+      {open && createPortal(
+        <div dir={DIR} {...swallowProps} className="fixed inset-0 z-[150] bg-black/50 flex items-end justify-center" onClick={e => { e.stopPropagation(); setOpen(false); }}>
+          <div className="w-full max-w-md bg-gray-900 rounded-t-2xl p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]" onClick={swallow}>
+            {mine ? (
+              <>
+                <MenuRow icon={<Pencil size={20} />} label="تعديل" onClick={pick(() => setSheet('edit'))} />
+                <MenuRow icon={<Trash2 size={20} />} label="حذف" danger onClick={pick(() => { if (window.confirm('حذف المنشور كله؟ لحذف ملف واحد منه اختر تعديل.')) void deleteMyPost(post, setPosts); })} />
+              </>
+            ) : (
+              <>
+                {hasAudio && <MenuRow icon={<Music size={20} />} label="استخدام كمقطع صوتي" onClick={pick(() => startReelWithAudio(post, author.displayName))} />}
+                <MenuRow icon={<BookmarkIcon size={20} className={saved ? 'fill-yellow-400 text-yellow-400' : ''} />} label={saved ? 'إلغاء الحفظ' : 'حفظ'} onClick={pick(onToggleSave)} />
+                <MenuRow icon={<Flag size={20} />} label="إبلاغ" danger onClick={pick(() => setSheet('report'))} />
+              </>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
+      {sheet === 'edit' && <EditPostSheet post={post} setPosts={setPosts} onClose={() => setSheet(null)} />}
+      {sheet === 'report' && <ReportSheet post={post} me={currentUser.id} onClose={() => setSheet(null)} />}
+    </>
   );
 }
 
@@ -5878,18 +6060,6 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
   };
 
   const audioName = post.music?.name ?? `${t('الصوت الأصلي')} · ${author.displayName}`;
-  const takeAudio = () => {
-    const src = post.music?.url ?? post.media?.url;
-    if (!src) return;
-    const p = pathOfUrl(src);
-    pendingAudio = { url: p && p.startsWith('b2/') ? kanPublicUrl(POST_MEDIA_BUCKET, p) : src, name: audioName.slice(0, 80) };
-    createFromAudio();
-  };
-  const report = async () => {
-    if (!window.confirm('الإبلاغ عن هذا المحتوى؟ يفحصه الذكاء الاصطناعي، وعدد البلاغات وحده لا يحظر أي حساب.')) return;
-    const { error } = await supabase.from('reports').insert({ post_id: post.id, reporter_id: currentUser.id });
-    window.alert(error && error.code !== '23505' ? 'تعذّر إرسال البلاغ' : 'وصل بلاغك، سيُفحص المحتوى');
-  };
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
   return (
@@ -5934,59 +6104,45 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       )}
 
       {/* Side actions */}
-      <div className="absolute bottom-[5.5rem] end-3 flex flex-col items-center gap-4 z-20" onClick={stop} onPointerDown={stop}>
+      <div className="absolute end-3 bottom-[calc(env(safe-area-inset-bottom)+3.75rem)] flex flex-col items-center gap-3.5 z-20" onClick={stop} onPointerDown={stop}>
         <div className="flex flex-col items-center">
-          <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}>
-            <Heart size={23} className={isLiked ? 'fill-red-400' : ''} />
+          <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90 ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}>
+            <Heart size={24} className={isLiked ? 'fill-red-400' : ''} />
           </button>
           {post.likes.length > 0 && (
             <button onClick={onShowLikes} className="text-[11px] text-white font-semibold drop-shadow">{post.likes.length}</button>
           )}
         </div>
         <div className="flex flex-col items-center">
-          <button onClick={onOpenComments} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white" aria-label={t('التعليقات')}>
-            <MessageCircle size={23} />
+          <button onClick={onOpenComments} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white active:scale-90" aria-label={t('التعليقات')}>
+            <MessageCircle size={24} />
           </button>
-          <span className="text-[11px] text-white font-semibold drop-shadow">{commentCount > 0 ? commentCount : ''}</span>
+          {commentCount > 0 && <span className="text-[11px] text-white font-semibold drop-shadow">{commentCount}</span>}
         </div>
-        <div className="flex flex-col items-center">
-          <button onClick={() => void toggleSave()} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90 ${isSaved ? 'text-yellow-400' : 'text-white'}`} aria-label={t('حفظ')}>
-            <BookmarkIcon size={22} className={isSaved ? 'fill-yellow-400' : ''} />
-          </button>
-          <span className="text-[11px] text-white font-semibold drop-shadow">{isSaved ? t('محفوظ') : t('حفظ')}</span>
-        </div>
-        <div className="flex flex-col items-center">
-          <button onClick={() => setShareOpen(true)} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white active:scale-90" aria-label={t('مشاركة')}>
-            <Share2 size={22} />
-          </button>
-          <span className="text-[11px] text-white font-semibold drop-shadow">{t('مشاركة')}</span>
-        </div>
-        {post.userId !== currentUser.id && (
-          <button onClick={() => void report()} className="p-1.5 text-white/80 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90" aria-label="إبلاغ"><Flag size={20} /></button>
-        )}
+        <button onClick={() => setShareOpen(true)} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white active:scale-90" aria-label={t('مشاركة')}>
+          <Share2 size={23} />
+        </button>
+        <PostMenu post={post} author={author} currentUser={currentUser} setPosts={setPosts} saved={isSaved} onToggleSave={() => void toggleSave()} dark />
       </div>
 
       {/* Author + caption */}
-      <div className="absolute bottom-[5.5rem] start-4 end-20 text-start z-20" onClick={stop} onPointerDown={stop}>
-        <div className="flex items-center gap-2 mb-2 flex-wrap">
+      <div className="absolute start-4 end-16 bottom-[calc(env(safe-area-inset-bottom)+3.75rem)] text-start z-20" onClick={stop} onPointerDown={stop}>
+        <div className="flex items-center gap-2 mb-1.5">
           <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2 min-w-0">
-            <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="md" />
-            <span className="text-white font-bold text-base truncate max-w-[12rem]">{author.displayName}</span>
-            <span className="text-white/70 text-sm truncate max-w-[8rem]">@{author.username}</span>
+            <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="sm" />
+            <span className="text-white font-bold text-sm truncate max-w-[10rem]">{author.displayName}</span>
           </button>
           {author.id !== currentUser.id && (
             <button
               onClick={() => toggleFollow(author.id)}
-              className={`shrink-0 px-5 py-2 rounded-full text-sm font-bold active:scale-95 transition-all ${isFollowing ? 'bg-white/15 text-white border border-white/25 backdrop-blur' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-md shadow-violet-500/30'}`}
+              className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition-all ${isFollowing ? 'bg-white/15 text-white border border-white/25' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}
             >
               {isFollowing ? t('متابَع') : t('متابعة')}
             </button>
           )}
         </div>
-        {post.text && <p className="text-white text-base leading-relaxed line-clamp-3 whitespace-pre-wrap" dir="auto">{post.text}</p>}
-        <button onClick={takeAudio} className="mt-2 max-w-full inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 text-white text-xs font-semibold active:scale-95">
-          <Music size={13} className="shrink-0" /><span className="truncate" dir="auto">{audioName}</span><span className="shrink-0 text-cyan-300">· استخدم الصوت</span>
-        </button>
+        {post.text && <p className="text-white text-sm leading-snug line-clamp-2 whitespace-pre-wrap" dir="auto">{post.text}</p>}
+        <div className="mt-1.5 flex items-center gap-1.5 text-white/80 text-xs max-w-full"><Music size={12} className="shrink-0" /><span className="truncate" dir="auto">{audioName}</span></div>
       </div>
 
       {/* Bottom bar: thin line while playing, full seek bar while paused */}
@@ -6603,10 +6759,10 @@ function CreatePost({ currentUser, setPosts }: {
   const [remoteMusic, setRemoteMusic] = useState<{ url: string; name: string } | null>(() => pendingAudio);
   const [editOpen, setEditOpen] = useState(!!pendingAudio);
   useEffect(() => { pendingAudio = null; }, []);
-  useEffect(() => { if (music) setRemoteMusic(null); }, [music]);
   const [error, setError] = useState('');
   const [extra, setExtra] = useState<File[]>([]);
   const [music, setMusic] = useState<File | null>(null);
+  useEffect(() => { if (music) setRemoteMusic(null); }, [music]);
   const musicRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
