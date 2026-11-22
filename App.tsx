@@ -3,7 +3,7 @@ import type React from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Home, Search, PlusCircle, User, Settings, LogOut, Heart,
+  Home, Search, User, Settings, LogOut, Heart,
   MessageCircle, Send, Image as ImageIcon, Video, Trash2,
   Reply, ChevronRight, ChevronLeft, Users,
   Check, X, Paperclip,
@@ -113,8 +113,6 @@ interface Conversation {
 }
 
 // ============ Helpers ============
-const genId = () => Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
-
 const CHAT_GRADIENTS = [
   'from-gray-900 to-gray-950',
   'from-violet-950 to-gray-950',
@@ -145,32 +143,6 @@ const formatDuration = (seconds: number) => {
 };
 
 // ============ Storage ============
-const STORAGE_KEYS = {
-  users: 'kan_users_v2',
-  posts: 'kan_posts_v2',
-  currentUser: 'kan_current_user_v2',
-  conversations: 'kan_conversations_v2',
-};
-
-function loadData<T>(key: string, fallback: T): T {
-  try {
-    const d = localStorage.getItem(key);
-    return d ? JSON.parse(d) : fallback;
-  } catch { return fallback; }
-}
-
-// Returns false when the data could not be persisted (e.g. localStorage quota
-// exceeded by large base64 images/videos) so the UI can warn the user.
-function saveData(key: string, data: unknown): boolean {
-  try {
-    localStorage.setItem(key, JSON.stringify(data));
-    return true;
-  } catch (e) {
-    console.warn(`Could not save "${key}" to localStorage`, e);
-    return false;
-  }
-}
-
 // ============ Avatar Component ============
 // ============ Story ring on pictures (everywhere), configurable in Settings ============
 type RingStyle = 'kan' | 'insta' | 'green' | 'off';
@@ -2412,7 +2384,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
               <button
                 onPointerDown={e => e.preventDefault()}
                 onMouseDown={e => e.preventDefault()}
-                onClick={() => { if (emojiOpen) { setEmojiOpen(false); inputRef.current?.focus(); } else { setToolsOpen(false); inputRef.current?.blur(); setStickerStart(false); setEmojiOpen(true); } }}
+                onClick={() => { if (emojiOpen) { setEmojiOpen(false); inputRef.current?.focus(); } else { setToolsOpen(false); inputRef.current?.blur(); setEmojiOpen(true); } }}
                 className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors active:scale-90 ${emojiOpen ? 'bg-yellow-400/20 text-yellow-300' : 'bg-gray-800 text-gray-300 hover:text-white'}`}
                 aria-label="إيموجي"
               ><Smile size={20} /></button>
@@ -3510,7 +3482,7 @@ function CoinBurst({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
 }
 
 // Big photos are scaled down (max 1920px) before upload: same look on a phone, a fraction of the time to publish.
-async function shrinkImage(file: File): Promise<File> {
+async function shrinkPhoto(file: File): Promise<File> {
   if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 600 * 1024) return file;
   try {
     const bmp = await createImageBitmap(file);
@@ -3742,15 +3714,8 @@ export default function App() {
   }, [currentUserId]);
 
   // Keys that failed to persist (quota exceeded, storage disabled, ...)
-  const [failedKeys, setFailedKeys] = useState<string[]>([]);
+  const [failedKeys] = useState<string[]>([]);
   const storageError = failedKeys.length > 0;
-
-  const persist = (key: string, data: unknown) => {
-    const ok = saveData(key, data);
-    setFailedKeys(prev =>
-      ok ? prev.filter(k => k !== key) : prev.includes(key) ? prev : [...prev, key]
-    );
-  };
 
   const [authReady, setAuthReady] = useState(false);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
@@ -6136,7 +6101,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       let mediaUrl: string | null = null;
       let coverUrl: string | null = null;
       // Photos are shrunk first and everything uploads 3 at a time, so publishing is much faster.
-      const files: File[] = await Promise.all([...(media ? [media.file] : []), ...extra].map(shrinkImage));
+      const files: File[] = await Promise.all([...(media ? [media.file] : []), ...extra].map(shrinkPhoto));
       const pcts = files.map(() => 0);
       const results: string[] = new Array(files.length);
       let nextIdx = 0;
