@@ -1106,7 +1106,34 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
 // in parallel 32 MB parts for big files. Their storage path starts with "b2/". Smaller files stay on Supabase Storage.
 const B2_MIN_MB = 20;
 const B2_PART_MB = 32;
-const B2_PARALLEL = 4;
+const B2_PARALLEL = 8;
+
+// Background publishing: uploads keep running while you move around the app; a small pill shows the progress.
+const pubJobs = new Map<string, number>();
+let pubEl: HTMLDivElement | null = null;
+let pubTimer: number | undefined;
+function pubRender(msg?: string) {
+  if (typeof document === 'undefined') return;
+  if (!pubEl) {
+    pubEl = document.createElement('div');
+    pubEl.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 10px);z-index:400;padding:7px 16px;border-radius:999px;color:#fff;font-size:13px;font-weight:600;pointer-events:none;background:linear-gradient(90deg,#7c3aed,#06b6d4);box-shadow:0 6px 20px rgba(124,58,237,.35)';
+    document.body.appendChild(pubEl);
+  }
+  if (msg) { pubEl.textContent = msg; pubEl.style.display = 'block'; return; }
+  if (pubJobs.size === 0) { pubEl.style.display = 'none'; return; }
+  const vals = [...pubJobs.values()];
+  const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  pubEl.textContent = `${t('جارٍ النشر...')} ${avg}%${vals.length > 1 ? ` (${vals.length})` : ''}`;
+  pubEl.style.display = 'block';
+}
+const trackJob = (id: string, pct: number) => { window.clearTimeout(pubTimer); pubJobs.set(id, pct); pubRender(); };
+const endJob = (id: string, ok: boolean) => {
+  pubJobs.delete(id);
+  if (ok) { pubRender(); return; }
+  pubRender(t('تعذّر النشر، حاول مرة أخرى'));
+  window.clearTimeout(pubTimer);
+  pubTimer = window.setTimeout(() => pubRender(), 3500);
+};
 
 const kanPath = (path: string, size: number) => (size > B2_MIN_MB * 1024 * 1024 ? `b2/${path}` : path);
 const isB2 = (p: string) => p.startsWith('b2/');
@@ -1428,7 +1455,7 @@ function EditTextModal({ title, initial, initialTitle, maxLength, allowEmpty, on
   };
   return createPortal(
     <div dir={DIR} className="fixed inset-0 z-[150] flex items-center justify-center p-4" onClick={e => { e.stopPropagation(); onClose(); }}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60" />
       <div className="relative w-full max-w-md bg-gray-900 border border-white/10 rounded-3xl p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold kan-gradient-text">{title}</h3>
@@ -1909,10 +1936,10 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
 
   return createPortal(
     <div dir={DIR} className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center" onClick={e => { e.stopPropagation(); onClose(); }}>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/60" />
       <motion.div
-        initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', damping: 26, stiffness: 300 }}
-        className="relative w-full sm:max-w-md max-h-[85dvh] flex flex-col bg-gray-900 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl shadow-violet-900/30 overflow-hidden"
+        initial={{ y: '100%' }} animate={{ y: 0 }} transition={{ type: 'tween', duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+        style={{ willChange: 'transform' }} className="relative w-full sm:max-w-md max-h-[85dvh] flex flex-col bg-gray-900 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl shadow-violet-900/30 overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="h-1 w-10 rounded-full bg-white/20 mx-auto mt-2.5 sm:hidden" />
@@ -2113,7 +2140,7 @@ function SheetShell({ title, onClose, children }: { title: string; onClose: () =
   useBackLayer(true, onClose);
   return createPortal(
     <div dir={DIR} className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center" onClick={onClose}>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/60" />
       <motion.div
         initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', damping: 26, stiffness: 300 }}
         className="relative w-full sm:max-w-md max-h-[88dvh] flex flex-col bg-gray-900 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl shadow-violet-900/30 overflow-hidden"
@@ -5869,13 +5896,13 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       {boost && <div className="absolute top-[max(4rem,calc(env(safe-area-inset-top)+3.25rem))] inset-x-0 flex justify-center pointer-events-none z-30"><span className="px-3 py-1 rounded-full bg-black/60 backdrop-blur text-white text-sm font-bold">2x</span></div>}
       {paused && !failed && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none">
-          <span className="w-24 h-24 rounded-full bg-gradient-to-br from-violet-600/70 to-cyan-500/70 backdrop-blur-md ring-2 ring-white/30 shadow-2xl shadow-violet-500/30 flex items-center justify-center text-white">
-            <Pause size={40} fill="white" strokeWidth={0} />
+          <span className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-600/70 to-cyan-500/70 backdrop-blur-md ring-2 ring-white/30 shadow-2xl shadow-violet-500/30 flex items-center justify-center text-white">
+            <Pause size={26} fill="white" strokeWidth={0} />
           </span>
           <button onClick={e => { e.stopPropagation(); onToggleMute(); }} onPointerDown={stop}
-            className="mt-6 w-12 h-12 rounded-full bg-black/55 backdrop-blur ring-1 ring-white/20 text-white flex items-center justify-center pointer-events-auto active:scale-90"
+            className="mt-4 w-10 h-10 rounded-full bg-black/55 backdrop-blur ring-1 ring-white/20 text-white flex items-center justify-center pointer-events-auto active:scale-90"
             aria-label={muted ? t('تشغيل الصوت') : t('كتم الصوت')}>
-            {muted ? <VolumeX size={22} /> : <Volume2 size={22} />}
+            {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
           </button>
         </div>
       )}
@@ -5883,30 +5910,30 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       {/* Side actions */}
       <div className="absolute bottom-[5.5rem] end-3 flex flex-col items-center gap-5 z-20" onClick={stop} onPointerDown={stop}>
         <div className="flex flex-col items-center">
-          <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-2.5 rounded-full bg-black/40 ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}>
-            <Heart size={30} className={isLiked ? 'fill-red-400' : ''} />
+          <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-2 rounded-full bg-black/40 ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}>
+            <Heart size={24} className={isLiked ? 'fill-red-400' : ''} />
           </button>
           {post.likes.length > 0 && (
-            <button onClick={onShowLikes} className="text-sm text-white mt-1 font-medium">{post.likes.length}</button>
+            <button onClick={onShowLikes} className="text-xs text-white mt-0.5 font-medium">{post.likes.length}</button>
           )}
         </div>
         <div className="flex flex-col items-center">
-          <button onClick={onOpenComments} className="p-2.5 rounded-full bg-black/40 text-white" aria-label={t('التعليقات')}>
-            <MessageCircle size={30} />
+          <button onClick={onOpenComments} className="p-2 rounded-full bg-black/40 text-white" aria-label={t('التعليقات')}>
+            <MessageCircle size={24} />
           </button>
-          <span className="text-sm text-white mt-1 font-medium">{commentCount > 0 ? commentCount : ''}</span>
+          <span className="text-xs text-white mt-0.5 font-medium">{commentCount > 0 ? commentCount : ''}</span>
         </div>
         <div className="flex flex-col items-center">
-          <button onClick={() => void toggleSave()} className={`p-2.5 rounded-full bg-black/40 active:scale-90 ${isSaved ? 'text-yellow-400' : 'text-white'}`} aria-label={t('حفظ')}>
-            <BookmarkIcon size={29} className={isSaved ? 'fill-yellow-400' : ''} />
+          <button onClick={() => void toggleSave()} className={`p-2 rounded-full bg-black/40 active:scale-90 ${isSaved ? 'text-yellow-400' : 'text-white'}`} aria-label={t('حفظ')}>
+            <BookmarkIcon size={23} className={isSaved ? 'fill-yellow-400' : ''} />
           </button>
-          <span className="text-sm text-white mt-1 font-medium">{isSaved ? t('محفوظ') : t('حفظ')}</span>
+          <span className="text-xs text-white mt-0.5 font-medium">{isSaved ? t('محفوظ') : t('حفظ')}</span>
         </div>
         <div className="flex flex-col items-center">
-          <button onClick={() => setShareOpen(true)} className="p-2.5 rounded-full bg-black/40 text-white active:scale-90" aria-label={t('مشاركة')}>
-            <Share2 size={28} />
+          <button onClick={() => setShareOpen(true)} className="p-2 rounded-full bg-black/40 text-white active:scale-90" aria-label={t('مشاركة')}>
+            <Share2 size={22} />
           </button>
-          <span className="text-sm text-white mt-1 font-medium">{t('مشاركة')}</span>
+          <span className="text-xs text-white mt-0.5 font-medium">{t('مشاركة')}</span>
         </div>
       </div>
 
@@ -5931,7 +5958,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       </div>
 
       {/* Bottom bar: thin line while playing, full seek bar while paused */}
-      <div dir="ltr" className="absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))]" onClick={stop} onPointerDown={stop}>
+      <div dir="ltr" className={`absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))] ${paused ? '' : 'hidden'}`} onClick={stop} onPointerDown={stop}>
         {paused && <div className="flex justify-between text-[11px] text-white/80 font-medium mb-0.5 px-0.5"><span>{fmt(prog * dur)}</span><span>{fmt(dur)}</span></div>}
         <div ref={barRef} className={`relative flex items-center touch-none h-6 cursor-pointer`}
           onPointerDown={e => { (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId); setScrub(true); seekTo(e.clientX); }}
@@ -6423,8 +6450,6 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [kind, setKind] = useState<'post' | 'reel' | 'video'>('post');
   const [error, setError] = useState('');
-  const [posting, setPosting] = useState(false);
-  const [postPct, setPostPct] = useState(0);
   const [extra, setExtra] = useState<File[]>([]);
   const [music, setMusic] = useState<File | null>(null);
   const musicRef = useRef<HTMLInputElement>(null);
@@ -6491,13 +6516,15 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
   };
 
   const handlePost = async () => {
-    if (posting) return;
     if (videoOnly && media?.type !== 'video') { setError(kind === 'reel' ? 'اختر فيديو لنشره كريل' : 'اختر الفيديو أولاً'); return; }
     if (kind === 'video' && !title.trim()) { setError('اكتب عنواناً للفيديو'); return; }
     if (!text.trim() && !media && !music) { setError('اكتب شيئاً أو أضف صورة أو فيديو أو ملف'); return; }
-    setPosting(true);
-    setPostPct(0);
+    const jobId = crypto.randomUUID();
+    trackJob(jobId, 0);
     setError('');
+    // Publishing continues in the background: the form is free right away and you can post something else.
+    setText(''); setTitle(''); setMedia(null); setExtra([]); setMusic(null); clearCover();
+    setActiveTab('feed');
     const uploaded: string[] = [];
     try {
       let mediaUrl: string | null = null;
@@ -6514,14 +6541,14 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
           const p = kanPath(`${currentUser.id}/${crypto.randomUUID()}.${MEDIA_EXT[f.type] ?? safeExt(f.name)}`, f.size);
           const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, p, f, f.type || 'application/octet-stream', '31536000', pct => {
             pcts[i] = pct;
-            setPostPct(Math.round(pcts.reduce((x, y) => x + y, 0) / files.length));
+            trackJob(jobId, Math.round(pcts.reduce((x, y) => x + y, 0) / files.length));
           });
           if (upErr) throw upErr;
           uploaded.push(p);
           results[i] = kanPublicUrl(POST_MEDIA_BUCKET, p);
         }
       };
-      await Promise.all([worker(), worker(), worker()]);
+      await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
       const offset = media ? 1 : 0;
       if (media) mediaUrl = results[0];
       const extraMedia: { type: 'image' | 'video' | 'file'; url: string; name: string; size: number }[] =
@@ -6574,20 +6601,11 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       const [shownPost] = await signPostsMedia([newPost]);
       setPosts(prev => [shownPost, ...prev.filter(p => p.id !== id)]);
       if (media && media.url) URL.revokeObjectURL(media.url);
-      clearCover();
-      setText('');
-      setTitle('');
-      setMedia(null);
-      setExtra([]);
-      setMusic(null);
-      // Everything you publish shows up on the home feed first.
-      setActiveTab('feed');
+      endJob(jobId, true);
     } catch (e) {
       console.error(e);
       if (uploaded.length > 0) void kanRemove(POST_MEDIA_BUCKET, uploaded);
-      setError('تعذّر النشر، حاول مرة أخرى');
-    } finally {
-      setPosting(false);
+      endJob(jobId, false);
     }
   };
 
@@ -6711,8 +6729,8 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
               {emojiOpen && <EmojiPicker onPick={e => setText(t => t + e)} onClose={() => setEmojiOpen(false)} />}
             </div>
           </div>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handlePost} disabled={posting} className="px-6 py-2 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-medium disabled:opacity-60">
-            {posting ? (media ? `جارٍ النشر... ${postPct}%` : 'جارٍ النشر...') : kind === 'reel' ? 'نشر الريل' : kind === 'video' ? 'نشر الفيديو' : 'نشر'}
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handlePost} className="px-6 py-2 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-medium disabled:opacity-60">
+            {kind === 'reel' ? 'نشر الريل' : kind === 'video' ? 'نشر الفيديو' : 'نشر'}
           </motion.button>
         </div>
       </div>

@@ -219,3 +219,10 @@ button, a { transition-property: color, background-color, border-color, opacity,
 
 /* English (LTR): right-aligned Arabic-first text flips to the left. */
 html[dir='ltr'] .text-right { text-align: left; }
+
+
+/* Smoothness on phones: blur filters are the main cause of janky sheets and scrolling, so they are off there. */
+@media (max-width: 767px) {
+  [class*='backdrop-blur'] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+}
+.fixed { backface-visibility: hidden; }
