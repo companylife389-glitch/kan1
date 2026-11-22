@@ -1129,9 +1129,9 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
 // ============ Uploads with a live percentage ============
 // Files above B2_MIN_MB go straight from the browser to Backblaze B2 (signed by the b2-sign edge function),
 // in parallel 32 MB parts for big files. Their storage path starts with "b2/". Smaller files stay on Supabase Storage.
-const B2_MIN_MB = 20;
-const B2_PART_MB = 32;
-const B2_PARALLEL = 8;
+const B2_MIN_MB = 8;
+const B2_PART_MB = 16;
+const B2_PARALLEL = 16;
 
 // Background publishing: uploads keep running while you move around; the progress shows inside the publish box.
 type PubExtra = { type: 'image' | 'video' | 'file'; url: string; name: string; size: number; start?: number };
@@ -1247,7 +1247,7 @@ async function uploadToB2(
   const report = (loaded: number) => onProgress?.(Math.min(99, Math.round((loaded / Math.max(1, file.size)) * 100)));
   let uploadId = '';
   try {
-    if (file.size <= 64 * 1024 * 1024) {
+    if (file.size <= 32 * 1024 * 1024) {
       const r = await b2Call<{ url: string }>({ action: 'put', bucket, path });
       await putBlob(r.url, file, { 'Content-Type': contentType, 'Cache-Control': cc }, report);
     } else {
@@ -5325,7 +5325,7 @@ function sortComments(list: Comment[], me: User, focusId?: string | null): Comme
   return [...list].sort((a, b) => score(b) - score(a) || b.timestamp - a.timestamp);
 }
 
-function MusicBar({ music }: { music: { url: string; name: string; start?: number } }) {
+function MusicBar({ music, auto = false }: { music: { url: string; name: string; start?: number }; auto?: boolean }) {
   const ref = useRef<HTMLAudioElement>(null);
   const start = music.start ?? 0;
   const win = music.start !== undefined ? 30 : Infinity;
@@ -5341,6 +5341,35 @@ function MusicBar({ music }: { music: { url: string; name: string; start?: numbe
       if (a.readyState >= 1) go(); else { a.addEventListener('loadedmetadata', go, { once: true }); a.load(); }
     } else a.pause();
   };
+  const [muted, setMuted] = useState(false);
+  const holder = useRef<HTMLDivElement>(null);
+  // Photo posts: the chosen 30-second part starts by itself when the post is on screen and stops when it leaves.
+  useEffect(() => {
+    if (!auto) return;
+    const a = ref.current;
+    const box = (holder.current?.closest('.post-card') as HTMLElement | null) ?? holder.current;
+    if (!a || !box || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([en]) => {
+      if (en.isIntersecting && en.intersectionRatio >= 0.5) {
+        if (playingAudio && playingAudio !== a) playingAudio.pause();
+        playingAudio = a;
+        const go = () => { if (a.currentTime < start || a.currentTime >= start + win) a.currentTime = start; void a.play().catch(() => undefined); };
+        if (a.readyState >= 1) go(); else { a.addEventListener('loadedmetadata', go, { once: true }); a.load(); }
+      } else { a.pause(); }
+    }, { threshold: [0, 0.5, 1] });
+    io.observe(box);
+    return () => io.disconnect();
+  }, [auto, start, win]);
+  if (auto) {
+    return (
+      <div ref={holder} className="absolute top-2 left-2 z-10" onClick={e => e.stopPropagation()}>
+        <audio ref={ref} src={music.url} preload="none" muted={muted} onPlay={() => setOn(true)} onPause={() => setOn(false)} onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= start + win) a.currentTime = start; }} onEnded={e => { const a = e.currentTarget; a.currentTime = start; void a.play().catch(() => undefined); }} />
+        <button onClick={() => setMuted(m => !m)} aria-label={muted ? 'تشغيل الصوت' : 'كتم الصوت'} className="w-7 h-7 rounded-full bg-black/40 text-white flex items-center justify-center opacity-70 active:scale-90">
+          {muted || !on ? <VolumeX size={14} /> : <Volume2 size={14} />}
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="px-4 pb-3" onClick={e => e.stopPropagation()}>
       <audio ref={ref} src={music.url} preload="none" onPlay={() => setOn(true)} onPause={() => setOn(false)} onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= start + win) a.currentTime = start; }} onEnded={e => { const a = e.currentTarget; a.currentTime = start; void a.play().catch(() => undefined); }} />
@@ -5550,7 +5579,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
             {post.title && <h3 className="text-white font-bold leading-snug">{post.title}</h3>}
           </div>
         )}
-        {post.music && <MusicBar music={post.music} />}
+        {post.music && <MusicBar music={post.music} auto={post.media?.type === 'image'} />}
         {post.text && (
           <div className="px-4 pb-3">
             <p className="text-white text-[16px] leading-7 whitespace-pre-wrap">{post.text}</p>
@@ -5655,125 +5684,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         )}
       </div>
 
-      <AnimatePresence>
-        {showComments && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-gray-800/50 overflow-hidden">
-            <div className="p-4 space-y-3 max-h-80 overflow-y-auto">
-              {sortComments(post.comments, currentUser, focusCommentId).map(comment => {
-                const cAuthor = users.find(u => u.id === comment.userId);
-                if (!cAuthor) return null;
-                return (
-                  <div key={comment.id} id={`comment-${comment.id}`} className={`space-y-2 rounded-xl transition-shadow ${focusCommentId === comment.id ? 'ring-2 ring-cyan-400/70 p-1' : ''}`}>
-                    <div className="flex gap-2">
-                      <button onClick={() => onOpenProfile(cAuthor.id)} className="self-start">
-                        <Avatar userId={cAuthor.id} src={cAuthor.avatar} name={cAuthor.displayName} size="sm" />
-                      </button>
-                      <div className="flex-1 bg-gray-800/50 rounded-xl p-2.5">
-                        <div className="flex items-center gap-2 mb-1">
-                          <button onClick={() => onOpenProfile(cAuthor.id)} className="text-sm font-medium text-white hover:underline">{cAuthor.displayName}</button>
-                          <span className="text-xs text-gray-500">{formatTime(comment.timestamp)}</span>
-                        </div>
-                        <CommentText text={comment.text} cls="text-sm text-gray-300" />
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="flex items-center gap-1">
-                            <button onClick={() => toggleCommentLike(comment.id)} className={`text-xs ${comment.likes.includes(currentUser.id) ? 'text-red-400' : 'text-gray-500'}`}>
-                              <Heart size={12} className={comment.likes.includes(currentUser.id) ? 'fill-red-400' : ''} />
-                            </button>
-                            {comment.likes.length > 0 && (
-                              <button onClick={() => setListModal({ title: 'الإعجابات', ids: comment.likes })} className="text-xs text-gray-400 hover:text-white">
-                                {comment.likes.length}
-                              </button>
-                            )}
-                          </span>
-                          <button onClick={() => setReplyTo(replyTo === comment.id ? null : comment.id)} className="text-xs text-gray-500 hover:text-violet-400 flex items-center gap-1">
-                            <Reply size={12} /> رد
-                          </button>
-                          <button onClick={() => setShareComment({ id: comment.id, text: comment.text, authorName: cAuthor.displayName })} className="text-xs text-gray-500 hover:text-cyan-400 flex items-center gap-1" aria-label="مشاركة التعليق">
-                            <Share2 size={12} /> مشاركة
-                          </button>
-                          {comment.userId === currentUser.id && (
-                            <button onClick={() => setEditC({ id: comment.id, text: comment.text })} className="text-xs text-gray-500 hover:text-cyan-400 flex items-center gap-1">
-                              <Pencil size={12} /> تعديل
-                            </button>
-                          )}
-                          {comment.userId === currentUser.id && (
-                            <button onClick={() => deleteComment(comment.id)} className="text-xs text-gray-500 hover:text-red-400 flex items-center gap-1">
-                              <Trash2 size={12} /> حذف
-                            </button>
-                          )}
-                        </div>
-                        {comment.replies.length > 0 && (
-                          <div className="mt-2 space-y-2 pr-3 border-r border-gray-700">
-                            {comment.replies.map(reply => {
-                              const rAuthor = users.find(u => u.id === reply.userId);
-                              if (!rAuthor) return null;
-                              return (
-                                <div key={reply.id} id={`comment-${reply.id}`} className={`flex gap-2 rounded-lg ${focusCommentId === reply.id ? 'ring-2 ring-cyan-400/70 p-1' : ''}`}>
-                                  <button onClick={() => onOpenProfile(rAuthor.id)} className="self-start">
-                                    <Avatar userId={rAuthor.id} src={rAuthor.avatar} name={rAuthor.displayName} size="sm" />
-                                  </button>
-                                  <div>
-                                    <button onClick={() => onOpenProfile(rAuthor.id)} className="text-xs font-medium text-white hover:underline">{rAuthor.displayName}</button>
-                                    <span className="text-xs text-gray-500 mr-2">{formatTime(reply.timestamp)}</span>
-                                    {reply.userId === currentUser.id && (
-                                      <button onClick={() => setEditC({ id: reply.id, text: reply.text })} className="text-xs text-gray-500 hover:text-cyan-400 mr-2 align-middle" aria-label="تعديل الرد">
-                                        <Pencil size={11} className="inline" />
-                                      </button>
-                                    )}
-                                    {reply.userId === currentUser.id && (
-                                      <button onClick={() => deleteReply(comment.id, reply.id)} className="text-xs text-gray-500 hover:text-red-400 mr-2 align-middle" aria-label="حذف الرد">
-                                        <Trash2 size={11} className="inline" />
-                                      </button>
-                                    )}
-                                    <CommentText text={reply.text} cls="text-xs text-gray-300" />
-                                    <div className="flex items-center gap-3 mt-0.5">
-                                      <span className="flex items-center gap-1">
-                                        <button onClick={() => toggleCommentLike(reply.id)} className={`text-xs ${reply.likes.includes(currentUser.id) ? 'text-red-400' : 'text-gray-500'}`} aria-label="إعجاب">
-                                          <Heart size={12} className={reply.likes.includes(currentUser.id) ? 'fill-red-400' : ''} />
-                                        </button>
-                                        {reply.likes.length > 0 && (
-                                          <button onClick={() => setListModal({ title: 'الإعجابات', ids: reply.likes })} className="text-xs text-gray-400 hover:text-white">{reply.likes.length}</button>
-                                        )}
-                                      </span>
-                                      <button onClick={() => { setReplyTo(comment.id); setReplyText(`@${rAuthor.username} `); }} className="text-xs text-gray-500 hover:text-violet-400 flex items-center gap-1">
-                                        <Reply size={11} /> رد
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                        {replyTo === comment.id && (
-                          <div className="flex gap-2 mt-2">
-                            <input value={replyText} onChange={e => setReplyText(e.target.value)} placeholder={t('اكتب رداً...')} className="flex-1 px-3 py-1.5 bg-gray-700 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none" onKeyDown={e => e.key === 'Enter' && addReply(comment.id)} />
-                            <div className="relative">
-                              <button onClick={() => setCEmoji(cEmoji === comment.id ? null : comment.id)} className="p-1.5 bg-gray-700 rounded-lg text-yellow-300" aria-label="إيموجي"><Smile size={14} /></button>
-                            </div>
-                            <button onClick={() => addReply(comment.id)} className="p-1.5 bg-violet-600 rounded-lg hover:bg-violet-500">
-                              <Send size={14} />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="p-3 border-t border-gray-800/50 flex gap-2">
-              <input value={commentText} onChange={e => setCommentText(e.target.value)} placeholder={t('اكتب تعليقاً...')} className="flex-1 px-4 py-2 bg-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500" onKeyDown={e => e.key === 'Enter' && addComment()} />
-              <div className="relative">
-                <button onClick={() => setCEmoji(cEmoji === 'main' ? null : 'main')} className="px-3 py-2 bg-gray-800 rounded-xl text-yellow-300 h-full" aria-label="إيموجي"><Smile size={18} /></button>
-              </div>
-              <button onClick={() => addComment()} className="px-4 py-2 bg-violet-600 rounded-xl hover:bg-violet-500 transition-colors">
-                <Send size={16} />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {showComments && <ReelComments post={post} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} onClose={() => setShowComments(false)} />}
       {listModal && (
         <UserListModal title={listModal.title} userIds={listModal.ids} users={users} onOpenProfile={onOpenProfile} onClose={() => setListModal(null)} />
       )}
@@ -5836,7 +5747,7 @@ function ReportSheet({ post, me, onClose }: { post: Post; me: string; onClose: (
   };
   return createPortal(
     <div dir={DIR} {...swallowProps} className="fixed inset-0 z-[160] bg-black/60 flex items-end justify-center" onClick={e => { e.stopPropagation(); onClose(); }}>
-      <div className="w-full max-w-md bg-gray-900 rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={swallow}>
+      <div className="kan-theme-text w-full max-w-md bg-gray-900 rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={swallow}>
         {state === 'done' ? (
           <div className="py-8 flex flex-col items-center gap-2 text-white"><Check size={30} className="text-emerald-300" /><span className="font-bold">تم الإبلاغ</span></div>
         ) : (
@@ -5931,7 +5842,7 @@ function EditPostSheet({ post, setPosts, onClose }: { post: Post; setPosts: Reac
 
   return createPortal(
     <div dir={DIR} {...swallowProps} className="fixed inset-0 z-[160] bg-black/60 flex items-end justify-center" onClick={e => { e.stopPropagation(); onClose(); }}>
-      <div className="w-full max-w-md max-h-[88vh] overflow-y-auto bg-gray-900 rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={swallow}>
+      <div className="kan-theme-text w-full max-w-md max-h-[88vh] overflow-y-auto bg-gray-900 rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={swallow}>
         <h3 className="font-bold text-white mb-3">تعديل المنشور</h3>
         {hasTitle && <input value={title} onChange={e => setTitle(e.target.value.slice(0, 120))} placeholder="عنوان الفيديو" className="w-full px-3 py-2.5 mb-2 bg-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />}
         <textarea value={text} onChange={e => setText(e.target.value.slice(0, 2000))} rows={4} placeholder="النص" dir="auto"
@@ -5992,7 +5903,7 @@ function PostMenu({ post, author, currentUser, setPosts, saved, onToggleSave, da
       </button>
       {open && createPortal(
         <div dir={DIR} {...swallowProps} className="fixed inset-0 z-[150] bg-black/50 flex items-end justify-center" onClick={e => { e.stopPropagation(); setOpen(false); }}>
-          <div className="w-full max-w-md bg-gray-900 rounded-t-2xl p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]" onClick={swallow}>
+          <div className="kan-theme-text w-full max-w-md bg-gray-900 rounded-t-2xl p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]" onClick={swallow}>
             {mine ? (
               <>
                 <MenuRow icon={<Pencil size={20} />} label="تعديل" onClick={pick(() => setSheet('edit'))} />
@@ -6350,8 +6261,8 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
   }
 
   return createPortal(
-    <div dir={DIR} className="fixed inset-0 z-[100] bg-black/60 flex items-end justify-center" onClick={onClose}>
-      <div className="w-full max-w-md bg-gray-900 border-t border-white/10 rounded-t-2xl h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div dir={DIR} className="fixed inset-0 z-[135] bg-black/60 flex items-end justify-center" onClick={onClose}>
+      <div className="kan-theme-text w-full max-w-md bg-gray-900 border-t border-white/10 rounded-t-2xl h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <h3 className="font-bold text-white">التعليقات <span className="text-gray-500 text-sm font-normal">({rows.length})</span></h3>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-white" aria-label="إغلاق"><X size={20} /></button>
@@ -6414,96 +6325,6 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
   );
 }
 
-// A post shown full-screen, reels style: swipe up for the next post, double tap to love it, side buttons like reels.
-function PostSlide({ post, author, currentUser, setPosts, onOpenProfile, onOpenComments, onShare, onShowLikes, users, setUsers }: {
-  post: Post; author: User; currentUser: User; users: User[];
-  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
-  setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
-  onOpenProfile: (id: string) => void; onOpenComments: () => void; onShare: () => void; onShowLikes: () => void;
-}) {
-  void users;
-  const isLiked = post.likes.includes(currentUser.id);
-  const isSaved = post.bookmarks.includes(currentUser.id);
-  const commentCount = post.comments.reduce((n, c) => n + 1 + c.replies.length, 0);
-  const toggleFollow = makeToggleFollow(currentUser, setUsers);
-  const isFollowing = currentUser.following.includes(author.id);
-  const [coinId, setCoinId] = useState(0);
-  const lastTap = useRef(0);
-  const [cur, setCur] = useState(0);
-  const items = [...(post.media ? [post.media] : []), ...(post.extraMedia ?? [])].filter(m => m.type === 'image');
-  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
-  const toggleSave = async () => {
-    const me = currentUser.id;
-    const was = isSaved;
-    const apply = (on: boolean) => setPosts(prev => prev.map(p => (p.id === post.id ? { ...p, bookmarks: on ? [...p.bookmarks.filter(i => i !== me), me] : p.bookmarks.filter(i => i !== me) } : p)));
-    apply(!was);
-    const { error } = was
-      ? await supabase.from('bookmarks').delete().eq('post_id', post.id).eq('user_id', me)
-      : await supabase.from('bookmarks').insert({ post_id: post.id, user_id: me });
-    if (error) apply(was);
-  };
-  const tap = () => {
-    const now = Date.now();
-    if (now - lastTap.current < 320) {
-      lastTap.current = 0;
-      setCoinId(n => n + 1);
-      window.setTimeout(() => setCoinId(0), 1100);
-      if (!isLiked) togglePostLike(post, currentUser.id, setPosts);
-    } else lastTap.current = now;
-  };
-  return (
-    <div className="relative h-full w-full snap-start snap-always bg-black overflow-hidden select-none kan-always-white" onClick={tap}>
-      {items.length > 0 ? (
-        <div dir="ltr" className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
-          onScroll={e => { const el = e.currentTarget; if (el.clientWidth) setCur(Math.round(el.scrollLeft / el.clientWidth)); }}>
-          {items.map((m, i) => (
-            <div key={`${m.url}-${i}`} className="relative w-full h-full shrink-0 snap-center flex items-center justify-center">
-              <img src={m.url} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110" />
-              <img src={m.url} alt="" draggable={false} loading={i === 0 ? 'eager' : 'lazy'} className="relative max-w-full max-h-full object-contain" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center p-8 bg-gradient-to-br from-violet-700 via-fuchsia-600 to-cyan-500">
-          <p className="text-white text-2xl font-bold leading-10 text-center whitespace-pre-wrap break-words line-clamp-[12]" dir="auto">{post.text}</p>
-        </div>
-      )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/35 pointer-events-none" />
-      {coinId > 0 && <CoinBurst key={coinId} />}
-      {items.length > 1 && (
-        <div className="absolute top-[max(5.5rem,calc(env(safe-area-inset-top)+4.5rem))] inset-x-0 flex justify-center gap-1.5 pointer-events-none z-20">
-          {items.map((_, i) => <span key={i} className={`h-1.5 rounded-full transition-all ${i === cur ? 'w-5 bg-white' : 'w-1.5 bg-white/40'}`} />)}
-        </div>
-      )}
-      <div className="absolute end-3 bottom-[calc(env(safe-area-inset-bottom)+2rem)] flex flex-col items-center gap-3 z-20" onClick={stop} onPointerDown={stop}>
-        <div className="flex flex-col items-center">
-          <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90 ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}><Heart size={26} className={isLiked ? 'fill-red-400' : ''} /></button>
-          {post.likes.length > 0 && <button onClick={onShowLikes} className="text-[11px] text-white font-semibold drop-shadow">{post.likes.length}</button>}
-        </div>
-        <div className="flex flex-col items-center">
-          <button onClick={onOpenComments} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white active:scale-90" aria-label={t('التعليقات')}><MessageCircle size={26} /></button>
-          {commentCount > 0 && <span className="text-[11px] text-white font-semibold drop-shadow">{commentCount}</span>}
-        </div>
-        <button onClick={onShare} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white active:scale-90" aria-label={t('مشاركة')}><Share2 size={25} /></button>
-        <button onClick={() => void toggleSave()} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90 ${isSaved ? 'text-yellow-300' : 'text-white'}`} aria-label={t('حفظ')}><Bookmark size={25} className={isSaved ? 'fill-yellow-300' : ''} /></button>
-        <PostMenu post={post} author={author} currentUser={currentUser} setPosts={setPosts} saved={isSaved} onToggleSave={() => void toggleSave()} dark />
-      </div>
-      <div className="absolute start-4 end-16 bottom-[calc(env(safe-area-inset-bottom)+2rem)] text-start z-20" onClick={stop} onPointerDown={stop}>
-        <div className="flex items-center gap-2 mb-1.5">
-          <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2 min-w-0">
-            <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="sm" />
-            <span className="text-white font-bold text-sm truncate max-w-[10rem]">{author.displayName}</span>
-          </button>
-          {author.id !== currentUser.id && (
-            <button onClick={() => toggleFollow(author.id)} className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition-all ${isFollowing ? 'bg-white/15 text-white border border-white/25' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}>{isFollowing ? t('متابَع') : t('متابعة')}</button>
-          )}
-        </div>
-        {post.text && items.length > 0 && <p className="text-white text-sm leading-snug line-clamp-3 whitespace-pre-wrap" dir="auto">{post.text}</p>}
-      </div>
-    </div>
-  );
-}
-
 function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile, onCreate, onLoadPage, onBack, startId }: {
   startId: string | null;
   onBack: () => void;
@@ -6519,24 +6340,8 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   const [muted, setMuted] = useState(true);
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
-  const [mode, setMode] = useState<'reels' | 'posts'>('reels');
-  const [shareFor, setShareFor] = useState<string | null>(null);
   const reels = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
-  const photoPosts = posts.filter(p => !p.isReel && !p.isVideo && (p.media?.type === 'image' || (!p.media && !!p.text.trim()))).sort((a, b) => b.timestamp - a.timestamp);
   const commentPost = commentsFor ? posts.find(p => p.id === commentsFor) : undefined;
-  const sharePost = shareFor ? posts.find(p => p.id === shareFor) : undefined;
-  const postsBusy = useRef(false);
-  const [postsMore, setPostsMore] = useState(true);
-  const loadMorePosts = async () => {
-    if (postsBusy.current || !postsMore) return;
-    postsBusy.current = true;
-    try {
-      const all = posts.slice().sort((a, b) => a.timestamp - b.timestamp);
-      const page = await onLoadPage({ before: all[0]?.cursor, limit: 12 });
-      if (page.length < 12) setPostsMore(false);
-    } catch (e) { console.error(e); } finally { postsBusy.current = false; }
-  };
-
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
   const loadMore = async () => {
@@ -6566,11 +6371,11 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
     return () => { cancelAnimationFrame(r); window.clearTimeout(t); };
   }, [startId, reels.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (mode === 'reels' && reels.length === 0 && hasMore) {
+  if (reels.length === 0 && hasMore) {
     return <div className="py-20 text-center text-gray-500 text-sm">جارٍ التحميل...</div>;
   }
 
-  if (mode === 'reels' && reels.length === 0) {
+  if (reels.length === 0) {
     return (
       <div className="px-4 py-16 text-center">
         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl kan-fab flex items-center justify-center"><Film size={30} className="text-white" /></div>
@@ -6587,21 +6392,10 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
         className="h-full overflow-y-scroll overscroll-contain snap-y snap-mandatory no-scrollbar"
         onScroll={e => {
           const el = e.currentTarget;
-          if (el.scrollTop + el.clientHeight * 2.5 >= el.scrollHeight) void (mode === 'reels' ? loadMore() : loadMorePosts());
+          if (el.scrollTop + el.clientHeight * 2.5 >= el.scrollHeight) void loadMore();
         }}
       >
-        {mode === 'posts' && photoPosts.length === 0 && <div className="h-full flex items-center justify-center text-gray-400 text-sm">لا توجد منشورات بعد</div>}
-        {mode === 'posts' && photoPosts.map(post => {
-          const author = users.find(u => u.id === post.userId);
-          if (!author) return null;
-          return (
-            <div key={post.id} className="h-full">
-              <PostSlide post={post} author={author} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile}
-                onOpenComments={() => setCommentsFor(post.id)} onShare={() => setShareFor(post.id)} onShowLikes={() => setListModal({ title: 'الإعجابات', ids: post.likes })} users={users} setUsers={setUsers} />
-            </div>
-          );
-        })}
-        {mode === 'reels' && reels.map(post => {
+        {reels.map(post => {
           const author = users.find(u => u.id === post.userId);
           if (!author) return null;
           return (
@@ -6626,16 +6420,8 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
       <div className="absolute inset-x-0 top-0 z-20 flex items-center px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-8 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
         <button onClick={onBack} className="pointer-events-auto p-2 rounded-full bg-black/40 text-white active:scale-90 transition-transform" aria-label="رجوع"><ChevronRight size={22} /></button>
         <span className="mx-3 text-lg font-extrabold tracking-[0.25em] kan-gradient-text">KAN</span>
-        <div className="pointer-events-auto mx-auto flex gap-1 p-1 rounded-full bg-black/45 backdrop-blur">
-          {([['reels', 'ريلز'], ['posts', 'منشورات']] as const).map(([k, label]) => (
-            <button key={k} onClick={() => setMode(k)} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${mode === k ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-white/80'}`}>{label}</button>
-          ))}
-        </div>
-        <span className="w-10" />
+        <span className="text-xs text-white/80 font-medium">ريلز</span>
       </div>
-      {sharePost && users.find(u => u.id === sharePost.userId) && (
-        <ShareSheet post={sharePost} author={users.find(u => u.id === sharePost.userId)!} users={users} currentUser={currentUser} onClose={() => setShareFor(null)} />
-      )}
       {commentPost && (
         <ReelComments post={commentPost} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} onClose={() => setCommentsFor(null)} />
       )}
@@ -7042,6 +6828,8 @@ function CreatePost({ currentUser, setPosts }: {
   const fileRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
   const videoOnly = kind !== 'post';
+  // Each icon opens only its own kind of file.
+  const openPicker = (accept: string) => { const el = fileRef.current; if (!el) return; el.accept = accept; el.click(); };
 
   const clearCover = () => {
     setCover(prev => {
@@ -7133,7 +6921,7 @@ function CreatePost({ currentUser, setPosts }: {
           results[i] = kanPublicUrl(POST_MEDIA_BUCKET, p);
         }
       };
-      await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
+      await Promise.all(Array.from({ length: 8 }, () => worker()));
       const offset = media ? 1 : 0;
       if (media) mediaUrl = results[0];
       const extraMedia: { type: 'image' | 'video' | 'file'; url: string; name: string; size: number }[] =
@@ -7311,15 +7099,15 @@ function CreatePost({ currentUser, setPosts }: {
           <div className="flex items-center gap-2">
             <input ref={fileRef} type="file" multiple={!videoOnly} accept={videoOnly ? 'video/*' : undefined} onChange={handleFile} className="hidden" />
             {!videoOnly && (
-              <button onClick={() => fileRef.current?.click()} className="p-2 text-cyan-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="صورة">
+              <button onClick={() => openPicker('image/*')} className="p-2 text-cyan-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="صورة">
                 <ImageIcon size={20} />
               </button>
             )}
-            <button onClick={() => fileRef.current?.click()} className="p-2 text-green-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="فيديو">
+            <button onClick={() => openPicker('video/*')} className="p-2 text-green-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="فيديو">
               <Video size={20} />
             </button>
             {!videoOnly && (
-              <button onClick={() => fileRef.current?.click()} className="p-2 text-amber-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="ملف">
+              <button onClick={() => openPicker('*/*')} className="p-2 text-amber-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="ملف">
                 <Paperclip size={20} />
               </button>
             )}
@@ -7519,7 +7307,7 @@ function UserListModal({ title, userIds, users, onOpenProfile, onClose }: {
   const list = userIds.map(id => users.find(u => u.id === id)).filter((u): u is User => Boolean(u));
   return createPortal(
     <div dir={DIR} className="fixed inset-0 z-[100] bg-black/70 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
-      <div className="w-full sm:max-w-md bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-2xl max-h-[75vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="kan-theme-text w-full sm:max-w-md bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-2xl max-h-[75vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <h3 className="font-bold text-white">{title} <span className="text-gray-500 text-sm font-normal">({list.length})</span></h3>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-white"><X size={20} /></button>
