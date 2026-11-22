@@ -9,9 +9,39 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Bookmark as BookmarkIcon
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
+
+// ============ Language (Arabic is the default; English is added first for the main screens) ============
+type Lang = 'ar' | 'en';
+const getLang = (): Lang => { try { return localStorage.getItem('kan_lang') === 'en' ? 'en' : 'ar'; } catch { return 'ar'; } };
+const LANG: Lang = getLang();
+const setLangStored = (l: Lang) => { try { localStorage.setItem('kan_lang', l); } catch { /* ignore */ } window.location.reload(); };
+if (typeof document !== 'undefined') { document.documentElement.lang = LANG; document.documentElement.dir = LANG === 'en' ? 'ltr' : 'rtl'; }
+const EN: Record<string, string> = {
+  'الرئيسية': 'Home', 'ريلز': 'Reels', 'فيديوهات': 'Videos', 'حسابي': 'Profile', 'نشر': 'Post',
+  'الإشعارات': 'Notifications', 'الرسائل': 'Messages', 'بحث': 'Search', 'الإعدادات': 'Settings', 'القائمة': 'Menu', 'إغلاق القائمة': 'Close menu',
+  'الكل': 'All', 'المتابَعون': 'Following', 'الملفات': 'Files', 'القصص': 'Stories', 'قصتك': 'Your story',
+  'المراسلة': 'Messaging', 'المجموعات': 'Groups', 'مجموعة جديدة': 'New group',
+  'لا توجد منشورات بعد': 'No posts yet', 'انشر أول منشور لك!': 'Share your first post!', 'جارٍ التحميل...': 'Loading...', 'وصلت لنهاية المنشورات': "You're all caught up",
+  'تسجيل الدخول': 'Log in', 'حساب جديد': 'Sign up', 'اسم المستخدم': 'Username', 'كلمة المرور': 'Password', 'الاسم المعروض': 'Display name',
+  'دخول': 'Enter', 'إنشاء حساب': 'Create account', 'شبكة التواصل الاجتماعي': 'Social network',
+  'اكتب رسالة...': 'Type a message...', 'اكتب تعليقاً...': 'Write a comment...', 'اكتب رداً...': 'Write a reply...', 'ابحث عن أشخاص...': 'Search people...', 'ماذا يدور في ذهنك؟': "What's on your mind?",
+  'منشور جديد': 'New post', 'ريل جديد': 'New reel', 'فيديو جديد': 'New video', 'منشور': 'Post', 'جارٍ النشر...': 'Posting...', 'نشر الريل': 'Post reel', 'نشر الفيديو': 'Post video',
+  'المظهر': 'Appearance', 'اختر الثيم الذي يريحك': 'Pick the theme you like', 'فاتح': 'Light', 'داكن': 'Dark',
+  'شكل الإعجاب': 'Like style', 'حلقة القصة حول الصورة': 'Story ring around pictures', 'اللغة': 'Language',
+  'الصورة الشخصية': 'Profile picture', 'النبذة التعريفية': 'Bio', 'الموقع': 'Location', 'الموقع الإلكتروني': 'Website',
+  'حفظ التغييرات': 'Save changes', 'تم الحفظ': 'Saved', 'تسجيل الخروج': 'Log out', 'تثبيت التطبيق': 'Install app', 'تثبيت': 'Install', 'مثبّت': 'Installed',
+  'الإشعارات والصوت': 'Notifications & sound', 'صوت الرسائل': 'Message sound', 'مفعّل': 'On', 'متوقف': 'Off', 'تفعيل': 'Enable', 'إيقاف': 'Turn off',
+  'منشوراتي': 'My posts', 'إعجاباتي': 'My likes', 'محفوظاتي': 'Saved', 'متابِع': 'Followers', 'متابَع': 'Following', 'متابعة': 'Follow', 'راسل': 'Message', 'رجوع': 'Back',
+  'مشاركة': 'Share', 'تحميل': 'Download', 'حذف': 'Delete', 'تعديل': 'Edit', 'رد': 'Reply', 'تفاعل': 'React', 'حفظ': 'Save', 'إلغاء': 'Cancel',
+  'لا توجد محادثات بعد': 'No chats yet', 'ابحث عن أشخاص وابدأ المحادثة!': 'Find people and start chatting!', 'ابدأ المحادثة': 'Start chatting',
+  'الإشعارات الفورية': 'Push notifications', 'لا توجد إشعارات بعد': 'No notifications yet', 'تحديد الكل كمقروء': 'Mark all as read', 'جديد': 'New', 'سابقاً': 'Earlier',
+  'أعجب بمنشورك': 'liked your post', 'بدأ بمتابعتك': 'started following you', 'يكتب الآن...': 'typing...', 'ملصقات': 'Stickers', 'إرفاق': 'Attach', 'اسأل KAN': 'Ask KAN',
+  'الإعجابات': 'Likes', 'التعليقات': 'Comments', 'المتابِعون': 'Followers', 'يتابع': 'Following',
+};
+const t = (ar: string): string => (LANG === 'en' ? EN[ar] ?? ar : ar);
 
 // ============ Types ============
 interface ChatBackground {
@@ -50,6 +80,7 @@ interface Reply {
 }
 
 interface Post {
+  music?: { url: string; name: string };
   id: string;
   userId: string;
   text: string;
@@ -346,7 +377,13 @@ function rowToPost(row: PostRow): Post {
     media: row.media_url && row.media_type
       ? { type: row.media_type, url: row.media_url, name: row.media_name ?? undefined, size: row.media_size ?? undefined }
       : undefined,
-    extraMedia: Array.isArray(row.media_extra) && row.media_extra.length > 0 ? row.media_extra : undefined,
+    extraMedia: (Array.isArray(row.media_extra) ? row.media_extra : []).filter(m => !(m.name ?? '').startsWith('kan-music|')).length > 0
+      ? (row.media_extra as NonNullable<PostRow['media_extra']>).filter(m => !(m.name ?? '').startsWith('kan-music|'))
+      : undefined,
+    music: (() => {
+      const m = (Array.isArray(row.media_extra) ? row.media_extra : []).find(x => (x.name ?? '').startsWith('kan-music|'));
+      return m ? { url: m.url, name: (m.name ?? '').slice(10) || 'موسيقى' } : undefined;
+    })(),
     isReel: row.is_reel,
     isVideo: row.is_video,
     title: row.title ?? undefined,
@@ -978,18 +1015,17 @@ async function uploadWithProgress(
   });
 }
 
-interface UploadState { done: number; total: number; pct: number }
-
-function UploadBar({ upload }: { upload: UploadState }) {
-  const overall = Math.min(100, Math.round(((upload.done + upload.pct / 100) / Math.max(1, upload.total)) * 100));
+function UploadBar({ ups }: { ups: Record<string, number> }) {
+  const vals = Object.values(ups);
+  const pct = Math.round(vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length));
   return (
-    <div className="mb-2 px-1" role="progressbar" aria-valuenow={overall} aria-valuemin={0} aria-valuemax={100}>
+    <div className="mb-2 px-1" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
       <div className="flex items-center justify-between text-[11px] text-gray-300 mb-1">
-        <span>جارٍ الإرسال{upload.total > 1 ? ` ${Math.min(upload.done + 1, upload.total)}/${upload.total}` : ''}</span>
-        <span className="tabular-nums font-bold text-cyan-300">{overall}%</span>
+        <span>جارٍ الإرسال{vals.length > 1 ? ` (${vals.length})` : ''}</span>
+        <span className="tabular-nums font-bold text-cyan-300">{pct}%</span>
       </div>
       <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-        <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-[width] duration-150" style={{ width: `${overall}%` }} />
+        <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-[width] duration-150" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -1038,6 +1074,11 @@ applyTheme(getTheme());
 // Any screen can open a post (optionally scrolled to one comment); the App draws it.
 // Filled by App: last chat activity per person (used to list recent chats first when sharing).
 let recentChatActivity: () => Map<string, number> = () => new Map();
+// Tapping a reel on the home feed opens it inside the Reels tab.
+let openReelHandler: (postId: string) => void = () => undefined;
+function openReel(postId: string) { openReelHandler(postId); }
+// Only one piece of post music plays at a time.
+let playingAudio: HTMLAudioElement | null = null;
 let openPostHandler: (postId: string, commentId?: string) => void = () => undefined;
 function openPost(postId: string, commentId?: string) { openPostHandler(postId, commentId); }
 
@@ -1176,7 +1217,6 @@ let backSeq = 0;
 let backListening = false;
 let sentinelArmed = false;
 let backFallback: () => boolean = () => false;
-let lastExitPress = 0;
 
 function setBackFallback(fn: () => boolean) { backFallback = fn; }
 
@@ -1199,12 +1239,9 @@ function ensureBackListener() {
     const top = backStack.pop();
     if (top) { top.close(); armSentinel(); return; }
     if (backFallback()) { armSentinel(); return; }
-    // Nothing left to close: the first Back only warns, a second one within 2.2s really leaves.
-    const now = Date.now();
-    if (now - lastExitPress < 2200) { window.history.back(); return; }
-    lastExitPress = now;
+    // Nothing left to close: Back never leaves the app, it only returns to the top of the page.
     armSentinel();
-    window.dispatchEvent(new Event('kan-exit-hint'));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 }
 
@@ -2013,7 +2050,6 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
 }) {
   const vp = useVisualViewport();
   const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -2022,8 +2058,8 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const [recording, setRecording] = useState(false);
   const [media, setMedia] = useState<{ type: 'image' | 'video' | 'file'; url: string; file: File } | null>(null);
   const [queue, setQueue] = useState<File[]>([]);
-  const [upload, setUpload] = useState<UploadState | null>(null);
-  const keepProgress = useRef(false);
+  const [ups, setUps] = useState<Record<string, number>>({});
+  const trackUp = (key: string, pct: number | null) => setUps(u => { const n = { ...u }; if (pct === null) delete n[key]; else n[key] = pct; return n; });
   const [replyingTo, setReplyingTo] = useState<GroupMessage | null>(null);
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [editing, setEditing] = useState<GroupMessage | null>(null);
@@ -2075,76 +2111,67 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
     if (rest.length) setQueue(q => [...q, ...rest]);
   };
 
-  const send = async (opts: { text?: string; file?: Blob; mediaType?: 'image' | 'video' | 'voice' | 'file'; fileName?: string; duration?: number }): Promise<boolean> => {
+  // Instant sending: shown at once, saved in the background (removed again only if it fails).
+  const send = async (opts: { text?: string; file?: Blob; mediaType?: 'image' | 'video' | 'voice' | 'file'; fileName?: string; duration?: number; replyToId?: string }): Promise<boolean> => {
     const body = (opts.text ?? '').trim();
     if (!body && !opts.file) return false;
-    setSending(true);
     setError('');
     const id = crypto.randomUUID();
+    const replyId = opts.replyToId ?? replyingTo?.id;
     let path: string | null = null;
-    try {
-      if (opts.file) {
-        const mime = (opts.file.type || '').split(';')[0];
-        const ext = CHAT_EXT[mime] ?? (opts.fileName ? safeExt(opts.fileName) : opts.mediaType === 'voice' ? 'webm' : 'bin');
-        path = `${group.id}/${crypto.randomUUID()}.${ext}`;
-        setUpload(u => u ?? { done: 0, total: 1, pct: 0 });
-        const { error: upErr } = await uploadWithProgress(CHAT_MEDIA_BUCKET, path, opts.file, mime || 'application/octet-stream', '3600', pct => setUpload(u => (u ? { ...u, pct } : u)));
-        if (upErr) throw upErr;
-      }
-      const { error: insErr } = await supabase.from('group_messages').insert({
-        id,
-        group_id: group.id,
-        sender_id: currentUser.id,
-        text: body,
-        media_path: path,
-        media_type: path ? opts.mediaType ?? null : null,
-        media_duration: opts.mediaType === 'voice' ? Math.round(opts.duration ?? 0) : null,
-        media_name: path && opts.fileName ? opts.fileName.slice(0, 200) : null,
-        media_size: opts.file ? opts.file.size : null,
-        reply_to_id: replyingTo?.id ?? null,
-      });
-      if (insErr) throw insErr;
-      const at = Date.now();
-      const msg: GroupMessage = {
-        id, senderId: currentUser.id, text: body, timestamp: at, isSystem: false, readBy: [currentUser.id], reactions: [],
-        replyToId: replyingTo?.id,
-        media: opts.file && opts.mediaType ? { type: opts.mediaType, url: URL.createObjectURL(opts.file), duration: opts.duration, name: opts.fileName, size: opts.file.size, path: path ?? undefined } : undefined,
-      };
-      setGroups(prev => prev.map(g => g.id !== group.id ? g : { ...g, lastActivity: at, messages: g.messages.some(m => m.id === id) ? g.messages : [...g.messages, msg] }));
-      playSound('send');
-      return true;
-    } catch (e) {
-      console.error(e);
-      if (path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([path]);
-      setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
-      return false;
-    } finally {
-      setSending(false);
-      if (!keepProgress.current) setUpload(null);
+    let mime = '';
+    if (opts.file) {
+      mime = (opts.file.type || '').split(';')[0];
+      const ext = CHAT_EXT[mime] ?? (opts.fileName ? safeExt(opts.fileName) : opts.mediaType === 'voice' ? 'webm' : 'bin');
+      path = `${group.id}/${crypto.randomUUID()}.${ext}`;
     }
+    const at = Date.now();
+    const msg: GroupMessage = {
+      id, senderId: currentUser.id, text: body, timestamp: at, isSystem: false, readBy: [currentUser.id], reactions: [],
+      replyToId: replyId,
+      media: opts.file && opts.mediaType ? { type: opts.mediaType, url: URL.createObjectURL(opts.file), duration: opts.duration, name: opts.fileName, size: opts.file.size, path: path ?? undefined } : undefined,
+    };
+    setGroups(prev => prev.map(g => g.id !== group.id ? g : { ...g, lastActivity: at, messages: g.messages.some(m => m.id === id) ? g.messages : [...g.messages, msg] }));
+    playSound('send');
+    void (async () => {
+      try {
+        if (opts.file && path) {
+          const { error: upErr } = await uploadWithProgress(CHAT_MEDIA_BUCKET, path, opts.file, mime || 'application/octet-stream', '3600', pct => { if (opts.mediaType !== 'voice' && !isStickerName(opts.fileName)) trackUp(id, pct); });
+          trackUp(id, null);
+          if (upErr) throw upErr;
+        }
+        const { error: insErr } = await supabase.from('group_messages').insert({
+          id,
+          group_id: group.id,
+          sender_id: currentUser.id,
+          text: body,
+          media_path: path,
+          media_type: path ? opts.mediaType ?? null : null,
+          media_duration: opts.mediaType === 'voice' ? Math.round(opts.duration ?? 0) : null,
+          media_name: path && opts.fileName ? opts.fileName.slice(0, 200) : null,
+          media_size: opts.file ? opts.file.size : null,
+          reply_to_id: replyId ?? null,
+        });
+        if (insErr) throw insErr;
+      } catch (e) {
+        console.error(e);
+        trackUp(id, null);
+        if (path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([path]);
+        patchMsgs(list => list.filter(m => m.id !== id));
+        setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
+      }
+    })();
+    return true;
   };
 
   const sendMessage = async () => {
-    if ((!text.trim() && !media && queue.length === 0) || sending) return;
+    if (!text.trim() && !media && queue.length === 0) return;
     const rest = queue;
-    const total = (media ? 1 : 0) + rest.length;
-    let done = 0;
-    keepProgress.current = true;
-    if (total > 0) setUpload({ done: 0, total, pct: 0 });
-    let ok = true;
-    if (text.trim() || media) {
-      ok = await send({ text, file: media?.file, mediaType: media?.type, fileName: media?.file.name });
-      if (ok) { if (media) done++; setText(''); setMedia(null); setReplyingTo(null); }
-    }
-    for (const f of ok ? rest : []) {
-      setUpload({ done, total, pct: 0 });
-      if (!(await send({ file: f, mediaType: detectMediaKind(f), fileName: f.name }))) break;
-      done++;
-      setQueue(q => q.filter(x => x !== f));
-    }
-    keepProgress.current = false;
-    setUpload(null);
+    const t = text, m = media, reply = replyingTo;
+    setText(''); setMedia(null); setReplyingTo(null); setQueue([]);
     inputRef.current?.focus();
+    if (t.trim() || m) await send({ text: t, file: m?.file, mediaType: m?.type, fileName: m?.file.name, replyToId: reply?.id });
+    for (const f of rest) void send({ file: f, mediaType: detectMediaKind(f), fileName: f.name });
   };
   const sendVoice = async (dataUrl: string, duration: number) => {
     setRecording(false);
@@ -2244,7 +2271,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                       () => { setActiveMsgId(m.id); setReactingTo(m.id); },
                     )}
                     onClick={e => { e.stopPropagation(); setActiveMsgId(active ? null : m.id); setReactingTo(null); }}
-                    className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words cursor-pointer select-none touch-pan-y transition-shadow ${highlightId === m.id ? 'ring-2 ring-cyan-400' : ''} ${mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`}
+                    className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words cursor-pointer select-none touch-pan-y transition-shadow ${highlightId === m.id ? 'ring-2 ring-cyan-400' : ''} ${isStickerName(m.media?.name) && !m.text ? 'bg-transparent !p-0' : mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`}
                   >
                     {m.replyToId && (
                       <button
@@ -2255,12 +2282,17 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                         <div className="opacity-80 truncate">{replied ? groupMsgPreview(replied) : 'رسالة غير متاحة'}</div>
                       </button>
                     )}
-                    {m.media?.type === 'image' && (
+                    {isStickerName(m.media?.name) && m.media && (
+                      m.media.type === 'video'
+                        ? <video src={m.media.url} autoPlay loop muted playsInline className="w-36 h-36 object-contain pointer-events-none" />
+                        : <img src={m.media.url} alt="" draggable={false} className="w-36 h-36 object-contain pointer-events-none" />
+                    )}
+                    {!isStickerName(m.media?.name) && m.media?.type === 'image' && (
                       <div className="mb-2 relative">
                         <img src={m.media.url} alt="" onClick={e => { e.stopPropagation(); setViewer({ src: m.media!.url, name: m.media!.name }); }} className="rounded-xl max-w-full max-h-56 object-cover cursor-zoom-in" />
                       </div>
                     )}
-                    {m.media?.type === 'video' && (
+                    {!isStickerName(m.media?.name) && m.media?.type === 'video' && (
                       <div className="mb-2 w-60 max-w-full" onClick={e => e.stopPropagation()}>
                         <VideoPlayer src={m.media.url} className="max-h-64" />
                       </div>
@@ -2307,7 +2339,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     <div className={`flex flex-wrap items-center gap-1.5 mt-1 ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
                       <button onClick={() => setReactingTo(p => (p === m.id ? null : m.id))} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Smile size={12} /> تفاعل</button>
                       <button onClick={() => { setReplyingTo(m); setActiveMsgId(null); inputRef.current?.focus(); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Reply size={12} /> رد</button>
-                      {m.media && m.media.type !== 'voice' && (
+                      {m.media && m.media.type !== 'voice' && !isStickerName(m.media.name) && (
                         <button onClick={() => { void downloadFile(m.media!.url, m.media!.name || (m.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Download size={12} /> تحميل</button>
                       )}
                       {mine && <button onClick={() => setSeenFor(seenFor === m.id ? null : m.id)} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-cyan-300 text-xs flex items-center gap-1"><Eye size={12} /> من شاهدها</button>}
@@ -2378,7 +2410,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
               )}
             </AnimatePresence>
             {queue.length > 0 && <QueueChip count={queue.length} onClear={() => setQueue([])} />}
-            {upload && <UploadBar upload={upload} />}
+            {Object.keys(ups).length > 0 && <UploadBar ups={ups} />}
             <div className="flex items-center gap-1.5">
               <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setToolsOpen(o => !o)} className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${toolsOpen ? 'bg-violet-600 text-white rotate-45' : 'bg-gray-800 text-gray-300 hover:text-white'}`} aria-label="المزيد"><Plus size={20} /></button>
               <button
@@ -2400,7 +2432,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && void sendMessage()}
               />
               {text.trim() || media || queue.length > 0 ? (
-                <motion.button whileTap={{ scale: 0.9 }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => void sendMessage()} disabled={sending} aria-label="إرسال" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30 disabled:opacity-60">
+                <motion.button whileTap={{ scale: 0.9 }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => void sendMessage()} aria-label="إرسال" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30 disabled:opacity-60">
                   <Send size={18} className="text-white" />
                 </motion.button>
               ) : (
@@ -2409,7 +2441,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 </motion.button>
               )}
             </div>
-          {emojiOpen && <EmojiPicker docked onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} />}
+          {emojiOpen && <EmojiPicker docked onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `kan-sticker.${stkExt(st.blob, st.kind)}` }); }} />}
           </div>
         )}
         {recording && (
@@ -2417,7 +2449,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             <VoiceRecorder onSend={sendVoice} onCancel={() => setRecording(false)} />
           </div>
         )}
-        {viewer && <ImageViewer src={viewer.src} name={viewer.name} gallery={group.messages.flatMap(x => x.media && (x.media.type === 'image' || x.media.type === 'video') ? [{ src: x.media.url, name: x.media.name, type: x.media.type as 'image' | 'video' }] : [])} onClose={() => setViewer(null)} />}
+        {viewer && <ImageViewer src={viewer.src} name={viewer.name} gallery={group.messages.flatMap(x => x.media && !isStickerName(x.media.name) && (x.media.type === 'image' || x.media.type === 'video') ? [{ src: x.media.url, name: x.media.name, type: x.media.type as 'image' | 'video' }] : [])} onClose={() => setViewer(null)} />}
         {aiOpen && (
           <KanAIModal
             messages={group.messages.filter(m => !m.isSystem).map(m => ({
@@ -2892,7 +2924,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
   return (
     <div className="relative">
       <div className="flex items-center justify-between px-1 mb-2">
-        <h3 className="text-sm font-semibold text-gray-200">القصص</h3>
+        <h3 className="text-sm font-semibold text-gray-200">{t('القصص')}</h3>
       </div>
       <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={pick} />
       <div className="flex gap-3.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
@@ -2903,7 +2935,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
             </div>
             <span onClick={e => { e.stopPropagation(); fileRef.current?.click(); }} className="absolute -bottom-0.5 -left-0.5 w-6 h-6 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 text-white flex items-center justify-center ring-2 ring-gray-950 shadow-md"><Plus size={14} /></span>
           </div>
-          <span className="text-[11px] text-gray-300 truncate w-full text-center">قصتك</span>
+          <span className="text-[11px] text-gray-300 truncate w-full text-center">{t('قصتك')}</span>
         </button>
         {others.map((g, i) => {
           const u = users.find(x => x.id === g.userId)!;
@@ -3415,11 +3447,17 @@ function useLikeStyle(): LikeStyle {
 }
 
 const KAN_GRAD = 'linear-gradient(135deg,#7c3aed,#06b6d4)';
-function GradHeart({ px, id }: { px: number; id: string }) {
+function GradHeart({ px, id, label }: { px: number; id: string; label?: string }) {
   return (
     <svg width={px} height={px} viewBox="0 0 24 24" aria-hidden>
-      <defs><linearGradient id={id} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#7c3aed" /><stop offset="1" stopColor="#06b6d4" /></linearGradient></defs>
-      <path fill={`url(#${id})`} d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 2.6 4.5 6.3 4.5c2 0 3.5 1.1 4.2 2.4h3c.7-1.3 2.2-2.4 4.2-2.4 3.7 0 5.4 3.9 3.9 7.3C19.5 16.400 12 21 12 21z" transform="translate(0 .5)" />
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#3b1a7a" /><stop offset="0.6" stopColor="#170f33" /><stop offset="1" stopColor="#07070f" /></linearGradient>
+        <linearGradient id={`${id}-s`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a78bfa" /><stop offset="1" stopColor="#22d3ee" /></linearGradient>
+      </defs>
+      <path fill={`url(#${id})`} stroke={`url(#${id}-s)`} strokeWidth="0.9" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+      {label && (
+        <text x="12" y="12.2" textAnchor="middle" dominantBaseline="middle" fontSize={label.length > 1 ? 5.4 : 10} fontWeight="800" fill="#fff" letterSpacing={label.length > 1 ? 0.3 : 0} style={{ fontFamily: 'inherit' }}>{label}</text>
+      )}
     </svg>
   );
 }
@@ -3436,39 +3474,60 @@ function CoinBurst({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
   const big = size === 'lg';
   const dim = big ? 112 : 56;
   const k = big ? 1 : 0.5;
+  // Little sparkles that shoot out around the main shape.
+  const sparks = (n: number, r: number, colors: string[]) => Array.from({ length: n }).map((_, i) => {
+    const ang = (i / n) * Math.PI * 2 + 0.3;
+    return (
+      <motion.span key={i} className="absolute rounded-full"
+        style={{ width: 7 * k + 2, height: 7 * k + 2, background: colors[i % colors.length], left: '50%', top: '50%', marginLeft: -4, marginTop: -4, boxShadow: `0 0 8px ${colors[i % colors.length]}` }}
+        initial={{ x: 0, y: 0, scale: 0, opacity: 0 }}
+        animate={{ x: Math.cos(ang) * r * k, y: Math.sin(ang) * r * k, scale: [0, 1.2, 0], opacity: [0, 1, 0] }}
+        transition={{ duration: 0.8, delay: 0.1, ease: 'easeOut' }} />
+    );
+  });
+  const ring = (
+    <motion.span className="absolute rounded-full border-2" style={{ width: dim, height: dim, borderColor: 'rgba(167,139,250,.8)' }}
+      initial={{ scale: 0.4, opacity: 0.9 }} animate={{ scale: 2, opacity: 0 }} transition={{ duration: 0.7, ease: 'easeOut' }} />
+  );
   let inner: React.ReactNode;
   if (style === 'heart') {
     inner = (
-      <motion.div initial={{ scale: 0.2, opacity: 0 }} animate={{ scale: [0.2, 1.3, 1, 1.1, 1], opacity: [0, 1, 1, 1, 0] }} transition={{ duration: 0.95, ease: 'easeOut' }} style={{ filter: 'drop-shadow(0 0 16px rgba(124,58,237,.7))' }}>
-        <GradHeart px={dim} id={`gh-${size}`} />
-      </motion.div>
+      <div className="relative flex items-center justify-center" style={{ width: dim, height: dim }}>
+        {ring}
+        {sparks(8, 78, ['#a78bfa', '#22d3ee', '#f472b6'])}
+        <motion.div initial={{ scale: 0, rotate: -18, opacity: 0 }} animate={{ scale: [0, 1.35, 0.95, 1.12, 1], rotate: [-18, 6, -3, 0, 0], opacity: [0, 1, 1, 1, 0] }} transition={{ duration: 1, ease: 'easeOut', times: [0, 0.25, 0.45, 0.65, 1] }} style={{ filter: 'drop-shadow(0 0 18px rgba(124,58,237,.75)) drop-shadow(0 4px 10px rgba(6,182,212,.45))' }}>
+          <GradHeart px={dim} id={`gh-${size}`} label="KAN" />
+        </motion.div>
+      </div>
     );
   } else if (style === 'flames') {
-    const hearts = [{ x: -70, y: 40, d: 0 }, { x: 70, y: 40, d: 0.08 }, { x: 0, y: -60, d: 0.16 }];
+    const hearts = [{ x: -70, y: 40, tx: -34, l: 'K', d: 0 }, { x: 0, y: -60, tx: 0, l: 'A', d: 0.08 }, { x: 70, y: 40, tx: 34, l: 'N', d: 0.16 }];
     inner = (
       <div className="relative" style={{ width: dim, height: dim }}>
+        {sparks(6, 74, ['#a78bfa', '#22d3ee', '#f472b6'])}
         {hearts.map((h, i) => (
           <motion.div key={i} className="absolute inset-0 flex items-center justify-center"
             initial={{ x: h.x * k, y: h.y * k, scale: 0.5, opacity: 0 }}
-            animate={{ x: [h.x * k, h.x * k * 0.6, 0], y: [h.y * k, h.y * k * 0.6, 0], scale: [0.5, 0.8, i === 2 ? 1.25 : 0.4], opacity: [0, 1, i === 2 ? 1 : 0] }}
-            transition={{ duration: 0.95, delay: h.d, ease: 'easeInOut' }}
-            style={{ filter: 'drop-shadow(0 0 10px rgba(6,182,212,.8)) drop-shadow(0 0 14px rgba(124,58,237,.8))' }}>
-            <GradHeart px={dim * 0.6} id={`gf-${size}-${i}`} />
-            <motion.span className="absolute -top-2" animate={{ y: [0, -6, 0], opacity: [1, .6, 1] }} transition={{ duration: 0.4, repeat: 2 }} style={{ fontSize: dim * 0.28 }}>🔥</motion.span>
+            animate={{ x: [h.x * k, h.x * k * 0.6, h.tx * k, h.tx * k], y: [h.y * k, h.y * k * 0.6, 0, 0], scale: [0.5, 0.85, 1, 1], opacity: [0, 1, 1, 0] }}
+            transition={{ duration: 1.05, delay: h.d, ease: 'easeInOut', times: [0, 0.4, 0.7, 1] }}
+            style={{ filter: 'drop-shadow(0 0 10px rgba(124,58,237,.8)) drop-shadow(0 0 8px rgba(6,182,212,.6))' }}>
+            <GradHeart px={dim * 0.52} id={`gf-${size}-${i}`} label={h.l} />
           </motion.div>
         ))}
       </div>
     );
   } else {
     inner = (
-      <div className="relative" style={{ width: dim, height: dim }}>
+      <div className="relative flex items-center justify-center" style={{ width: dim, height: dim }}>
+        {ring}
+        {sparks(8, 80, ['#a78bfa', '#22d3ee', '#fde047'])}
         {COIN_PIECES.map((c, i) => (
           <motion.div key={i} className="absolute inset-0"
             initial={{ x: c.from.x * k, y: c.from.y * k, rotate: c.from.r, opacity: 0 }}
             animate={{ x: [c.from.x * k, 0, 0], y: [c.from.y * k, 0, 0], rotate: [c.from.r, 0, 0], opacity: [0, 1, 1, 1, 0] }}
             transition={{ duration: 1, ease: 'easeOut', times: [0, 0.55, 1] }}>
             <div className="w-full h-full rounded-full flex items-center justify-center font-extrabold tracking-wider text-white border-4 border-white/80"
-              style={{ clipPath: c.clip, background: KAN_GRAD, boxShadow: '0 0 34px rgba(124,58,237,.6)', fontSize: dim * 0.27 }}>
+              style={{ clipPath: c.clip, background: KAN_GRAD, boxShadow: '0 0 34px rgba(124,58,237,.6), inset 0 0 18px rgba(255,255,255,.25)', fontSize: dim * 0.27 }}>
               <span className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]">KAN</span>
             </div>
           </motion.div>
@@ -4130,6 +4189,8 @@ export default function App() {
   const lastHomeTap = useRef(0);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
   openPostHandler = (postId, commentId) => pushScreen({ k: 'post', postId, commentId });
+  const [reelStart, setReelStart] = useState<string | null>(null);
+  openReelHandler = id => { setReelStart(id); goTab('reels'); };
   const [introDone, setIntroDone] = useState(false);
   useEffect(() => {
     const t = window.setTimeout(() => setIntroDone(true), 1500);
@@ -4177,10 +4238,19 @@ export default function App() {
       goTab('profile');
     } else {
       pushScreen({ k: 'profile', id, y: window.scrollY });
-      window.scrollTo(0, 0);
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     }
   };
   openProfileHandler = openProfile;
+  // A profile always opens from its first line (the page below it may have been scrolled).
+  useEffect(() => {
+    if (!viewedUserId) return;
+    const top = () => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    top();
+    const raf = requestAnimationFrame(top);
+    const t = window.setTimeout(top, 120);
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(t); };
+  }, [viewedUserId]);
 
   // Links such as  .../#/post/<id>  or  .../#/u/<id>  open the post / profile straight away, from anywhere.
   useEffect(() => {
@@ -4239,7 +4309,7 @@ export default function App() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-gray-950 text-white font-sans">
+    <div dir={LANG === 'en' ? 'ltr' : 'rtl'} className="min-h-screen bg-gray-950 text-white font-sans">
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={popScreen} />}
       {/* Header */}
@@ -4263,10 +4333,10 @@ export default function App() {
                   className="flex items-center gap-0.5 p-1 ml-2 rounded-full bg-gray-900/80 backdrop-blur-md border border-white/10 shadow-lg shadow-black/30"
                 >
                   {([
-                    { tab: 'notifications' as const, label: 'الإشعارات', Icon: Bell, badge: notifUnread },
-                    { tab: 'messages' as const, label: 'الرسائل', Icon: MessageSquare, badge: unreadCount },
-                    { tab: 'search' as const, label: 'بحث', Icon: Search, badge: 0 },
-                    { tab: 'settings' as const, label: 'الإعدادات', Icon: Settings, badge: 0 },
+                    { tab: 'notifications' as const, label: t('الإشعارات'), Icon: Bell, badge: notifUnread },
+                    { tab: 'messages' as const, label: t('الرسائل'), Icon: MessageSquare, badge: unreadCount },
+                    { tab: 'search' as const, label: t('بحث'), Icon: Search, badge: 0 },
+                    { tab: 'settings' as const, label: t('الإعدادات'), Icon: Settings, badge: 0 },
                   ]).map(({ tab, label, Icon, badge }) => {
                     const on = activeTab === tab && !viewedUserId;
                     return (
@@ -4288,7 +4358,7 @@ export default function App() {
             </AnimatePresence>
             <button
               onClick={() => setMenuOpen(o => !o)}
-              aria-label={menuOpen ? 'إغلاق القائمة' : 'القائمة'}
+              aria-label={menuOpen ? t('إغلاق القائمة') : t('القائمة')}
               aria-expanded={menuOpen}
               className={`relative w-10 h-10 rounded-full flex items-center justify-center border transition-all active:scale-90 ${menuOpen ? 'bg-violet-500/15 border-violet-400/30 text-violet-200' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white'}`}
             >
@@ -4352,7 +4422,7 @@ export default function App() {
           )}
           {!viewedUserId && activeTab === 'reels' && (
             <motion.div key="reels" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
-              <ReelsTab onBack={() => goTab('feed')} posts={posts} setPosts={setPosts} users={users} setUsers={setUsers} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} />
+              <ReelsTab startId={reelStart} onBack={() => { setReelStart(null); goTab('feed'); }} posts={posts} setPosts={setPosts} users={users} setUsers={setUsers} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'videos' && (
@@ -4415,10 +4485,10 @@ export default function App() {
         <div className="w-full grid grid-cols-[1fr_auto_1fr] items-end gap-1 px-[max(0.5rem,env(safe-area-inset-left))] md:px-6 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
           {(() => {
             const tabs = {
-              feed: { icon: Home, label: 'الرئيسية' },
-              reels: { icon: Film, label: 'ريلز' },
-              videos: { icon: PlayCircle, label: 'فيديوهات' },
-              profile: { icon: User, label: 'حسابي' },
+              feed: { icon: Home, label: t('الرئيسية') },
+              reels: { icon: Film, label: t('ريلز') },
+              videos: { icon: PlayCircle, label: t('فيديوهات') },
+              profile: { icon: User, label: t('حسابي') },
             };
             const tabButton = (tab: 'feed' | 'reels' | 'videos' | 'profile') => {
               const { icon: Icon, label } = tabs[tab];
@@ -4446,7 +4516,7 @@ export default function App() {
                   <span className={`kan-fab w-12 h-12 min-[400px]:w-14 min-[400px]:h-14 rounded-full flex items-center justify-center ring-4 ring-gray-950 ${createActive ? 'scale-105' : ''}`}>
                     <Plus size={28} strokeWidth={2.6} className="text-white" />
                   </span>
-                  <span className="mt-1 text-[11px] font-bold kan-gradient-text">نشر</span>
+                  <span className="mt-1 text-[11px] font-bold kan-gradient-text">{t('نشر')}</span>
                 </button>
                 <div className="flex items-end">
                   {tabButton('videos')}
@@ -4574,7 +4644,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
           <h1 className="text-5xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent mb-2">
             KAN
           </h1>
-          <p className="text-gray-400">شبكة التواصل الاجتماعي</p>
+          <p className="text-gray-400">{t('شبكة التواصل الاجتماعي')}</p>
         </div>
 
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
@@ -4585,7 +4655,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
                 showLogin ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
               }`}
             >
-              تسجيل الدخول
+              {t('تسجيل الدخول')}
             </button>
             <button
               onClick={() => { setShowLogin(false); setError(''); }}
@@ -4593,7 +4663,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
                 !showLogin ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
               }`}
             >
-              حساب جديد
+              {t('حساب جديد')}
             </button>
           </div>
 
@@ -4615,7 +4685,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
 
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">اسم المستخدم</label>
+              <label className="text-sm text-gray-400 mb-1 block">{t('اسم المستخدم')}</label>
               <input
                 dir="ltr"
                 value={username}
@@ -4628,7 +4698,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
             {!showLogin && (
               <>
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">الاسم المعروض</label>
+                  <label className="text-sm text-gray-400 mb-1 block">{t('الاسم المعروض')}</label>
                   <input
                     value={displayName}
                     onChange={e => setDisplayName(e.target.value)}
@@ -4677,7 +4747,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
             )}
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">كلمة المرور</label>
+              <label className="text-sm text-gray-400 mb-1 block">{t('كلمة المرور')}</label>
               <div className="relative">
                 <input
                   type={showPass ? 'text' : 'password'}
@@ -4703,7 +4773,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
               disabled={busy}
               className="w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-xl text-white font-medium shadow-lg shadow-violet-500/25 disabled:opacity-60"
             >
-              {busy ? '...' : showLogin ? 'دخول' : 'إنشاء حساب'}
+              {busy ? '...' : showLogin ? t('دخول') : t('إنشاء حساب')}
             </motion.button>
           </div>
         </div>
@@ -4823,7 +4893,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
       )}
       <StoriesBar users={users} currentUser={currentUser} />
       <div className="seg flex gap-1 bg-gray-900/70 rounded-2xl p-1 border border-white/5">
-        {([{ key: 'all', label: 'الكل', Icon: LayoutGrid }, { key: 'following', label: 'المتابَعون', Icon: Users }, { key: 'files', label: 'الملفات', Icon: FileText }] as const).map(t => (
+        {([{ key: 'all', label: t('الكل'), Icon: LayoutGrid }, { key: 'following', label: t('المتابَعون'), Icon: Users }, { key: 'files', label: t('الملفات'), Icon: FileText }] as const).map(t => (
           <button key={t.key} onClick={() => setMode(t.key)} className={`seg-btn relative flex-1 basis-0 px-1 py-2 rounded-xl text-sm font-medium transition-colors ${mode === t.key ? 'seg-on text-violet-100' : 'text-gray-500 hover:text-gray-300'}`}>
             {mode === t.key && <span className="seg-pill absolute inset-0 rounded-xl bg-violet-500/15 ring-1 ring-violet-400/25" />}
             <span className="relative flex items-center justify-center gap-1.5 whitespace-nowrap">
@@ -4836,7 +4906,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
       {displayPosts.length === 0 && !loading && (
         <div className="text-center py-12">
           <div className="text-4xl mb-4">📭</div>
-          <p className="text-gray-400 mb-2">لا توجد منشورات بعد</p>
+          <p className="text-gray-400 mb-2">{t('لا توجد منشورات بعد')}</p>
           <p className="text-gray-500 text-sm">
             {mode === 'following' ? 'تابع أشخاصاً لتظهر منشوراتهم هنا' : mode === 'files' ? 'لا توجد ملفات منشورة بعد. انشر أول ملف!' : 'انشر أول منشور لك!'}
           </p>
@@ -4846,7 +4916,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
         <PostCard key={post.id} post={post} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={onOpenProfile} />
       ))}
       <div ref={sentinel} className="h-8 flex items-center justify-center text-xs text-gray-500">
-        {loading ? 'جارٍ التحميل...' : !hasMore && displayPosts.length > 0 ? 'وصلت لنهاية المنشورات' : ''}
+        {loading ? t('جارٍ التحميل...') : !hasMore && displayPosts.length > 0 ? t('وصلت لنهاية المنشورات') : ''}
       </div>
     </div>
   );
@@ -4981,6 +5051,44 @@ function sortComments(list: Comment[], me: User, focusId?: string | null): Comme
   return [...list].sort((a, b) => score(b) - score(a) || b.timestamp - a.timestamp);
 }
 
+function MusicBar({ music }: { music: { url: string; name: string } }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  const [on, setOn] = useState(false);
+  useEffect(() => () => { const a = ref.current; if (a) { a.pause(); if (playingAudio === a) playingAudio = null; } }, []);
+  const toggle = () => {
+    const a = ref.current;
+    if (!a) return;
+    if (a.paused) {
+      if (playingAudio && playingAudio !== a) playingAudio.pause();
+      playingAudio = a;
+      void a.play().catch(() => undefined);
+    } else a.pause();
+  };
+  return (
+    <div className="px-4 pb-3" onClick={e => e.stopPropagation()}>
+      <audio ref={ref} src={music.url} loop preload="none" onPlay={() => setOn(true)} onPause={() => setOn(false)} />
+      <button onClick={toggle} className="w-full flex items-center gap-3 p-2.5 rounded-2xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25 active:scale-[0.99] transition-transform text-right">
+        <span className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white">{on ? <Pause size={18} fill="white" /> : <Play size={18} fill="white" className="translate-x-px" />}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm text-white truncate" dir="auto">{music.name}</span>
+          <span className="flex items-center gap-1 text-[11px] text-cyan-300"><Music size={12} /> موسيقى</span>
+        </span>
+        <span className="flex items-end gap-0.5 h-5 shrink-0" aria-hidden>
+          {[0, 1, 2, 3].map(i => (
+            <motion.span key={i} className="w-1 rounded-full bg-cyan-300" animate={{ height: on ? [4, 18, 7, 14, 4] : 4 }} transition={{ repeat: Infinity, duration: 0.9, delay: i * 0.12 }} style={{ height: 4 }} />
+          ))}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function CommentText({ text, cls }: { text: string; cls: string }) {
+  const m = /^\[\[sticker:(https?:\/\/[^\]\s]+)\]\]$/.exec(text.trim());
+  if (m) return <img src={m[1]} alt="" draggable={false} loading="lazy" className="w-28 h-28 object-contain" />;
+  return <p className={cls}>{text}</p>;
+}
+
 function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusCommentId }: {
   post: Post;
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
@@ -4999,6 +5107,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   const [commentText, setCommentText] = useState('');
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [cEmoji, setCEmoji] = useState<string | null>(null); // 'main' or a comment id (reply box)
   const [shareOpen, setShareOpen] = useState(false);
   const [shareComment, setShareComment] = useState<{ id: string; text: string; authorName: string } | null>(null);
   const [editPost, setEditPost] = useState(false);
@@ -5038,8 +5147,19 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
     if (error) mutatePost(p => ({ ...p, bookmarks: setIn(p.bookmarks, was) }));
   };
 
-  const addComment = async () => {
-    const text = commentText.trim();
+  // A sticker in a comment is a small image kept in storage; the comment text is a marker the app draws as the sticker.
+  const sendCommentSticker = async (st: SavedSticker, parentId: string | null) => {
+    setCEmoji(null);
+    if (st.kind !== 'image') { window.alert('الملصقات المتحركة غير مدعومة في التعليقات'); return; }
+    const path = `${me}/cs-${crypto.randomUUID()}.${stkExt(st.blob, st.kind)}`;
+    const { error: upErr } = await supabase.storage.from(POST_MEDIA_BUCKET).upload(path, st.blob, { contentType: st.blob.type || 'image/webp', cacheControl: '31536000' });
+    if (upErr) { console.error(upErr); window.alert('تعذّر إرسال الملصق'); return; }
+    const marker = `[[sticker:${supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl}]]`;
+    if (parentId) await addReply(parentId, marker); else await addComment(marker);
+  };
+
+  const addComment = async (override?: string) => {
+    const text = (override ?? commentText).trim();
     if (!text) return;
     const id = crypto.randomUUID();
     const newComment: Comment = { id, userId: me, text, timestamp: Date.now(), likes: [], replies: [] };
@@ -5053,8 +5173,8 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
     }
   };
 
-  const addReply = async (commentId: string) => {
-    const text = replyText.trim();
+  const addReply = async (commentId: string, override?: string) => {
+    const text = (override ?? replyText).trim();
     if (!text) return;
     const id = crypto.randomUUID();
     const newReply: Reply = { id, userId: me, text, timestamp: Date.now(), likes: [] };
@@ -5172,6 +5292,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
             {post.title && <h3 className="text-white font-bold leading-snug">{post.title}</h3>}
           </div>
         )}
+        {post.music && <MusicBar music={post.music} />}
         {post.text && (
           <div className="px-4 pb-3">
             <p className="text-white text-[16px] leading-7 whitespace-pre-wrap">{post.text}</p>
@@ -5203,11 +5324,21 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
                 </button>
               </div>
             ) : post.media.type === 'video' ? (
+              post.isReel ? (
+                <button onClick={e => { e.stopPropagation(); openReel(post.id); }} className="relative block mx-auto w-full max-w-xs aspect-[9/16] max-h-[75vh] rounded-xl overflow-hidden bg-black active:scale-[0.985] transition-transform" aria-label="فتح الريل">
+                  {post.coverUrl
+                    ? <img src={post.coverUrl} alt="" className="w-full h-full object-cover pointer-events-none" />
+                    : <video src={`${post.media.url}#t=0.5`} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none" />}
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/20"><span className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-600/90 to-cyan-500/90 flex items-center justify-center shadow-lg"><Play size={26} className="text-white" fill="white" /></span></span>
+                  <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/55 text-white text-[11px]">🎬 ريل</span>
+                </button>
+              ) : (
               <VideoPlayer
                 src={post.media.url}
                 poster={post.coverUrl}
-                className={post.isReel ? 'max-h-[75vh] mx-auto w-auto max-w-full' : 'w-full max-h-[75vh]'}
+                className="w-full max-h-[75vh]"
               />
+              )
             ) : (
               <div className="flex items-center gap-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl">
                 <FileText size={32} className="shrink-0 text-cyan-400" />
@@ -5301,7 +5432,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
                           <button onClick={() => onOpenProfile(cAuthor.id)} className="text-sm font-medium text-white hover:underline">{cAuthor.displayName}</button>
                           <span className="text-xs text-gray-500">{formatTime(comment.timestamp)}</span>
                         </div>
-                        <p className="text-sm text-gray-300">{comment.text}</p>
+                        <CommentText text={comment.text} cls="text-sm text-gray-300" />
                         <div className="flex items-center gap-3 mt-1">
                           <span className="flex items-center gap-1">
                             <button onClick={() => toggleCommentLike(comment.id)} className={`text-xs ${comment.likes.includes(currentUser.id) ? 'text-red-400' : 'text-gray-500'}`}>
@@ -5353,7 +5484,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
                                         <Trash2 size={11} className="inline" />
                                       </button>
                                     )}
-                                    <p className="text-xs text-gray-300">{reply.text}</p>
+                                    <CommentText text={reply.text} cls="text-xs text-gray-300" />
                                   </div>
                                 </div>
                               );
@@ -5362,7 +5493,10 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
                         )}
                         {replyTo === comment.id && (
                           <div className="flex gap-2 mt-2">
-                            <input value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="اكتب رداً..." className="flex-1 px-3 py-1.5 bg-gray-700 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none" onKeyDown={e => e.key === 'Enter' && addReply(comment.id)} />
+                            <input value={replyText} onChange={e => setReplyText(e.target.value)} placeholder={t('اكتب رداً...')} className="flex-1 px-3 py-1.5 bg-gray-700 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none" onKeyDown={e => e.key === 'Enter' && addReply(comment.id)} />
+                            <div className="relative">
+                              <button onClick={() => setCEmoji(cEmoji === comment.id ? null : comment.id)} className="p-1.5 bg-gray-700 rounded-lg text-yellow-300" aria-label="إيموجي"><Smile size={14} /></button>
+                            </div>
                             <button onClick={() => addReply(comment.id)} className="p-1.5 bg-violet-600 rounded-lg hover:bg-violet-500">
                               <Send size={14} />
                             </button>
@@ -5375,8 +5509,11 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
               })}
             </div>
             <div className="p-3 border-t border-gray-800/50 flex gap-2">
-              <input value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="اكتب تعليقاً..." className="flex-1 px-4 py-2 bg-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500" onKeyDown={e => e.key === 'Enter' && addComment()} />
-              <button onClick={addComment} className="px-4 py-2 bg-violet-600 rounded-xl hover:bg-violet-500 transition-colors">
+              <input value={commentText} onChange={e => setCommentText(e.target.value)} placeholder={t('اكتب تعليقاً...')} className="flex-1 px-4 py-2 bg-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500" onKeyDown={e => e.key === 'Enter' && addComment()} />
+              <div className="relative">
+                <button onClick={() => setCEmoji(cEmoji === 'main' ? null : 'main')} className="px-3 py-2 bg-gray-800 rounded-xl text-yellow-300 h-full" aria-label="إيموجي"><Smile size={18} /></button>
+              </div>
+              <button onClick={() => addComment()} className="px-4 py-2 bg-violet-600 rounded-xl hover:bg-violet-500 transition-colors">
                 <Send size={16} />
               </button>
             </div>
@@ -5387,6 +5524,17 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         <UserListModal title={listModal.title} userIds={listModal.ids} users={users} onOpenProfile={onOpenProfile} onClose={() => setListModal(null)} />
       )}
       {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}
+      {cEmoji && createPortal(
+        <div dir="rtl" className="fixed inset-x-0 bottom-0 z-[140] bg-gray-900 border-t border-white/10">
+          <EmojiPicker
+            docked
+            onPick={em => (cEmoji === 'main' ? setCommentText(t => t + em) : setReplyText(t => t + em))}
+            onClose={() => setCEmoji(null)}
+            onSticker={st => { void sendCommentSticker(st, cEmoji === 'main' ? null : cEmoji); }}
+          />
+        </div>,
+        document.body,
+      )}
     </motion.div>
   );
 }
@@ -5434,6 +5582,17 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
   const toggleFollow = makeToggleFollow(currentUser, setUsers);
   const isFollowing = currentUser.following.includes(author.id);
   const [shareOpen, setShareOpen] = useState(false);
+  const isSaved = post.bookmarks.includes(currentUser.id);
+  const toggleSave = async () => {
+    const me = currentUser.id;
+    const was = isSaved;
+    const apply = (on: boolean) => setPosts(prev => prev.map(p => (p.id === post.id ? { ...p, bookmarks: on ? [...p.bookmarks.filter(i => i !== me), me] : p.bookmarks.filter(i => i !== me) } : p)));
+    apply(!was);
+    const { error } = was
+      ? await supabase.from('bookmarks').delete().eq('post_id', post.id).eq('user_id', me)
+      : await supabase.from('bookmarks').insert({ post_id: post.id, user_id: me });
+    if (error) apply(was);
+  };
 
   // Play only the reel that is on screen.
   useEffect(() => {
@@ -5529,6 +5688,12 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
           <span className="text-xs text-white mt-1 font-medium">{commentCount > 0 ? commentCount : ''}</span>
         </div>
         <div className="flex flex-col items-center">
+          <button onClick={() => void toggleSave()} className={`p-2.5 rounded-full bg-black/40 active:scale-90 ${isSaved ? 'text-yellow-400' : 'text-white'}`} aria-label="حفظ">
+            <BookmarkIcon size={25} className={isSaved ? 'fill-yellow-400' : ''} />
+          </button>
+          <span className="text-xs text-white mt-1 font-medium">{isSaved ? 'محفوظ' : 'حفظ'}</span>
+        </div>
+        <div className="flex flex-col items-center">
           <button onClick={() => setShareOpen(true)} className="p-2.5 rounded-full bg-black/40 text-white active:scale-90" aria-label="مشاركة">
             <Share2 size={24} />
           </button>
@@ -5548,7 +5713,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
               onClick={() => toggleFollow(author.id)}
               className={`shrink-0 px-3.5 py-1 rounded-full text-xs font-semibold active:scale-95 transition-all ${isFollowing ? 'bg-white/15 text-white border border-white/25 backdrop-blur' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-md shadow-violet-500/30'}`}
             >
-              {isFollowing ? 'متابَع' : 'متابعة'}
+              {isFollowing ? t('متابَع') : t('متابعة')}
             </button>
           )}
         </div>
@@ -5630,7 +5795,7 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
                       <button onClick={() => remove(r.id)} className="mr-auto text-gray-500 hover:text-red-400" aria-label="حذف"><Trash2 size={13} /></button>
                     )}
                   </div>
-                  <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">{r.text}</p>
+                  <CommentText text={r.text} cls="text-sm text-gray-200 whitespace-pre-wrap break-words" />
                 </div>
               </div>
             );
@@ -5641,7 +5806,7 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && add()}
-            placeholder="اكتب تعليقاً..."
+            placeholder={t('اكتب تعليقاً...')}
             className="flex-1 min-w-0 w-full px-3 min-[400px]:px-4 py-2.5 bg-gray-800 rounded-full text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
           <button onClick={add} className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white" aria-label="إرسال"><Send size={18} /></button>
@@ -5652,7 +5817,8 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
   );
 }
 
-function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile, onCreate, onLoadPage, onBack }: {
+function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile, onCreate, onLoadPage, onBack, startId }: {
+  startId: string | null;
   onBack: () => void;
   posts: Post[];
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
@@ -5688,6 +5854,16 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
     if (reels.length < 5) void loadMore();
   }, []);
 
+  // Coming from a reel on the home feed: jump straight to it.
+  useEffect(() => {
+    if (!startId) return;
+    const go = () => document.getElementById(`reel-${startId}`)?.scrollIntoView({ block: 'start', behavior: 'instant' as ScrollBehavior });
+    go();
+    const r = requestAnimationFrame(go);
+    const t = window.setTimeout(go, 150);
+    return () => { cancelAnimationFrame(r); window.clearTimeout(t); };
+  }, [startId, reels.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (reels.length === 0 && hasMore) {
     return <div className="py-20 text-center text-gray-500 text-sm">جارٍ التحميل...</div>;
   }
@@ -5716,7 +5892,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
           const author = users.find(u => u.id === post.userId);
           if (!author) return null;
           return (
-            <div key={post.id} className="h-full">
+            <div key={post.id} id={`reel-${post.id}`} className="h-full">
               <ReelItem
                 post={post}
                 author={author}
@@ -5810,7 +5986,7 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-6 sm:px-4 pb-6">
       <div>
         <button onClick={onBack} className="flex items-center gap-1 text-gray-400 hover:text-white text-sm px-4 sm:px-0 py-3">
-          <ChevronRight size={18} /> رجوع
+          <ChevronRight size={18} /> {t('رجوع')}
         </button>
         <div className="aspect-video w-full bg-black sm:rounded-xl overflow-hidden">
           <VideoPlayer key={post.id} src={post.media!.url} poster={post.coverUrl} autoPlay className="w-full h-full object-contain" />
@@ -5832,7 +6008,7 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
                   onClick={() => toggleFollow(author.id)}
                   className={`mr-auto px-4 py-1.5 rounded-full text-sm font-medium ${isFollowing ? 'bg-gray-800 text-gray-300' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}
                 >
-                  {isFollowing ? 'متابَع' : 'متابعة'}
+                  {isFollowing ? t('متابَع') : t('متابعة')}
                 </button>
               )}
             </div>
@@ -6026,6 +6202,8 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
   const [posting, setPosting] = useState(false);
   const [postPct, setPostPct] = useState(0);
   const [extra, setExtra] = useState<File[]>([]);
+  const [music, setMusic] = useState<File | null>(null);
+  const musicRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
   const videoOnly = kind !== 'post';
@@ -6092,7 +6270,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
     if (posting) return;
     if (videoOnly && media?.type !== 'video') { setError(kind === 'reel' ? 'اختر فيديو لنشره كريل' : 'اختر الفيديو أولاً'); return; }
     if (kind === 'video' && !title.trim()) { setError('اكتب عنواناً للفيديو'); return; }
-    if (!text.trim() && !media) { setError('اكتب شيئاً أو أضف صورة أو فيديو أو ملف'); return; }
+    if (!text.trim() && !media && !music) { setError('اكتب شيئاً أو أضف صورة أو فيديو أو ملف'); return; }
     setPosting(true);
     setPostPct(0);
     setError('');
@@ -6124,6 +6302,14 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       if (media) mediaUrl = results[0];
       const extraMedia: { type: 'image' | 'video' | 'file'; url: string; name: string; size: number }[] =
         files.slice(offset).map((f, k) => ({ type: detectMediaKind(f), url: results[offset + k], name: f.name.slice(0, 200), size: f.size }));
+      let musicItem: { type: 'file'; url: string; name: string; size: number } | null = null;
+      if (music) {
+        const mp = `${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`;
+        const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
+        if (mErr) throw mErr;
+        uploaded.push(mp);
+        musicItem = { type: 'file', url: supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(mp).data.publicUrl, name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size };
+      }
       if (kind === 'video' && cover) {
         const coverPath = `${currentUser.id}/${crypto.randomUUID()}-cover.${cover.blob.type === 'image/png' ? 'png' : cover.blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
         const { error: coverErr } = await supabase.storage
@@ -6146,7 +6332,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         is_video: kind === 'video',
         title: kind === 'video' ? title.trim().slice(0, 120) : null,
         cover_url: coverUrl,
-        media_extra: extraMedia,
+        media_extra: musicItem ? [...extraMedia, musicItem] : extraMedia,
       });
       if (insErr) throw insErr;
       const newPost: Post = {
@@ -6157,6 +6343,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         title: kind === 'video' ? title.trim().slice(0, 120) : undefined,
         coverUrl: coverUrl ?? undefined,
         extraMedia: extraMedia.length > 0 ? extraMedia : undefined,
+        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10) } : undefined,
         cursor: new Date().toISOString(),
         timestamp: Date.now(), likes: [], comments: [], bookmarks: [],
       };
@@ -6167,6 +6354,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       setTitle('');
       setMedia(null);
       setExtra([]);
+      setMusic(null);
       // Everything you publish shows up on the home feed first.
       setActiveTab('feed');
     } catch (e) {
@@ -6178,7 +6366,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
     }
   };
 
-  const heading = kind === 'reel' ? 'ريل جديد' : kind === 'video' ? 'فيديو جديد' : 'منشور جديد';
+  const heading = kind === 'reel' ? t('ريل جديد') : kind === 'video' ? t('فيديو جديد') : t('منشور جديد');
 
   return (
     <div className="px-4 py-4">
@@ -6207,7 +6395,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
           <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="md" />
           <textarea
             value={text} onChange={e => setText(e.target.value)}
-            placeholder={kind === 'reel' ? 'اكتب وصفاً للريل...' : kind === 'video' ? 'وصف الفيديو (اختياري)...' : 'ماذا يدور في ذهنك؟'} rows={4}
+            placeholder={kind === 'reel' ? 'اكتب وصفاً للريل...' : kind === 'video' ? 'وصف الفيديو (اختياري)...' : t('ماذا يدور في ذهنك؟')} rows={4}
             className="flex-1 bg-transparent text-white placeholder-gray-500 focus:outline-none resize-none text-lg"
           />
         </div>
@@ -6263,6 +6451,13 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
             </div>
           </div>
         )}
+        {music && (
+          <div className="mb-4 flex items-center gap-3 p-2.5 rounded-xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25">
+            <span className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white shrink-0"><Music size={16} /></span>
+            <div className="min-w-0 flex-1"><div className="text-sm text-white truncate" dir="auto">{music.name}</div><div className="text-[11px] text-gray-400">موسيقى المنشور · {formatBytes(music.size)}</div></div>
+            <button onClick={() => setMusic(null)} className="p-1.5 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
+          </div>
+        )}
         {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
         <div className="flex items-center justify-between border-t border-gray-800 pt-3">
           <div className="flex items-center gap-2">
@@ -6280,6 +6475,10 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
                 <Paperclip size={20} />
               </button>
             )}
+            <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (!f.type.startsWith('audio/') && !/\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(f.name)) { setError('اختر ملف صوت'); return; } if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); }} />
+            <button onClick={() => musicRef.current?.click()} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${music ? 'text-fuchsia-300' : 'text-fuchsia-400'}`} aria-label="موسيقى">
+              <Music size={20} />
+            </button>
             <div className="relative">
               <button onClick={() => setEmojiOpen(o => !o)} className="p-2 text-yellow-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="إيموجي">
                 <Smile size={20} />
@@ -6316,7 +6515,7 @@ function SearchTab({ users, currentUser, setUsers, onStartChat, onOpenProfile }:
     <div className="px-4 py-4">
       <div className="relative mb-6">
         <Search size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500" />
-        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="ابحث عن أشخاص..." className="w-full pr-12 pl-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-violet-500" />
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('ابحث عن أشخاص...')} className="w-full pr-12 pl-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-violet-500" />
       </div>
       <div className="space-y-3">
         {filtered.length === 0 && (
@@ -6342,7 +6541,7 @@ function SearchTab({ users, currentUser, setUsers, onStartChat, onOpenProfile }:
                   <MessageSquare size={18} />
                 </button>
                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => toggleFollow(user.id)} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${isFollowing ? 'bg-gray-800 text-gray-300 hover:bg-red-500/20 hover:text-red-400' : 'bg-violet-600 text-white hover:bg-violet-500'}`}>
-                  {isFollowing ? 'متابَع' : 'متابعة'}
+                  {isFollowing ? t('متابَع') : t('متابعة')}
                 </motion.button>
               </div>
             </motion.div>
@@ -6518,7 +6717,7 @@ function UserProfile({ userId, currentUser, users, posts, setUsers, setPosts, on
 
   const backButton = (
     <button onClick={onBack} className="flex items-center gap-1 text-gray-400 hover:text-white mb-3 text-sm">
-      <ChevronRight size={18} /> رجوع
+      <ChevronRight size={18} /> {t('رجوع')}
     </button>
   );
 
@@ -6556,7 +6755,7 @@ function UserProfile({ userId, currentUser, users, posts, setUsers, setPosts, on
         </div>
         <div className="flex gap-2 mt-4">
           <motion.button whileTap={{ scale: 0.95 }} onClick={() => toggleFollow(user.id)} className={`flex-1 py-2 rounded-full text-sm font-medium transition-all ${isFollowing ? 'bg-gray-800 text-gray-300 hover:bg-red-500/20 hover:text-red-400' : 'bg-violet-600 text-white hover:bg-violet-500'}`}>
-            {isFollowing ? 'متابَع' : 'متابعة'}
+            {isFollowing ? t('متابَع') : t('متابعة')}
           </motion.button>
           <button onClick={() => onStartChat(user.id)} className="px-5 py-2 rounded-full text-sm font-medium bg-gray-800 text-cyan-400 hover:bg-gray-700 flex items-center gap-2">
             <MessageSquare size={16} /> راسل
@@ -6749,7 +6948,7 @@ function LikeStylePicker() {
   ];
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-      <div className="text-sm font-semibold text-white mb-1">شكل الإعجاب</div>
+      <div className="text-sm font-semibold text-white mb-1">{t('شكل الإعجاب')}</div>
       <p className="text-xs text-gray-400 mb-3">يظهر عند الضغط مرتين على المنشور أو الرسالة</p>
       <div className="grid grid-cols-3 gap-2">
         {opts.map(o => (
@@ -6762,6 +6961,19 @@ function LikeStylePicker() {
       </div>
       <div className="relative h-36 mt-3 rounded-xl bg-black/20 border border-white/5 overflow-hidden">
         {demo > 0 ? <CoinBurst key={demo} /> : <p className="absolute inset-0 flex items-center justify-center text-xs text-gray-500">اختر شكلاً لمعاينته</p>}
+      </div>
+    </div>
+  );
+}
+
+function LangPicker() {
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+      <div className="text-sm font-semibold text-white mb-3">{t('اللغة')} / Language</div>
+      <div className="grid grid-cols-2 gap-2">
+        {([['ar', 'العربية'], ['en', 'English']] as const).map(([id, label]) => (
+          <button key={id} onClick={() => { if (id !== LANG) setLangStored(id); }} className={`rounded-xl border py-2.5 text-sm font-semibold active:scale-95 transition-transform ${LANG === id ? 'border-violet-400 bg-violet-500/15 text-white' : 'border-white/10 bg-white/5 text-gray-300'}`}>{label}</button>
+        ))}
       </div>
     </div>
   );
@@ -6838,11 +7050,12 @@ function SettingsTab({ currentUser, setUsers }: {
 
   return (
     <div className="px-4 py-4 space-y-4">
-      <h2 className="text-xl font-bold text-white">الإعدادات</h2>
+      <h2 className="text-xl font-bold text-white">{t('الإعدادات')}</h2>
       <LikeStylePicker />
       <RingStylePicker />
+      <LangPicker />
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-        <div className="text-sm font-semibold text-white mb-1">المظهر</div>
+        <div className="text-sm font-semibold text-white mb-1">{t('المظهر')}</div>
         <p className="text-xs text-gray-400 mb-3">اختر الثيم الذي يريحك</p>
         <div className="grid grid-cols-3 gap-2.5">
           {([
@@ -6903,13 +7116,13 @@ function SettingsTab({ currentUser, setUsers }: {
         </div>
         {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
         <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSave} className="w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-xl text-white font-medium flex items-center justify-center gap-2">
-          {saved ? <><Check size={18} /> تم الحفظ</> : 'حفظ التغييرات'}
+          {saved ? <><Check size={18} /> {t('تم الحفظ')}</> : t('حفظ التغييرات')}
         </motion.button>
       </div>
       <InstallCard />
       <NotificationSettings />
       <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => { void (async () => { await detachPush(); await supabase.auth.signOut(); })(); }} className="w-full py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 font-medium flex items-center justify-center gap-2">
-        <LogOut size={18} /> تسجيل الخروج
+        <LogOut size={18} /> {t('تسجيل الخروج')}
       </motion.button>
     </div>
   );
@@ -6983,13 +7196,13 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
   return (
     <div className="px-4 py-4">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-white">المراسلة</h2>
+        <h2 className="text-xl font-bold text-white">{t('المراسلة')}</h2>
         <button onClick={() => setCreatingGroup(true)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-xs font-semibold shadow-lg shadow-violet-500/25 active:scale-95 transition-transform">
-          <Plus size={15} /> مجموعة جديدة
+          <Plus size={15} /> {t('مجموعة جديدة')}
         </button>
       </div>
       <div className="grid grid-cols-2 gap-1 p-1 mb-4 rounded-full bg-gray-900 border border-gray-800">
-        {([['direct', 'الرسائل', directUnread], ['groups', 'المجموعات', groupsUnread]] as const).map(([key, label, count]) => (
+        {([['direct', t('الرسائل'), directUnread], ['groups', t('المجموعات'), groupsUnread]] as const).map(([key, label, count]) => (
           <button key={key} onClick={() => setSection(key)} className={`relative py-2 rounded-full text-sm font-medium transition-all ${section === key ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-md shadow-violet-500/25' : 'text-gray-400 hover:text-white'}`}>
             {label}
             {count > 0 && <span className={`mr-1.5 inline-flex min-w-[18px] h-[18px] px-1 items-center justify-center rounded-full text-[10px] font-bold ${section === key ? 'bg-white/25 text-white' : 'bg-violet-500 text-white'}`}>{count > 9 ? '9+' : count}</span>}
@@ -7558,8 +7771,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [text, setText] = useState('');
   const [media, setMedia] = useState<{ type: 'image' | 'video' | 'file'; url: string; file: File } | null>(null);
   const [queue, setQueue] = useState<File[]>([]);
-  const [upload, setUpload] = useState<UploadState | null>(null);
-  const keepProgress = useRef(false);
+  const [ups, setUps] = useState<Record<string, number>>({});
+  const trackUp = (key: string, pct: number | null) => setUps(u => { const n = { ...u }; if (pct === null) delete n[key]; else n[key] = pct; return n; });
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
@@ -7580,7 +7793,6 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const inputRef = useRef<HTMLInputElement>(null);
   const [recording, setRecording] = useState(false);
   const [showBgPicker, setShowBgPicker] = useState(false);
-  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState('');
@@ -7688,82 +7900,71 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     return id;
   };
 
+  // Instant sending: the message appears at once; upload and save happen in the background (removed again only if they fail).
   const send = async (opts: { text?: string; file?: Blob; mediaType?: 'image' | 'video' | 'voice' | 'file'; duration?: number; fileName?: string; replyToId?: string }): Promise<boolean> => {
     const body = (opts.text ?? '').trim();
     if (!body && !opts.file) return false;
-    if (sending) return false;
-    setSending(true);
     setError('');
-    let path: string | null = null;
+    let convId: string;
     try {
-      const convId = await ensureConversation();
-      if (opts.file) {
-        const ext = CHAT_EXT[opts.file.type] ?? safeExt(opts.fileName);
-        path = `${convId}/${crypto.randomUUID()}.${ext}`;
-        setUpload(u => u ?? { done: 0, total: 1, pct: 0 });
-        const { error: upErr } = await uploadWithProgress(CHAT_MEDIA_BUCKET, path, opts.file, opts.file.type || 'application/octet-stream', '3600', pct => setUpload(u => (u ? { ...u, pct } : u)));
-        if (upErr) throw upErr;
-      }
-      const id = crypto.randomUUID();
-      const { error: insErr } = await supabase.from('messages').insert({
-        id,
-        conversation_id: convId,
-        sender_id: currentUser.id,
-        text: body,
-        media_path: path,
-        media_type: opts.file ? opts.mediaType ?? null : null,
-        media_duration: opts.mediaType === 'voice' ? Math.round(opts.duration ?? 0) : null,
-        media_name: opts.file && opts.fileName ? opts.fileName.slice(0, 200) : null,
-        media_size: opts.file ? opts.file.size : null,
-        reply_to_id: opts.replyToId ?? null,
-      });
-      if (insErr) throw insErr;
-      const msg: Message = {
-        id, senderId: currentUser.id, text: body, timestamp: Date.now(), read: false,
-        replyToId: opts.replyToId,
-        media: opts.file && opts.mediaType
-          ? { type: opts.mediaType, url: URL.createObjectURL(opts.file), duration: opts.duration, name: opts.fileName, size: opts.file.size, path: path ?? undefined }
-          : undefined,
-      };
-      setConversations(prev => prev.map(c =>
-        c.id !== convId
-          ? c
-          : { ...c, messages: c.messages.some(m => m.id === id) ? c.messages : [...c.messages, msg], lastActivity: msg.timestamp }
-      ));
-      playSound('send');
-      return true;
+      convId = await ensureConversation();
     } catch (e) {
       console.error(e);
-      if (path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([path]);
       setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
       return false;
-    } finally {
-      setSending(false);
-      if (!keepProgress.current) setUpload(null);
     }
+    const id = crypto.randomUUID();
+    const path = opts.file ? `${convId}/${crypto.randomUUID()}.${CHAT_EXT[opts.file.type] ?? safeExt(opts.fileName)}` : null;
+    const msg: Message = {
+      id, senderId: currentUser.id, text: body, timestamp: Date.now(), read: false,
+      replyToId: opts.replyToId,
+      media: opts.file && opts.mediaType
+        ? { type: opts.mediaType, url: URL.createObjectURL(opts.file), duration: opts.duration, name: opts.fileName, size: opts.file.size, path: path ?? undefined }
+        : undefined,
+    };
+    setConversations(prev => prev.map(c =>
+      c.id !== convId ? c : { ...c, messages: c.messages.some(m => m.id === id) ? c.messages : [...c.messages, msg], lastActivity: msg.timestamp }
+    ));
+    playSound('send');
+    void (async () => {
+      try {
+        if (opts.file && path) {
+          const { error: upErr } = await uploadWithProgress(CHAT_MEDIA_BUCKET, path, opts.file, opts.file.type || 'application/octet-stream', '3600', pct => { if (opts.mediaType !== 'voice' && !isStickerName(opts.fileName)) trackUp(id, pct); });
+          trackUp(id, null);
+          if (upErr) throw upErr;
+        }
+        const { error: insErr } = await supabase.from('messages').insert({
+          id,
+          conversation_id: convId,
+          sender_id: currentUser.id,
+          text: body,
+          media_path: path,
+          media_type: opts.file ? opts.mediaType ?? null : null,
+          media_duration: opts.mediaType === 'voice' ? Math.round(opts.duration ?? 0) : null,
+          media_name: opts.file && opts.fileName ? opts.fileName.slice(0, 200) : null,
+          media_size: opts.file ? opts.file.size : null,
+          reply_to_id: opts.replyToId ?? null,
+        });
+        if (insErr) throw insErr;
+      } catch (e) {
+        console.error(e);
+        trackUp(id, null);
+        if (path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([path]);
+        setConversations(prev => prev.map(c => (c.id === convId ? { ...c, messages: c.messages.filter(m => m.id !== id) } : c)));
+        setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
+      }
+    })();
+    return true;
   };
 
   const sendMessage = async () => {
     if (!text.trim() && !media && queue.length === 0) return;
     const rest = queue;
-    const total = (media ? 1 : 0) + rest.length;
-    let done = 0;
-    keepProgress.current = true;
-    if (total > 0) setUpload({ done: 0, total, pct: 0 });
-    let ok = true;
-    if (text.trim() || media) {
-      ok = await send({ text, file: media?.file, mediaType: media?.type, fileName: media?.file.name, replyToId: replyingTo?.id });
-      if (ok) { if (media) done++; setText(''); setMedia(null); setReplyingTo(null); }
-    }
-    for (const f of ok ? rest : []) {
-      setUpload({ done, total, pct: 0 });
-      if (!(await send({ file: f, mediaType: detectMediaKind(f), fileName: f.name }))) break;
-      done++;
-      setQueue(q => q.filter(x => x !== f));
-    }
-    keepProgress.current = false;
-    setUpload(null);
+    const t = text, m = media, reply = replyingTo;
+    setText(''); setMedia(null); setReplyingTo(null); setQueue([]);
     inputRef.current?.focus();
+    if (t.trim() || m) await send({ text: t, file: m?.file, mediaType: m?.type, fileName: m?.file.name, replyToId: reply?.id });
+    for (const f of rest) void send({ file: f, mediaType: detectMediaKind(f), fileName: f.name });
   };
 
   const sendVoice = async (dataUrl: string, duration: number) => {
@@ -8191,7 +8392,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                     >
                       <Reply size={12} /> رد
                     </button>
-                    {msg.media && msg.media.type !== 'voice' && (
+                    {msg.media && msg.media.type !== 'voice' && !isStickerName(msg.media.name) && (
                       <button
                         onClick={() => { void downloadFile(msg.media!.url, msg.media!.name || (msg.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); setActiveMsgId(null); }}
                         className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"
@@ -8313,7 +8514,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
             )}
           </AnimatePresence>
           {queue.length > 0 && <QueueChip count={queue.length} onClear={() => setQueue([])} />}
-          {upload && <UploadBar upload={upload} />}
+            {Object.keys(ups).length > 0 && <UploadBar ups={ups} />}
           <div className="flex items-center gap-1.5">
             <button
               onPointerDown={e => e.preventDefault()}
@@ -8335,13 +8536,13 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               enterKeyHint="send"
               autoComplete="off"
               value={text} onChange={e => { setText(e.target.value); if (e.target.value) notifyTyping(); }}
-              placeholder="اكتب رسالة..."
+              placeholder={t('اكتب رسالة...')}
               className="flex-1 min-w-0 h-10 px-4 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
               onFocus={() => setEmojiOpen(false)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             />
             {text.trim() || media || queue.length > 0 ? (
-              <motion.button whileTap={{ scale: 0.9 }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={sendMessage} disabled={sending} aria-label="إرسال" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30 disabled:opacity-60">
+              <motion.button whileTap={{ scale: 0.9 }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={sendMessage} aria-label="إرسال" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30 disabled:opacity-60">
                 <Send size={18} className="text-white" />
               </motion.button>
             ) : (

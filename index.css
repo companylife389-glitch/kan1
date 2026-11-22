@@ -190,3 +190,28 @@ html[data-theme='light'] ::-webkit-scrollbar-thumb { background: #cfcfdc; }
 
 /* Small text stays readable: never thin. */
 .text-xs, [class*='text-[9px]'], [class*='text-[10px]'], [class*='text-[11px]'], [class*='text-[12px]'] { font-weight: 500; }
+
+
+/* Dark theme, Instagram style: no card boxes, just content on black with a hairline between posts. */
+html[data-theme='dark'] .post-card,
+html[data-theme='dark'] [class~='bg-gray-900'][class~='border-gray-800'][class~='rounded-2xl'] {
+  background: transparent;
+  border-color: transparent;
+  border-bottom: 1px solid #1c1c1e;
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-theme='dark'] header, html[data-theme='dark'] nav { background-color: rgba(0, 0, 0, 0.92) !important; }
+
+
+/* Smoothness: GPU-friendly scrolling, instant tap response, cheaper offscreen rendering. */
+html { -webkit-tap-highlight-color: transparent; text-size-adjust: 100%; }
+body { overscroll-behavior-y: none; }
+button, a, [role='button'] { touch-action: manipulation; }
+button:active:not(:disabled) { transform: scale(0.97); }
+.overflow-y-auto, .overflow-auto { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+img, video { -webkit-user-drag: none; }
+img { content-visibility: auto; }
+.post-card { content-visibility: auto; contain-intrinsic-size: auto 520px; }
+button, a { transition-property: color, background-color, border-color, opacity, box-shadow, transform; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } button:active:not(:disabled) { transform: none; } }
