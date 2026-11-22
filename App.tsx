@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home, Search, PlusCircle, User, Settings, LogOut, Heart,
   MessageCircle, Send, Image as ImageIcon, Video, Trash2,
-  Reply, ChevronRight, Users,
+  Reply, ChevronRight, ChevronLeft, Users,
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
@@ -172,8 +172,39 @@ function saveData(key: string, data: unknown): boolean {
 }
 
 // ============ Avatar Component ============
-function Avatar({ src, name, size = 'md', zoom = false }: { src: string; name: string; size?: 'sm' | 'md' | 'lg' | 'xl'; zoom?: boolean }) {
+// ============ Story ring on pictures (everywhere), configurable in Settings ============
+type RingStyle = 'kan' | 'insta' | 'green' | 'off';
+const RING_BG: Record<Exclude<RingStyle, 'off'>, string> = {
+  kan: 'linear-gradient(135deg,#7c3aed,#d946ef,#06b6d4)',
+  insta: 'linear-gradient(45deg,#facc15,#f43f5e,#a21caf)',
+  green: 'linear-gradient(135deg,#22c55e,#10b981)',
+};
+const getRingStyle = (): RingStyle => {
+  try { const v = localStorage.getItem('kan_story_ring'); return v === 'insta' || v === 'green' || v === 'off' ? v : 'kan'; } catch { return 'kan'; }
+};
+const setRingStyleStored = (v: RingStyle) => {
+  try { localStorage.setItem('kan_story_ring', v); } catch { /* ignore */ }
+  window.dispatchEvent(new Event('kan-ring-style'));
+};
+// user id -> 'new' (unseen story) | 'seen'
+let storyRings = new Map<string, 'new' | 'seen'>();
+const ringListeners = new Set<() => void>();
+const setStoryRings = (m: Map<string, 'new' | 'seen'>) => { storyRings = m; ringListeners.forEach(f => f()); };
+function useStoryRing(userId: string | undefined): { state: 'new' | 'seen' | null; style: RingStyle } {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const f = () => force(n => n + 1);
+    ringListeners.add(f);
+    window.addEventListener('kan-ring-style', f);
+    return () => { ringListeners.delete(f); window.removeEventListener('kan-ring-style', f); };
+  }, []);
+  return { state: userId ? storyRings.get(userId) ?? null : null, style: getRingStyle() };
+}
+
+function Avatar({ src, name, size = 'md', zoom = false, noRing = false, userId }: { src: string; name: string; size?: 'sm' | 'md' | 'lg' | 'xl'; zoom?: boolean; noRing?: boolean; userId?: string }) {
   const [open, setOpen] = useState(false);
+  const ring = useStoryRing(noRing ? undefined : userId);
+  const showRing = ring.state !== null && ring.style !== 'off';
   const sizes = {
     sm: 'w-7 h-7 text-xs',
     md: 'w-10 h-10 text-base',
@@ -187,10 +218,14 @@ function Avatar({ src, name, size = 'md', zoom = false }: { src: string; name: s
   ];
 
   const colorIndex = name.charCodeAt(0) % bgColors.length;
+  // The coloured ring is decided per person (user id), so it works for pictures and for initials alike.
+  const wrap = (node: React.ReactNode) => (showRing ? (
+    <div className="rounded-full p-[2px] flex-shrink-0" style={{ background: ring.state === 'new' && ring.style !== 'off' ? RING_BG[ring.style] : '#4b5563' }}>{node}</div>
+  ) : node);
 
   if (src) {
-    const picture = (
-      <div className={`${sizes[size]} rounded-full overflow-hidden flex-shrink-0 border-2 border-gray-700`}>
+    const picture = wrap(
+      <div className={`${sizes[size]} rounded-full overflow-hidden flex-shrink-0 border-2 ${showRing ? 'border-gray-950' : 'border-gray-700'}`}>
         <img src={src} alt={name} className="w-full h-full object-cover" />
       </div>
     );
@@ -205,8 +240,8 @@ function Avatar({ src, name, size = 'md', zoom = false }: { src: string; name: s
     );
   }
 
-  return (
-    <div className={`${sizes[size]} rounded-full ${bgColors[colorIndex]} flex items-center justify-center flex-shrink-0 font-bold text-white`}>
+  return wrap(
+    <div className={`${sizes[size]} rounded-full ${bgColors[colorIndex]} flex items-center justify-center flex-shrink-0 font-bold text-white ${showRing ? 'border-2 border-gray-950' : ''}`}>
       {name.charAt(0).toUpperCase()}
     </div>
   );
@@ -1029,6 +1064,8 @@ function setTheme(t: ThemeKey) {
 applyTheme(getTheme());
 
 // Any screen can open a post (optionally scrolled to one comment); the App draws it.
+// Filled by App: last chat activity per person (used to list recent chats first when sharing).
+let recentChatActivity: () => Map<string, number> = () => new Map();
 let openPostHandler: (postId: string, commentId?: string) => void = () => undefined;
 function openPost(postId: string, commentId?: string) { openPostHandler(postId, commentId); }
 
@@ -1161,7 +1198,7 @@ function EditTextModal({ title, initial, initialTitle, maxLength, allowEmpty, on
 // One history entry (the "sentinel") sits above the real page. Pressing Back consumes it, we close the top
 // layer (or scroll Home to the top), then put the sentinel back. With nothing left to close, Back leaves the app.
 // The sentinel is added after the first tap, because browsers skip history entries made without any user interaction.
-interface BackLayer { id: number; close: () => void }
+interface BackLayer { id: number; prio: number; close: () => void }
 const backStack: BackLayer[] = [];
 let backSeq = 0;
 let backListening = false;
@@ -1200,14 +1237,18 @@ function ensureBackListener() {
 }
 
 // While `active`, this layer is on the back-button stack and onClose runs when Back is pressed.
-function useBackLayer(active: boolean, onClose: () => void) {
+// prio: higher closes first. Modals/viewers use the default (100); app screens use lower values so one Back
+// always undoes the most recent thing in order: sheet -> profile/post screen -> chat -> tab -> home.
+function useBackLayer(active: boolean, onClose: () => void, prio = 100) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
     ensureBackListener();
     if (!active) return;
-    const layer: BackLayer = { id: ++backSeq, close: () => closeRef.current() };
-    backStack.push(layer);
+    const layer: BackLayer = { id: ++backSeq, prio, close: () => closeRef.current() };
+    let at = backStack.length;
+    while (at > 0 && backStack[at - 1].prio > prio) at--;
+    backStack.splice(at, 0, layer);
     return () => {
       const i = backStack.indexOf(layer);
       if (i >= 0) backStack.splice(i, 1);
@@ -1215,32 +1256,66 @@ function useBackLayer(active: boolean, onClose: () => void) {
   }, [active]);
 }
 
-function ImageViewer({ src, name, onClose }: { src: string; name?: string; onClose: () => void }) {
+interface GalleryItem { src: string; name?: string; type?: 'image' | 'video' }
+// Full-screen viewer. With a `gallery` you can flip between photos/videos by swiping or with the arrows.
+function ImageViewer({ src, name, gallery, onClose }: { src: string; name?: string; gallery?: GalleryItem[]; onClose: () => void }) {
   useBackLayer(true, onClose);
+  const list: GalleryItem[] = gallery && gallery.length > 1 ? gallery : [{ src, name }];
+  const [idx, setIdx] = useState(Math.max(0, list.findIndex(g => g.src === src)));
   const [zoomed, setZoomed] = useState(false);
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const go = (d: number) => { setZoomed(false); setIdx(i => Math.min(list.length - 1, Math.max(0, i + d))); };
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') go(1);
+      else if (e.key === 'ArrowRight') go(-1);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [list.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cur = list[idx] ?? list[0];
   return createPortal(
     <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col" onClick={onClose}>
       <div className="flex items-center justify-between p-3" onClick={e => e.stopPropagation()}>
         <button onClick={onClose} className="p-2 rounded-full bg-white/10 text-white hover:bg-white/20" aria-label="إغلاق"><X size={20} /></button>
+        {list.length > 1 && <span className="text-white/80 text-sm tabular-nums">{idx + 1} / {list.length}</span>}
         <button
-          onClick={() => { void downloadFile(src, name || 'image.jpg'); }}
+          onClick={() => { void downloadFile(cur.src, cur.name || (cur.type === 'video' ? 'video.mp4' : 'image.jpg')); }}
           className="px-4 py-2 rounded-full bg-white/10 text-white hover:bg-white/20 text-sm flex items-center gap-2"
         >
           <Download size={16} /> تحميل
         </button>
       </div>
-      <div className={`flex-1 overflow-auto flex ${zoomed ? 'items-start justify-start' : 'items-center justify-center'}`}>
-        <img
-          src={src}
-          alt=""
-          onClick={e => { e.stopPropagation(); setZoomed(z => !z); }}
-          className={zoomed ? 'max-w-none cursor-zoom-out m-auto' : 'max-w-full max-h-full object-contain cursor-zoom-in'}
-        />
+      <div
+        className={`relative flex-1 overflow-auto flex ${zoomed ? 'items-start justify-start' : 'items-center justify-center'}`}
+        onTouchStart={e => { touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }}
+        onTouchEnd={e => {
+          const t = touch.current; touch.current = null;
+          if (!t || zoomed) return;
+          const dx = e.changedTouches[0].clientX - t.x;
+          const dy = e.changedTouches[0].clientY - t.y;
+          if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) go(dx < 0 ? 1 : -1);
+        }}
+      >
+        {cur.type === 'video' ? (
+          <video key={cur.src} src={cur.src} controls autoPlay playsInline onClick={e => e.stopPropagation()} className="max-w-full max-h-full" />
+        ) : (
+          <img
+            key={cur.src}
+            src={cur.src}
+            alt=""
+            draggable={false}
+            onClick={e => { e.stopPropagation(); setZoomed(z => !z); }}
+            className={zoomed ? 'max-w-none cursor-zoom-out m-auto' : 'max-w-full max-h-full object-contain cursor-zoom-in'}
+          />
+        )}
+        {list.length > 1 && !zoomed && (
+          <>
+            {idx > 0 && <button onClick={e => { e.stopPropagation(); go(-1); }} aria-label="السابق" className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center active:scale-90"><ChevronRight size={22} /></button>}
+            {idx < list.length - 1 && <button onClick={e => { e.stopPropagation(); go(1); }} aria-label="التالي" className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center active:scale-90"><ChevronLeft size={22} /></button>}
+          </>
+        )}
       </div>
     </div>,
     document.body
@@ -1470,9 +1545,10 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
 
   const link = postLink(post.id, comment?.id);
   const text = (comment ? `${comment.authorName}: ${comment.text}\n— ${author.displayName} (@${author.username}) على KAN` : postShareText(post, author)) + `\n${link}`;
+  const recent = recentChatActivity();
   const people = users
     .filter(u => u.id !== currentUser.id && (u.displayName + ' ' + u.username).toLowerCase().includes(q.trim().toLowerCase()))
-    .sort((a, b) => Number(currentUser.following.includes(b.id)) - Number(currentUser.following.includes(a.id)))
+    .sort((a, b) => (recent.get(b.id) ?? 0) - (recent.get(a.id) ?? 0) || Number(currentUser.following.includes(b.id)) - Number(currentUser.following.includes(a.id)))
     .slice(0, 40);
 
   const flash = (msg: string) => { setNote(msg); window.setTimeout(() => setNote(''), 1800); };
@@ -1620,7 +1696,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
               return (
                 <button key={u.id} onClick={() => void sendTo(u)} disabled={busy !== null || done} className="flex flex-col items-center gap-1.5 active:scale-90 transition-transform">
                   <span className="relative block">
-                    <Avatar src={u.avatar} name={u.displayName} size="lg" />
+                    <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="lg" />
                     {done && <span className="absolute inset-0 rounded-full bg-cyan-500/75 flex items-center justify-center"><Check size={22} className="text-white" /></span>}
                     {busy === u.id && <span className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center"><RefreshCw size={18} className="text-white animate-spin" /></span>}
                   </span>
@@ -1754,7 +1830,7 @@ function MemberPicker({ users, exclude, selected, onToggle, me }: {
           const on = selected.includes(u.id);
           return (
             <button key={u.id} onClick={() => onToggle(u.id)} className="w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 text-right">
-              <Avatar src={u.avatar} name={u.displayName} size="md" />
+              <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="md" />
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-white truncate">{u.displayName}</div>
                 <div className="text-xs text-gray-500 truncate">@{u.username}</div>
@@ -1933,7 +2009,7 @@ function GroupInfoSheet({ group, users, me, reload, onClose, onLeft }: {
           if (!u) return null;
           return (
             <div key={m.userId} className="flex items-center gap-3 px-1 py-2">
-              <Avatar src={u.avatar} name={u.displayName} size="md" zoom />
+              <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="md" zoom />
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-white truncate">{u.displayName}{u.id === me.id ? ' (أنت)' : ''}</div>
                 <div className="text-xs text-gray-500 truncate">@{u.username}</div>
@@ -2187,7 +2263,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             for (const r of m.reactions) reactionGroups.set(r.emoji, [...(reactionGroups.get(r.emoji) ?? []), r.userId]);
             return (
               <motion.div key={m.id} id={`gmsg-${m.id}`} data-unread={!mine && !m.readBy.includes(currentUser.id) ? '1' : undefined} data-mids={m.id} initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.18 }} className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
-                {!mine && (showName && sender ? <button onClick={e => { e.stopPropagation(); openUserProfile(sender.id); }} className="shrink-0 self-end"><Avatar src={sender.avatar} name={sender.displayName} size="sm" /></button> : <div className="w-7 shrink-0" />)}
+                {!mine && (showName && sender ? <button onClick={e => { e.stopPropagation(); openUserProfile(sender.id); }} className="shrink-0 self-end"><Avatar userId={sender.id} src={sender.avatar} name={sender.displayName} size="sm" /></button> : <div className="w-7 shrink-0" />)}
                 <div className={`max-w-[85%] sm:max-w-[75%] flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
                   {showName && sender && <button onClick={e => { e.stopPropagation(); openUserProfile(sender.id); }} className={`text-[11px] font-semibold mb-0.5 px-1 text-right ${nameColors[sender.displayName.charCodeAt(0) % nameColors.length]}`}>{sender.displayName}</button>}
                   <div
@@ -2273,7 +2349,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                       {seen.length === 0 && <div className="text-[11px] text-gray-500">لم يشاهدها أحد بعد</div>}
                       {seen.map(id => (
                         <div key={id} className="flex items-center gap-2 py-0.5">
-                          <Avatar src={person(id)?.avatar ?? ''} name={person(id)?.displayName ?? '؟'} size="sm" />
+                          <Avatar userId={id} src={person(id)?.avatar ?? ''} name={person(id)?.displayName ?? '؟'} size="sm" />
                           <span className="text-xs text-gray-200 truncate">{person(id)?.displayName ?? 'مستخدم'}</span>
                         </div>
                       ))}
@@ -2336,7 +2412,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
               <button
                 onPointerDown={e => e.preventDefault()}
                 onMouseDown={e => e.preventDefault()}
-                onClick={() => { if (emojiOpen) { setEmojiOpen(false); inputRef.current?.focus(); } else { setToolsOpen(false); inputRef.current?.blur(); setEmojiOpen(true); } }}
+                onClick={() => { if (emojiOpen) { setEmojiOpen(false); inputRef.current?.focus(); } else { setToolsOpen(false); inputRef.current?.blur(); setStickerStart(false); setEmojiOpen(true); } }}
                 className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors active:scale-90 ${emojiOpen ? 'bg-yellow-400/20 text-yellow-300' : 'bg-gray-800 text-gray-300 hover:text-white'}`}
                 aria-label="إيموجي"
               ><Smile size={20} /></button>
@@ -2369,7 +2445,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             <VoiceRecorder onSend={sendVoice} onCancel={() => setRecording(false)} />
           </div>
         )}
-        {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}
+        {viewer && <ImageViewer src={viewer.src} name={viewer.name} gallery={group.messages.flatMap(x => x.media && (x.media.type === 'image' || x.media.type === 'video') ? [{ src: x.media.url, name: x.media.name, type: x.media.type as 'image' | 'video' }] : [])} onClose={() => setViewer(null)} />}
         {aiOpen && (
           <KanAIModal
             messages={group.messages.filter(m => !m.isSystem).map(m => ({
@@ -2448,7 +2524,8 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
   );
 }
 
-function NotificationsTab({ currentUser, users, notifications, setNotifications, onOpenProfile, onOpenMine, onOpenGroup }: {
+function NotificationsTab({ currentUser, users, notifications, setNotifications, onOpenProfile, onOpenMine, onOpenGroup, soundOn, bannersOn, onToggleSound, onToggleBanners }: {
+  soundOn: boolean; bannersOn: boolean; onToggleSound: () => void; onToggleBanners: () => void;
   currentUser: User; users: User[];
   notifications: AppNotification[];
   setNotifications: React.Dispatch<React.SetStateAction<AppNotification[]>>;
@@ -2560,7 +2637,7 @@ function NotificationsTab({ currentUser, users, notifications, setNotifications,
         className={`w-full flex items-center gap-3 p-3 rounded-2xl border text-right transition-colors ${n.read ? 'bg-gray-900/60 border-white/5 hover:border-white/10' : 'bg-violet-500/10 border-violet-400/25 hover:border-violet-400/40'}`}
       >
         <div className="relative shrink-0">
-          <Avatar src={actor?.avatar ?? ''} name={actor?.displayName ?? '؟'} size="md" />
+          <Avatar userId={actor?.id} src={actor?.avatar ?? ''} name={actor?.displayName ?? '؟'} size="md" />
           <span className={`absolute -bottom-1 -left-1 w-5 h-5 rounded-full ${m.tint} text-white flex items-center justify-center ring-2 ring-gray-950`}>{m.icon}</span>
         </div>
         <div className="min-w-0 flex-1">
@@ -2578,6 +2655,12 @@ function NotificationsTab({ currentUser, users, notifications, setNotifications,
         <h2 className="text-xl font-bold text-white flex items-center gap-2"><Bell size={20} className="text-violet-300" /> الإشعارات</h2>
         <div className="flex items-center gap-1.5">
           {unread > 0 && <button onClick={() => void markAllRead()} className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-gray-300 hover:text-white">تحديد الكل كمقروء</button>}
+          <button onClick={onToggleSound} aria-label={soundOn ? 'إيقاف الصوت' : 'تشغيل الصوت'} aria-pressed={soundOn} className={`w-9 h-9 rounded-full flex items-center justify-center border border-white/10 bg-white/5 active:scale-90 transition-all ${soundOn ? 'text-cyan-300' : 'text-gray-500'}`}>
+            {soundOn ? <Volume2 size={17} /> : <VolumeX size={17} />}
+          </button>
+          <button onClick={onToggleBanners} aria-label={bannersOn ? 'إيقاف الإشعارات المنبثقة' : 'تشغيل الإشعارات المنبثقة'} aria-pressed={bannersOn} className={`w-9 h-9 rounded-full flex items-center justify-center border border-white/10 bg-white/5 active:scale-90 transition-all ${bannersOn ? 'text-violet-300' : 'text-gray-500'}`}>
+            {bannersOn ? <Bell size={17} /> : <BellOff size={17} />}
+          </button>
           <button onClick={() => setSettingsOpen(o => !o)} aria-label="إعدادات الإشعارات" className={`w-9 h-9 rounded-full flex items-center justify-center border transition-colors ${settingsOpen ? 'bg-violet-500/15 border-violet-400/30 text-violet-200' : 'bg-white/5 border-white/10 text-gray-300 hover:text-white'}`}>
             <Settings size={17} />
           </button>
@@ -2759,13 +2842,13 @@ function ProfileStoryAvatar({ user, currentUser, users }: { user: User; currentU
     return () => { off = true; window.removeEventListener('kan-stories-changed', load); };
   }, [user.id, currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (items.length === 0) return <Avatar src={user.avatar} name={user.displayName} size="xl" zoom />;
+  if (items.length === 0) return <Avatar noRing src={user.avatar} name={user.displayName} size="xl" zoom />;
   const unseen = user.id === currentUser.id || items.some(i => !seen.has(i.id));
   return (
     <>
       <button onClick={() => setOpen(true)} aria-label="عرض القصة" className="relative shrink-0 active:scale-95 transition-transform">
         <div className={`rounded-full p-[3px] ${unseen ? 'bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400' : 'bg-gray-700'}`}>
-          <div className="rounded-full bg-gray-950 p-[2px]"><Avatar src={user.avatar} name={user.displayName} size="xl" /></div>
+          <div className="rounded-full bg-gray-950 p-[2px]"><Avatar noRing src={user.avatar} name={user.displayName} size="xl" /></div>
         </div>
       </button>
       {open && (
@@ -2844,7 +2927,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
         <button onClick={() => (mine ? setOpenAt(0) : fileRef.current?.click())} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
           <div className="relative">
             <div className={`w-[62px] h-[62px] rounded-full p-[2.5px] ${mine ? 'bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400' : 'border-2 border-dashed border-violet-400/40'}`}>
-              <div className={`w-full h-full rounded-full overflow-hidden ${mine ? 'bg-gray-950 p-[2px]' : ''}`}><Avatar src={currentUser.avatar} name={currentUser.displayName} size="lg" /></div>
+              <div className={`w-full h-full rounded-full overflow-hidden ${mine ? 'bg-gray-950 p-[2px]' : ''}`}><Avatar noRing src={currentUser.avatar} name={currentUser.displayName} size="lg" /></div>
             </div>
             <span onClick={e => { e.stopPropagation(); fileRef.current?.click(); }} className="absolute -bottom-0.5 -left-0.5 w-6 h-6 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 text-white flex items-center justify-center ring-2 ring-gray-950 shadow-md"><Plus size={14} /></span>
           </div>
@@ -2856,7 +2939,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
           return (
             <button key={g.userId} onClick={() => setOpenAt(offset + i)} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
               <div className={`w-[62px] h-[62px] rounded-full p-[2.5px] ${unseen ? 'bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400' : 'bg-gray-700'}`}>
-                <div className="w-full h-full rounded-full bg-gray-950 p-[2px]"><div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"><Avatar src={u.avatar} name={u.displayName} size="lg" /></div></div>
+                <div className="w-full h-full rounded-full bg-gray-950 p-[2px]"><div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"><Avatar noRing src={u.avatar} name={u.displayName} size="lg" /></div></div>
               </div>
               <span className={`text-[11px] truncate w-full text-center ${unseen ? 'text-gray-200' : 'text-gray-500'}`}>{u.displayName}</span>
             </button>
@@ -2947,6 +3030,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
   onSeen: (id: string) => void; onChanged: () => void; onClose: () => void;
 }) {
   useBackLayer(true, onClose);
+  useEffect(() => () => { window.dispatchEvent(new Event('kan-stories-changed')); }, []);
   const [gi, setGi] = useState(startGroup);
   const [si, setSi] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -3126,7 +3210,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
         // A drag (swipe) is not a tap.
         if (Math.abs(e.clientX - downX.current) > 25 || Math.abs(e.clientY - downY.current) > 25) return;
         const rect = e.currentTarget.getBoundingClientRect();
-        if (e.clientX - rect.left > rect.width / 3) next(); else prev();
+        if (rect.right - e.clientX < rect.width / 3) prev(); else next();
       }}
       onPointerCancel={() => { window.clearTimeout(holdTimer.current); setPaused(false); }}
     >
@@ -3153,6 +3237,15 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
               onError={() => setProgress(1)}
             />
           )}
+        {/* Visible navigation: RTL, so the right arrow goes back and the left arrow goes forward. */}
+        {(gi > 0 || si > 0) && (
+          <button {...ignore} onClick={e => { e.stopPropagation(); prev(); }} aria-label="السابق" className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center active:scale-90 transition-transform">
+            <ChevronRight size={22} />
+          </button>
+        )}
+        <button {...ignore} onClick={e => { e.stopPropagation(); next(); }} aria-label="التالي" className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center active:scale-90 transition-transform">
+          <ChevronLeft size={22} />
+        </button>
         <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
         <div className="absolute inset-x-0 top-0 px-3 pt-[max(0.6rem,env(safe-area-inset-top))]">
           <div className="flex gap-1">
@@ -3164,7 +3257,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
           </div>
           <div className="flex items-center gap-2.5 mt-2.5" {...ignore}>
             <button onClick={() => author && openPerson(author.id)} className="flex items-center gap-2.5 flex-1 min-w-0 text-right active:opacity-80">
-              {author && <Avatar src={author.avatar} name={author.displayName} size="md" />}
+              {author && <Avatar noRing src={author.avatar} name={author.displayName} size="md" />}
               <div className="flex-1 min-w-0">
                 <div className="text-white text-sm font-semibold truncate">{isMine ? 'قصتك' : author?.displayName}</div>
                 <div className="text-white/70 text-[11px]">{formatTime(story.createdAt)}</div>
@@ -3226,7 +3319,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
               const u = users.find(x => x.id === id);
               return u ? (
                 <button key={id} onClick={() => openPerson(u.id)} className="w-full flex items-center gap-3 py-1.5 text-right rounded-xl hover:bg-white/5 active:bg-white/10 transition-colors">
-                  <Avatar src={u.avatar} name={u.displayName} size="md" />
+                  <Avatar noRing src={u.avatar} name={u.displayName} size="md" />
                   <span className="text-sm text-white flex-1 truncate">{u.displayName}</span>
                   {likers.includes(u.id) && <Heart size={15} className="fill-rose-500 text-rose-500 shrink-0" />}
                 </button>
@@ -3301,44 +3394,137 @@ function messageGestures(onReply: () => void, onLongPress: () => void) {
   };
 }
 
-function EmojiPicker({ onPick, onClose, docked = false }: { onPick: (emoji: string) => void; onClose: () => void; docked?: boolean }) {
+function EmojiPicker({ onPick, onClose, docked = false, onSticker, startOnStickers = false }: { onPick: (emoji: string) => void; onClose: () => void; docked?: boolean; onSticker?: (st: SavedSticker) => void; startOnStickers?: boolean }) {
   const [group, setGroup] = useState(0);
+  const [stk, setStk] = useState(!!onSticker && startOnStickers);
   return (
     <div dir="rtl" onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} className={docked ? 'kan-pop mt-2 w-full bg-gray-900/70 border-t border-white/10' : 'absolute bottom-full mb-2 right-0 z-30 w-72 max-w-[92vw] bg-gray-900 border border-gray-700 rounded-2xl shadow-xl'}>
       <div className="flex items-center justify-between px-2 pt-2 border-b border-gray-800">
         <div className="flex">
+          {onSticker && (
+            <button onClick={() => setStk(true)} className={`px-2.5 py-1.5 text-xs font-semibold rounded-t-lg ${stk ? 'bg-gray-800 text-cyan-300' : 'text-gray-400 hover:text-white'}`}>ملصقات</button>
+          )}
           {EMOJI_GROUPS.map((g, i) => (
-            <button key={g.icon} onClick={() => setGroup(i)} className={`px-2 py-1.5 text-lg rounded-t-lg ${i === group ? 'bg-gray-800' : 'opacity-60 hover:opacity-100'}`}>
+            <button key={g.icon} onClick={() => { setStk(false); setGroup(i); }} className={`px-2 py-1.5 text-lg rounded-t-lg ${!stk && i === group ? 'bg-gray-800' : 'opacity-60 hover:opacity-100'}`}>
               {g.icon}
             </button>
           ))}
         </div>
         <button onClick={onClose} className="p-1 text-gray-400 hover:text-white" aria-label="إغلاق"><X size={16} /></button>
       </div>
+      {stk && onSticker ? <StickerPane onSend={onSticker} /> : (
       <div className={`grid gap-0.5 p-2 overflow-y-auto overscroll-contain ${docked ? 'grid-cols-8 min-[420px]:grid-cols-10 sm:grid-cols-14 h-60' : 'grid-cols-8 max-h-52'}`}>
         {EMOJI_GROUPS[group].items.map(e => (
           <button key={e} onClick={() => onPick(e)} className="h-9 text-2xl rounded-lg hover:bg-gray-800 active:scale-125 transition-transform">{e}</button>
         ))}
       </div>
+      )}
     </div>
   );
 }
 
-// ============ Double-tap love: a gold coin stamped KAN ============
-function CoinBurst({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
-  const dim = size === 'lg' ? 'w-28 h-28 text-3xl' : 'w-14 h-14 text-base';
+// ============ Double-tap love: the burst follows the "like style" chosen in Settings ============
+type LikeStyle = 'heart' | 'coin' | 'flames';
+const getLikeStyle = (): LikeStyle => {
+  try { const v = localStorage.getItem('kan_like_style'); return v === 'heart' || v === 'flames' ? v : 'coin'; } catch { return 'coin'; }
+};
+const setLikeStyleStored = (v: LikeStyle) => {
+  try { localStorage.setItem('kan_like_style', v); } catch { /* ignore */ }
+  window.dispatchEvent(new Event('kan-like-style'));
+};
+function useLikeStyle(): LikeStyle {
+  const [v, setV] = useState<LikeStyle>(getLikeStyle);
+  useEffect(() => {
+    const on = () => setV(getLikeStyle());
+    window.addEventListener('kan-like-style', on);
+    return () => window.removeEventListener('kan-like-style', on);
+  }, []);
+  return v;
+}
+
+const KAN_GRAD = 'linear-gradient(135deg,#7c3aed,#06b6d4)';
+function GradHeart({ px, id }: { px: number; id: string }) {
   return (
-    <motion.div
-      initial={{ scale: 0.3, opacity: 0 }}
-      animate={{ scale: [0.3, 1.25, 1], opacity: [0, 1, 1, 0], rotateY: [-90, 0, 360] }}
-      transition={{ duration: 1, ease: 'easeOut' }}
-      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-    >
-      <div className={`${dim} rounded-full flex items-center justify-center font-extrabold tracking-wider text-white bg-gradient-to-br from-violet-600 via-violet-500 to-cyan-500 border-4 border-white/80 shadow-[0_0_34px_rgba(124,58,237,0.65)] ring-4 ring-cyan-400/30`}>
-        <span className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]">KAN</span>
-      </div>
-    </motion.div>
+    <svg width={px} height={px} viewBox="0 0 24 24" aria-hidden>
+      <defs><linearGradient id={id} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#7c3aed" /><stop offset="1" stopColor="#06b6d4" /></linearGradient></defs>
+      <path fill={`url(#${id})`} d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 2.6 4.5 6.3 4.5c2 0 3.5 1.1 4.2 2.4h3c.7-1.3 2.2-2.4 4.2-2.4 3.7 0 5.4 3.9 3.9 7.3C19.5 16.400 12 21 12 21z" transform="translate(0 .5)" />
+    </svg>
   );
+}
+
+// Coin broken into pieces that fly in and join into one coin.
+const COIN_PIECES = [
+  { clip: 'polygon(50% 50%, 0% 0%, 100% 0%)', from: { x: 0, y: -90, r: -50 } },
+  { clip: 'polygon(50% 50%, 100% 0%, 100% 100%)', from: { x: 90, y: 0, r: 60 } },
+  { clip: 'polygon(50% 50%, 100% 100%, 0% 100%)', from: { x: 0, y: 90, r: 40 } },
+  { clip: 'polygon(50% 50%, 0% 100%, 0% 0%)', from: { x: -90, y: 0, r: -60 } },
+];
+function CoinBurst({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
+  const style = useLikeStyle();
+  const big = size === 'lg';
+  const dim = big ? 112 : 56;
+  const k = big ? 1 : 0.5;
+  let inner: React.ReactNode;
+  if (style === 'heart') {
+    inner = (
+      <motion.div initial={{ scale: 0.2, opacity: 0 }} animate={{ scale: [0.2, 1.3, 1, 1.1, 1], opacity: [0, 1, 1, 1, 0] }} transition={{ duration: 0.95, ease: 'easeOut' }} style={{ filter: 'drop-shadow(0 0 16px rgba(124,58,237,.7))' }}>
+        <GradHeart px={dim} id={`gh-${size}`} />
+      </motion.div>
+    );
+  } else if (style === 'flames') {
+    const hearts = [{ x: -70, y: 40, d: 0 }, { x: 70, y: 40, d: 0.08 }, { x: 0, y: -60, d: 0.16 }];
+    inner = (
+      <div className="relative" style={{ width: dim, height: dim }}>
+        {hearts.map((h, i) => (
+          <motion.div key={i} className="absolute inset-0 flex items-center justify-center"
+            initial={{ x: h.x * k, y: h.y * k, scale: 0.5, opacity: 0 }}
+            animate={{ x: [h.x * k, h.x * k * 0.6, 0], y: [h.y * k, h.y * k * 0.6, 0], scale: [0.5, 0.8, i === 2 ? 1.25 : 0.4], opacity: [0, 1, i === 2 ? 1 : 0] }}
+            transition={{ duration: 0.95, delay: h.d, ease: 'easeInOut' }}
+            style={{ filter: 'drop-shadow(0 0 10px rgba(6,182,212,.8)) drop-shadow(0 0 14px rgba(124,58,237,.8))' }}>
+            <GradHeart px={dim * 0.6} id={`gf-${size}-${i}`} />
+            <motion.span className="absolute -top-2" animate={{ y: [0, -6, 0], opacity: [1, .6, 1] }} transition={{ duration: 0.4, repeat: 2 }} style={{ fontSize: dim * 0.28 }}>🔥</motion.span>
+          </motion.div>
+        ))}
+      </div>
+    );
+  } else {
+    inner = (
+      <div className="relative" style={{ width: dim, height: dim }}>
+        {COIN_PIECES.map((c, i) => (
+          <motion.div key={i} className="absolute inset-0"
+            initial={{ x: c.from.x * k, y: c.from.y * k, rotate: c.from.r, opacity: 0 }}
+            animate={{ x: [c.from.x * k, 0, 0], y: [c.from.y * k, 0, 0], rotate: [c.from.r, 0, 0], opacity: [0, 1, 1, 1, 0] }}
+            transition={{ duration: 1, ease: 'easeOut', times: [0, 0.55, 1] }}>
+            <div className="w-full h-full rounded-full flex items-center justify-center font-extrabold tracking-wider text-white border-4 border-white/80"
+              style={{ clipPath: c.clip, background: KAN_GRAD, boxShadow: '0 0 34px rgba(124,58,237,.6)', fontSize: dim * 0.27 }}>
+              <span className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]">KAN</span>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">{inner}</div>
+  );
+}
+
+// Big photos are scaled down (max 1920px) before upload: same look on a phone, a fraction of the time to publish.
+async function shrinkImage(file: File): Promise<File> {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 600 * 1024) return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1920 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k);
+    c.height = Math.round(bmp.height * k);
+    c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close();
+    const type = file.type === 'image/png' ? 'image/webp' : 'image/jpeg';
+    const blob = await new Promise<Blob | null>(res => c.toBlob(res, type, 0.85));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, '') + (type === 'image/webp' ? '.webp' : '.jpg'), { type });
+  } catch { return file; }
 }
 
 // Grabs a frame of a video file to use as its cover (null when the browser cannot decode the file).
@@ -3410,6 +3596,7 @@ function formatBytes(bytes?: number): string {
 // Short text shown when a message is quoted in a reply.
 function describeMessage(m: Message): string {
   if (m.text) return m.text;
+  if (isStickerName(m.media?.name)) return '🏷️ ملصق';
   switch (m.media?.type) {
     case 'image': return '📷 صورة';
     case 'video': return '🎥 فيديو';
@@ -3533,6 +3720,26 @@ export default function App() {
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
 
   const currentUser = users.find(u => u.id === currentUserId) || null;
+  useEffect(() => {
+    if (!currentUserId) { setStoryRings(new Map()); return; }
+    let off = false;
+    const load = async () => {
+      const { data } = await supabase.from('stories').select('id,user_id').gt('expires_at', new Date().toISOString()).limit(500);
+      const { data: v } = await supabase.from('story_views').select('story_id').eq('viewer_id', currentUserId).gt('viewed_at', new Date(Date.now() - 86400000).toISOString());
+      if (off) return;
+      const seen = new Set((v ?? []).map(x => (x as { story_id: string }).story_id));
+      const byUser = new Map<string, 'new' | 'seen'>();
+      for (const r of (data ?? []) as { id: string; user_id: string }[]) {
+        const unseen = r.user_id === currentUserId || !seen.has(r.id);
+        if (unseen || !byUser.has(r.user_id)) byUser.set(r.user_id, unseen ? 'new' : 'seen');
+      }
+      setStoryRings(byUser);
+    };
+    void load();
+    const t = window.setInterval(() => void load(), 60000);
+    window.addEventListener('kan-stories-changed', load);
+    return () => { off = true; window.clearInterval(t); window.removeEventListener('kan-stories-changed', load); };
+  }, [currentUserId]);
 
   // Keys that failed to persist (quota exceeded, storage disabled, ...)
   const [failedKeys, setFailedKeys] = useState<string[]>([]);
@@ -3650,9 +3857,6 @@ export default function App() {
     for (const table of ['profiles', 'follows', 'comments', 'post_likes', 'comment_likes']) {
       channel.on('postgres_changes', { event: '*', schema: 'public', table }, schedule);
     }
-    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, payload => {
-      if ((payload.new as { user_id?: string }).user_id !== currentUserId) setNewPostsCount(n => n + 1);
-    });
     channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'posts' }, payload => {
       const id = (payload.old as { id?: string }).id;
       if (id) setPosts(prev => prev.filter(p => p.id !== id));
@@ -3669,6 +3873,11 @@ export default function App() {
 
   const conversationsRef = useRef<Conversation[]>([]);
   conversationsRef.current = conversations;
+  recentChatActivity = () => {
+    const m = new Map<string, number>();
+    for (const c of conversationsRef.current) for (const id of c.participants) if (id !== currentUserId) m.set(id, Math.max(m.get(id) ?? 0, c.lastActivity));
+    return m;
+  };
 
   // Latest screen state for the live handlers (they live inside long-running subscriptions).
   const [toast, setToast] = useState<InAppToast | null>(null);
@@ -3970,9 +4179,9 @@ export default function App() {
     return () => document.removeEventListener('pointerdown', onDown);
   }, [menuOpen]);
   // Phone back button: profile -> chat -> tab -> home, like any app.
-  useBackLayer(currentUserId !== null && screens.length > 0, popScreen);
-  useBackLayer(currentUserId !== null && selectedChat !== null, () => setSelectedChat(null));
-  useBackLayer(currentUserId !== null && activeTab !== 'feed', () => setActiveTab('feed'));
+  useBackLayer(currentUserId !== null && screens.length > 0, popScreen, 30);
+  useBackLayer(currentUserId !== null && selectedChat !== null, () => setSelectedChat(null), 20);
+  useBackLayer(currentUserId !== null && activeTab !== 'feed', () => setActiveTab('feed'), 10);
   // Home, scrolled down: the phone's back button first takes you back to the top of the page.
   setBackFallback(() => {
     if (currentUserId !== null && activeTab === 'feed' && !viewedUserId && selectedChat === null && window.scrollY > 120) {
@@ -4088,23 +4297,6 @@ export default function App() {
                   transition={{ duration: 0.18, ease: 'easeOut' }}
                   className="flex items-center gap-0.5 p-1 ml-2 rounded-full bg-gray-900/80 backdrop-blur-md border border-white/10 shadow-lg shadow-black/30"
                 >
-                  <button
-                    onClick={toggleSoundQuick}
-                    aria-label={soundOn ? 'إيقاف الصوت' : 'تشغيل الصوت'}
-                    aria-pressed={soundOn}
-                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 ${soundOn ? 'text-cyan-300 hover:bg-white/10' : 'text-gray-500 hover:bg-white/10'}`}
-                  >
-                    {soundOn ? <Volume2 size={18} /> : <VolumeX size={18} />}
-                  </button>
-                  <button
-                    onClick={toggleBannersQuick}
-                    aria-label={bannersOn ? 'إيقاف الإشعارات المنبثقة' : 'تشغيل الإشعارات المنبثقة'}
-                    aria-pressed={bannersOn}
-                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 ${bannersOn ? 'text-violet-300 hover:bg-white/10' : 'text-gray-500 hover:bg-white/10'}`}
-                  >
-                    {bannersOn ? <Bell size={18} /> : <BellOff size={18} />}
-                  </button>
-                  <span className="w-px h-5 bg-white/10 mx-0.5" />
                   {([
                     { tab: 'notifications' as const, label: 'الإشعارات', Icon: Bell, badge: notifUnread },
                     { tab: 'messages' as const, label: 'الرسائل', Icon: MessageSquare, badge: unreadCount },
@@ -4223,6 +4415,7 @@ export default function App() {
                 onOpenProfile={openProfile}
                 onOpenMine={() => goTab('profile')}
                 onOpenGroup={id => { setOpenGroupId(id); goTab('messages'); }}
+                soundOn={soundOn} bannersOn={bannersOn} onToggleSound={toggleSoundQuick} onToggleBanners={toggleBannersQuick}
               />
             </motion.div>
           )}
@@ -4555,7 +4748,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
 }
 
 // ============ Feed ============
-function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, hasMore, loading, newCount, onRefresh, onLoadMore }: {
+function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, hasMore, loading, onRefresh, onLoadMore }: {
   posts: Post[];
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
   users: User[];
@@ -4659,11 +4852,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
               <RefreshCw size={18} className={`text-violet-300 ${refreshing ? 'animate-spin' : ''}`} style={refreshing ? undefined : { transform: `rotate(${pull * 4}deg)` }} />
             </div>
           </div>
-          {newCount > 0 && !refreshing && pull === 0 && (
-            <button onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); void doRefresh(); }} className="fixed top-[68px] left-1/2 -translate-x-1/2 z-40 px-4 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-xs font-semibold shadow-lg shadow-violet-900/40 flex items-center gap-1.5 active:scale-95 transition-transform">
-              <RefreshCw size={12} /> منشورات جديدة
-            </button>
-          )}
+          {/* New posts never appear by themselves: pull down (or tap Home twice) to refresh. */}
         </>,
         document.body,
       )}
@@ -4699,29 +4888,49 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
 }
 
 // ============ Post Card ============
-function PostAlbum({ items }: { items: NonNullable<Post['extraMedia']> }) {
-  const [downloading, setDownloading] = useState(false);
+// Instagram-style carousel: swipe sideways through every photo / video / file of the post.
+function PostCarousel({ items, poster, onTap }: { items: NonNullable<Post['extraMedia']>; poster?: string; onTap?: (open: () => void) => void }) {
   const [viewer, setViewer] = useState<{ src: string; name?: string } | null>(null);
+  const [cur, setCur] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+  const gallery: GalleryItem[] = items.filter(m => m.type !== 'file').map(m => ({ src: m.url, name: m.name, type: m.type as 'image' | 'video' }));
+  const onScroll = () => {
+    const el = ref.current;
+    if (el && el.clientWidth) setCur(Math.round(el.scrollLeft / el.clientWidth));
+  };
+  const jump = (i: number) => ref.current?.scrollTo({ left: i * (ref.current?.clientWidth ?? 0), behavior: 'smooth' });
   return (
-    <div className="mt-3">
-      <div className="grid grid-cols-2 gap-1.5">
+    <div className="relative">
+      <div ref={ref} dir="ltr" onScroll={onScroll} className="flex overflow-x-auto snap-x snap-mandatory rounded-xl no-scrollbar" style={{ scrollbarWidth: 'none' }}>
         {items.map((m, i) => (
-          <div key={`${m.url}-${i}`} className={`relative rounded-xl overflow-hidden bg-gray-800 ${items.length % 2 === 1 && i === items.length - 1 ? 'col-span-2' : ''}`}>
+          <div key={`${m.url}-${i}`} className="relative w-full shrink-0 snap-center bg-gray-800/60 flex items-center justify-center">
             {m.type === 'image' ? (
-              <img src={m.url} alt="" loading="lazy" onClick={() => setViewer({ src: m.url, name: m.name })} className="w-full h-44 object-cover cursor-zoom-in" />
+              <img src={m.url} alt="" loading={i === 0 ? 'eager' : 'lazy'} draggable={false}
+                onClick={e => { e.stopPropagation(); const open = () => setViewer({ src: m.url, name: m.name }); onTap ? onTap(open) : open(); }}
+                className="w-full max-h-[70vh] object-cover cursor-zoom-in" />
             ) : m.type === 'video' ? (
-              <VideoPlayer src={m.url} className="h-44" />
+              <VideoPlayer src={m.url} poster={i === 0 ? poster : undefined} className="w-full max-h-[70vh]" />
             ) : (
-              <button onClick={() => { void downloadFile(m.url, m.name || 'file'); }} className="w-full h-24 flex items-center gap-3 px-3 text-right">
-                <FileText size={26} className="text-cyan-400 shrink-0" />
-                <span className="min-w-0 flex-1"><span className="block text-sm text-white truncate" dir="auto">{m.name || 'ملف'}</span><span className="block text-[11px] text-gray-400">{formatBytes(m.size)}</span></span>
-                <Download size={16} className="text-gray-300 shrink-0" />
-              </button>
+              <div className="w-full h-40 flex items-center gap-3 px-4" dir="rtl">
+                <FileText size={32} className="text-cyan-400 shrink-0" />
+                <div className="min-w-0 flex-1"><div className="text-white truncate" dir="auto">{m.name || 'ملف'}</div><div className="text-xs text-gray-400">{formatBytes(m.size)}</div></div>
+                <button onClick={e => { e.stopPropagation(); void downloadFile(m.url, m.name || 'file'); }} className="px-3 py-1.5 bg-violet-600 rounded-full text-sm text-white flex items-center gap-1.5"><Download size={14} /> تحميل</button>
+              </div>
             )}
           </div>
         ))}
       </div>
-      {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}
+      {items.length > 1 && (
+        <>
+          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/60 text-white text-[11px] tabular-nums pointer-events-none">{cur + 1}/{items.length}</span>
+          <div className="flex justify-center gap-1.5 mt-2">
+            {items.map((_, i) => (
+              <button key={i} onClick={e => { e.stopPropagation(); jump(i); }} aria-label={`الصورة ${i + 1}`} className={`h-1.5 rounded-full transition-all ${i === cur ? 'w-4 bg-violet-400' : 'w-1.5 bg-white/25'}`} />
+            ))}
+          </div>
+        </>
+      )}
+      {viewer && <ImageViewer src={viewer.src} name={viewer.name} gallery={gallery} onClose={() => setViewer(null)} />}
     </div>
   );
 }
@@ -4791,6 +5000,20 @@ function PostViewer({ target, posts, setPosts, users, currentUser, onOpenProfile
     </div>,
     document.body,
   );
+}
+
+// Comment order: the one you were sent to, your fresh comments, then by likes/replies/recency (people you follow get a small boost).
+function sortComments(list: Comment[], me: User, focusId?: string | null): Comment[] {
+  const now = Date.now();
+  const score = (c: Comment) => {
+    const hours = Math.max(0, (now - c.timestamp) / 3600000);
+    let v = c.likes.length * 3 + c.replies.length * 2 + 6 / (1 + hours / 6);
+    if (me.following.includes(c.userId)) v += 2;
+    if (c.userId === me.id && hours < 0.17) v += 100;
+    if (c.id === focusId) v += 1000;
+    return v;
+  };
+  return [...list].sort((a, b) => score(b) - score(a) || b.timestamp - a.timestamp);
 }
 
 function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusCommentId }: {
@@ -4955,10 +5178,10 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden [contain:layout_paint] [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }} className="post-card bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden [contain:layout_paint] [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
       <div className="p-4 flex items-center gap-3">
         <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
-          <Avatar src={author.avatar} name={author.displayName} size="md" />
+          <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="md" />
           <div className="flex-1 min-w-0">
             <div className="font-medium text-white truncate hover:underline">{author.displayName}</div>
             <div className="text-xs text-gray-500">@{author.username} · {formatTime(post.timestamp)}</div>
@@ -4990,7 +5213,13 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
           </div>
         )}
 
-        {post.media && (
+        {post.media && post.extraMedia && post.extraMedia.length > 0 && (
+          <div className="px-4 pb-3">
+            <PostCarousel items={[post.media, ...post.extraMedia]} poster={post.coverUrl} onTap={open => handleContentTap(open)} />
+            <DownloadAllButton post={post} />
+          </div>
+        )}
+        {post.media && !(post.extraMedia && post.extraMedia.length > 0) && (
           <div className="px-4 pb-3">
             {post.media.type === 'image' ? (
               <div className="relative">
@@ -5029,7 +5258,6 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
                 </button>
               </div>
             )}
-            {post.extraMedia && <PostAlbum items={post.extraMedia} />}
             <DownloadAllButton post={post} />
           </div>
         )}
@@ -5094,14 +5322,14 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         {showComments && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-gray-800/50 overflow-hidden">
             <div className="p-4 space-y-3 max-h-80 overflow-y-auto">
-              {post.comments.map(comment => {
+              {sortComments(post.comments, currentUser, focusCommentId).map(comment => {
                 const cAuthor = users.find(u => u.id === comment.userId);
                 if (!cAuthor) return null;
                 return (
                   <div key={comment.id} id={`comment-${comment.id}`} className={`space-y-2 rounded-xl transition-shadow ${focusCommentId === comment.id ? 'ring-2 ring-cyan-400/70 p-1' : ''}`}>
                     <div className="flex gap-2">
                       <button onClick={() => onOpenProfile(cAuthor.id)} className="self-start">
-                        <Avatar src={cAuthor.avatar} name={cAuthor.displayName} size="sm" />
+                        <Avatar userId={cAuthor.id} src={cAuthor.avatar} name={cAuthor.displayName} size="sm" />
                       </button>
                       <div className="flex-1 bg-gray-800/50 rounded-xl p-2.5">
                         <div className="flex items-center gap-2 mb-1">
@@ -5145,7 +5373,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
                               return (
                                 <div key={reply.id} id={`comment-${reply.id}`} className={`flex gap-2 rounded-lg ${focusCommentId === reply.id ? 'ring-2 ring-cyan-400/70 p-1' : ''}`}>
                                   <button onClick={() => onOpenProfile(rAuthor.id)} className="self-start">
-                                    <Avatar src={rAuthor.avatar} name={rAuthor.displayName} size="sm" />
+                                    <Avatar userId={rAuthor.id} src={rAuthor.avatar} name={rAuthor.displayName} size="sm" />
                                   </button>
                                   <div>
                                     <button onClick={() => onOpenProfile(rAuthor.id)} className="text-xs font-medium text-white hover:underline">{rAuthor.displayName}</button>
@@ -5346,7 +5574,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       <div className="absolute bottom-4 right-4 left-20 text-right" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2 min-w-0">
-            <Avatar src={author.avatar} name={author.displayName} size="sm" />
+            <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="sm" />
             <span className="text-white font-semibold text-sm truncate max-w-[9rem]">{author.displayName}</span>
             <span className="text-white/60 text-xs truncate max-w-[6rem]">@{author.username}</span>
           </button>
@@ -5428,7 +5656,7 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
             if (!u) return null;
             return (
               <div key={r.id} className={`flex gap-2 ${r.reply ? 'mr-8' : ''}`}>
-                <button onClick={() => { onClose(); onOpenProfile(u.id); }} className="self-start"><Avatar src={u.avatar} name={u.displayName} size="sm" /></button>
+                <button onClick={() => { onClose(); onOpenProfile(u.id); }} className="self-start"><Avatar userId={u.id} src={u.avatar} name={u.displayName} size="sm" /></button>
                 <div className="flex-1 bg-gray-800/60 rounded-xl p-2.5 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-sm font-medium text-white">{u.displayName}</span>
@@ -5578,7 +5806,7 @@ function VideoCard({ post, author, onOpen }: { post: Post; author: User; onOpen:
         </div>
       </div>
       <div className="flex gap-2.5 mt-2">
-        <Avatar src={author.avatar} name={author.displayName} size="sm" />
+        <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="sm" />
         <div className="min-w-0 flex-1">
           <div className="text-white font-semibold text-sm leading-snug line-clamp-2">{post.title || post.text || 'فيديو'}</div>
           <div className="text-xs text-gray-400 mt-0.5">{author.displayName}</div>
@@ -5628,7 +5856,7 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
           {author && (
             <div className="flex items-center gap-3 mt-3">
               <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2.5 min-w-0">
-                <Avatar src={author.avatar} name={author.displayName} size="md" />
+                <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="md" />
                 <div className="text-right min-w-0">
                   <div className="text-white font-semibold text-sm truncate">{author.displayName}</div>
                   <div className="text-xs text-gray-500">{author.followers.length} متابِع</div>
@@ -5704,7 +5932,7 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const [results, setResults] = useState<Post[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [watchId, setWatchId] = useState<string | null>(null);
-  useBackLayer(watchId !== null, () => setWatchId(null));
+  useBackLayer(watchId !== null, () => setWatchId(null), 20);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
@@ -5907,22 +6135,30 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
     try {
       let mediaUrl: string | null = null;
       let coverUrl: string | null = null;
-      if (media) {
-        const path = `${currentUser.id}/${crypto.randomUUID()}.${MEDIA_EXT[media.file.type] ?? safeExt(media.file.name)}`;
-        const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, media.file, media.file.type || 'application/octet-stream', '31536000', pct => setPostPct(Math.round((pct / 100 / (extra.length + 1)) * 100)));
-        if (upErr) throw upErr;
-        uploaded.push(path);
-        mediaUrl = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
-      }
-      const extraMedia: { type: 'image' | 'video' | 'file'; url: string; name: string; size: number }[] = [];
-      for (let i = 0; i < extra.length; i++) {
-        const f = extra[i];
-        const p = `${currentUser.id}/${crypto.randomUUID()}.${MEDIA_EXT[f.type] ?? safeExt(f.name)}`;
-        const { error: exErr } = await uploadWithProgress(POST_MEDIA_BUCKET, p, f, f.type || 'application/octet-stream', '31536000', pct => setPostPct(Math.round(((i + 1 + pct / 100) / (extra.length + 1)) * 100)));
-        if (exErr) throw exErr;
-        uploaded.push(p);
-        extraMedia.push({ type: detectMediaKind(f), url: supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(p).data.publicUrl, name: f.name.slice(0, 200), size: f.size });
-      }
+      // Photos are shrunk first and everything uploads 3 at a time, so publishing is much faster.
+      const files: File[] = await Promise.all([...(media ? [media.file] : []), ...extra].map(shrinkImage));
+      const pcts = files.map(() => 0);
+      const results: string[] = new Array(files.length);
+      let nextIdx = 0;
+      const worker = async () => {
+        while (nextIdx < files.length) {
+          const i = nextIdx++;
+          const f = files[i];
+          const p = `${currentUser.id}/${crypto.randomUUID()}.${MEDIA_EXT[f.type] ?? safeExt(f.name)}`;
+          const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, p, f, f.type || 'application/octet-stream', '31536000', pct => {
+            pcts[i] = pct;
+            setPostPct(Math.round(pcts.reduce((x, y) => x + y, 0) / files.length));
+          });
+          if (upErr) throw upErr;
+          uploaded.push(p);
+          results[i] = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(p).data.publicUrl;
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      const offset = media ? 1 : 0;
+      if (media) mediaUrl = results[0];
+      const extraMedia: { type: 'image' | 'video' | 'file'; url: string; name: string; size: number }[] =
+        files.slice(offset).map((f, k) => ({ type: detectMediaKind(f), url: results[offset + k], name: f.name.slice(0, 200), size: f.size }));
       if (kind === 'video' && cover) {
         const coverPath = `${currentUser.id}/${crypto.randomUUID()}-cover.${cover.blob.type === 'image/png' ? 'png' : cover.blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
         const { error: coverErr } = await supabase.storage
@@ -6003,7 +6239,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
           />
         )}
         <div className="flex gap-3 mb-4">
-          <Avatar src={currentUser.avatar} name={currentUser.displayName} size="md" />
+          <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="md" />
           <textarea
             value={text} onChange={e => setText(e.target.value)}
             placeholder={kind === 'reel' ? 'اكتب وصفاً للريل...' : kind === 'video' ? 'وصف الفيديو (اختياري)...' : 'ماذا يدور في ذهنك؟'} rows={4}
@@ -6129,7 +6365,7 @@ function SearchTab({ users, currentUser, setUsers, onStartChat, onOpenProfile }:
           return (
             <motion.div key={user.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl">
               <button onClick={() => onOpenProfile(user.id)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
-                <Avatar src={user.avatar} name={user.displayName} size="lg" />
+                <Avatar userId={user.id} src={user.avatar} name={user.displayName} size="lg" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-white truncate">{user.displayName}</div>
                   <div className="text-sm text-gray-500">@{user.username}</div>
@@ -6281,7 +6517,7 @@ function UserListModal({ title, userIds, users, onOpenProfile, onClose }: {
             <p className="text-center text-gray-500 py-8">لا أحد بعد</p>
           ) : list.map(u => (
             <button key={u.id} onClick={() => { onClose(); onOpenProfile(u.id); }} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-800 text-right">
-              <Avatar src={u.avatar} name={u.displayName} size="md" />
+              <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="md" />
               <div className="min-w-0">
                 <div className="text-white font-medium truncate">{u.displayName}</div>
                 <div className="text-sm text-gray-500">@{u.username}</div>
@@ -6538,6 +6774,53 @@ function NotificationSettings() {
   );
 }
 
+function LikeStylePicker() {
+  const cur = useLikeStyle();
+  const [demo, setDemo] = useState(0);
+  const opts: { id: LikeStyle; label: string; hint: string }[] = [
+    { id: 'heart', label: 'قلب', hint: 'قلب عادي بألوان المنصة' },
+    { id: 'coin', label: 'عملة', hint: 'عملة KAN مكسورة تتجمّع' },
+    { id: 'flames', label: '3 قلوب', hint: 'ثلاث قلوب بنار المنصة تلتحم' },
+  ];
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+      <div className="text-sm font-semibold text-white mb-1">شكل الإعجاب</div>
+      <p className="text-xs text-gray-400 mb-3">يظهر عند الضغط مرتين على المنشور أو الرسالة</p>
+      <div className="grid grid-cols-3 gap-2">
+        {opts.map(o => (
+          <button key={o.id} onClick={() => { setLikeStyleStored(o.id); setDemo(n => n + 1); }}
+            className={`rounded-xl border p-2.5 text-center active:scale-95 transition-transform ${cur === o.id ? 'border-violet-400 bg-violet-500/15 text-white' : 'border-white/10 bg-white/5 text-gray-300'}`}>
+            <div className="text-sm font-semibold">{o.label}</div>
+            <div className="text-[10px] text-gray-400 mt-0.5 leading-4">{o.hint}</div>
+          </button>
+        ))}
+      </div>
+      <div className="relative h-36 mt-3 rounded-xl bg-black/20 border border-white/5 overflow-hidden">
+        {demo > 0 ? <CoinBurst key={demo} /> : <p className="absolute inset-0 flex items-center justify-center text-xs text-gray-500">اختر شكلاً لمعاينته</p>}
+      </div>
+    </div>
+  );
+}
+
+function RingStylePicker() {
+  const [cur, setCur] = useState<RingStyle>(getRingStyle);
+  const opts: { id: RingStyle; label: string }[] = [{ id: 'kan', label: 'KAN' }, { id: 'insta', label: 'ألوان دافئة' }, { id: 'green', label: 'أخضر' }, { id: 'off', label: 'إيقاف' }];
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+      <div className="text-sm font-semibold text-white mb-1">حلقة القصة حول الصورة</div>
+      <p className="text-xs text-gray-400 mb-3">تظهر حول صورة أي شخص لديه قصة نشطة، ورمادية بعد أن تشاهدها</p>
+      <div className="grid grid-cols-4 gap-2">
+        {opts.map(o => (
+          <button key={o.id} onClick={() => { setCur(o.id); setRingStyleStored(o.id); }} className={`rounded-xl border p-2 flex flex-col items-center gap-1.5 active:scale-95 transition-transform ${cur === o.id ? 'border-violet-400 bg-violet-500/15' : 'border-white/10 bg-white/5'}`}>
+            <span className="w-9 h-9 rounded-full p-[2px]" style={{ background: o.id === 'off' ? '#4b5563' : RING_BG[o.id] }}><span className="block w-full h-full rounded-full bg-gray-900" /></span>
+            <span className="text-[11px] text-gray-200">{o.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab({ currentUser, setUsers }: {
   currentUser: User;
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
@@ -6591,6 +6874,8 @@ function SettingsTab({ currentUser, setUsers }: {
   return (
     <div className="px-4 py-4 space-y-4">
       <h2 className="text-xl font-bold text-white">الإعدادات</h2>
+      <LikeStylePicker />
+      <RingStylePicker />
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
         <div className="text-sm font-semibold text-white mb-1">المظهر</div>
         <p className="text-xs text-gray-400 mb-3">اختر الثيم الذي يريحك</p>
@@ -6684,7 +6969,7 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
     .sort((a, b) => b.lastActivity - a.lastActivity);
   const [section, setSection] = useState<'direct' | 'groups'>('direct');
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-  useBackLayer(selectedGroup !== null, () => setSelectedGroup(null));
+  useBackLayer(selectedGroup !== null, () => setSelectedGroup(null), 20);
   useEffect(() => { onActiveGroupChange(selectedGroup); }, [selectedGroup]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (openGroupId && groups.some(g => g.id === openGroupId)) {
@@ -6796,7 +7081,7 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
             return (
               <motion.button key={conv.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} onClick={() => setSelectedChat(otherUserId)} className="w-full flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl hover:border-gray-700 transition-all text-right">
                 <div className="relative">
-                  <Avatar src={otherUser.avatar} name={otherUser.displayName} size="lg" />
+                  <Avatar userId={otherUser.id} src={otherUser.avatar} name={otherUser.displayName} size="lg" />
                   {unread > 0 && (
                     <span className="absolute -top-1 -right-1 w-5 h-5 bg-violet-500 rounded-full text-xs flex items-center justify-center font-bold">
                       {unread > 9 ? '9+' : unread}
@@ -7096,6 +7381,209 @@ function ChatBgPicker({ current, onChange, onImageUpload }: {
 }
 
 // ============ Chat View ============
+// ============ Stickers ============
+// A sticker is an ordinary chat image/video whose file name starts with "kan-sticker"; the chat draws it without a bubble.
+const isStickerName = (name?: string | null) => !!name && name.startsWith('kan-sticker');
+interface SavedSticker { id: string; kind: 'image' | 'video'; blob: Blob; at: number }
+const stkDb = () => new Promise<IDBDatabase>((res, rej) => {
+  const r = indexedDB.open('kan_stickers', 1);
+  r.onupgradeneeded = () => { r.result.createObjectStore('s', { keyPath: 'id' }); };
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+});
+async function stkAll(): Promise<SavedSticker[]> {
+  try {
+    const db = await stkDb();
+    return await new Promise(res => {
+      const q = db.transaction('s').objectStore('s').getAll();
+      q.onsuccess = () => res((q.result as SavedSticker[]).sort((a, b) => b.at - a.at));
+      q.onerror = () => res([]);
+    });
+  } catch { return []; }
+}
+async function stkPut(st: SavedSticker) {
+  try { const db = await stkDb(); db.transaction('s', 'readwrite').objectStore('s').put(st); } catch (e) { console.error(e); }
+}
+async function stkDel(id: string) {
+  try { const db = await stkDb(); db.transaction('s', 'readwrite').objectStore('s').delete(id); } catch (e) { console.error(e); }
+}
+const stkExt = (b: Blob, kind: 'image' | 'video') => (b.type.split('/')[1] ?? (kind === 'video' ? 'webm' : 'webp')).split(';')[0];
+
+function drawContain(ctx: CanvasRenderingContext2D, src: CanvasImageSource, sw: number, sh: number, size: number) {
+  const k = Math.min(size / sw, size / sh);
+  const w = sw * k, h = sh * k;
+  ctx.drawImage(src, (size - w) / 2, (size - h) / 2, w, h);
+}
+
+// Picture -> 512px transparent WebP with rounded corners.
+function imageToSticker(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const size = 512;
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      if (!ctx) { URL.revokeObjectURL(url); reject(new Error('canvas')); return; }
+      const k = Math.min(size / img.naturalWidth, size / img.naturalHeight);
+      const w = img.naturalWidth * k, h = img.naturalHeight * k;
+      const x = (size - w) / 2, y = (size - h) / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 36);
+      ctx.clip();
+      ctx.drawImage(img, x, y, w, h);
+      ctx.restore();
+      URL.revokeObjectURL(url);
+      c.toBlob(b => (b ? resolve(b) : reject(new Error('blob'))), 'image/webp', 0.9);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('img')); };
+    img.src = url;
+  });
+}
+
+// Short video -> a looping square clip (up to 5 s) recorded from a canvas. Returns null when the browser cannot record video.
+async function videoToSticker(file: File, start: number, len: number): Promise<Blob | null> {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find(m => MediaRecorder.isTypeSupported(m));
+  if (!mime) return null;
+  const url = URL.createObjectURL(file);
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.src = url;
+  try {
+    await new Promise<void>((res, rej) => { v.onloadedmetadata = () => res(); v.onerror = () => rej(new Error('video')); });
+    v.currentTime = Math.min(start, Math.max(0, (v.duration || 1) - 0.1));
+    await new Promise<void>(res => { v.onseeked = () => res(); });
+    const size = 384;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d')!;
+    const rec = new MediaRecorder(c.captureStream(30), { mimeType: mime, videoBitsPerSecond: 1_200_000 });
+    const chunks: Blob[] = [];
+    rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    const done = new Promise<void>(res => { rec.onstop = () => res(); });
+    const t0 = v.currentTime;
+    rec.start();
+    await v.play();
+    await new Promise<void>(res => {
+      const tick = () => {
+        ctx.clearRect(0, 0, size, size);
+        drawContain(ctx, v, v.videoWidth, v.videoHeight, size);
+        if (v.ended || v.currentTime - t0 >= len) { res(); return; }
+        requestAnimationFrame(tick);
+      };
+      tick();
+    });
+    v.pause();
+    rec.stop();
+    await done;
+    return new Blob(chunks, { type: mime.split(';')[0] });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function StickerThumb({ st, className }: { st: SavedSticker; className?: string }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    const u = URL.createObjectURL(st.blob);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [st.blob]);
+  if (!url) return null;
+  return st.kind === 'video'
+    ? <video src={url} autoPlay loop muted playsInline className={className} />
+    : <img src={url} alt="" draggable={false} className={className} />;
+}
+
+// Stickers live inside the emoji panel (it replaces the keyboard): tap one to send it.
+function StickerPane({ onSend }: { onSend: (st: SavedSticker) => void }) {
+  const [list, setList] = useState<SavedSticker[]>([]);
+  const [making, setMaking] = useState<File | null>(null);
+  const [manage, setManage] = useState(false);
+  const pickRef = useRef<HTMLInputElement>(null);
+  const reload = () => { void stkAll().then(setList); };
+  useEffect(reload, []);
+  return (
+    <div className="h-60 overflow-y-auto overscroll-contain p-2">
+      <input ref={pickRef} type="file" accept="image/*,video/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setMaking(f); }} />
+      <div className="grid grid-cols-4 min-[420px]:grid-cols-5 sm:grid-cols-8 gap-2">
+        <button onClick={() => pickRef.current?.click()} className="aspect-square rounded-xl border-2 border-dashed border-violet-400/50 text-violet-300 flex flex-col items-center justify-center gap-0.5 active:scale-90 transition-transform">
+          <Plus size={20} /><span className="text-[10px]">جديد</span>
+        </button>
+        {list.map(st => (
+          <div key={st.id} className="relative aspect-square rounded-xl bg-white/5 overflow-hidden">
+            <button onClick={() => (manage ? undefined : onSend(st))} className="w-full h-full active:scale-90 transition-transform">
+              <StickerThumb st={st} className="w-full h-full object-contain" />
+            </button>
+            {manage && <button onClick={() => { void stkDel(st.id).then(reload); }} aria-label="حذف الملصق" className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center"><X size={12} /></button>}
+          </div>
+        ))}
+      </div>
+      {list.length === 0 && <p className="text-center text-gray-500 text-xs pt-5 leading-6">اصنع أول ملصق من صورة أو فيديو قصير</p>}
+      {list.length > 0 && <div className="flex justify-center pt-3"><button onClick={() => setManage(m => !m)} className={`px-4 py-1 rounded-full text-[11px] border ${manage ? 'bg-rose-500/20 border-rose-400/40 text-rose-200' : 'bg-white/5 border-white/10 text-gray-400'}`}>{manage ? 'تم' : 'حذف ملصقات'}</button></div>}
+      {making && <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}><StickerMaker file={making} onClose={() => setMaking(null)} onSaved={st => { setMaking(null); reload(); onSend(st); }} /></div>}
+    </div>
+  );
+}
+
+function StickerMaker({ file, onClose, onSaved }: { file: File; onClose: () => void; onSaved: (st: SavedSticker) => void }) {
+  const isVideo = file.type.startsWith('video/') || detectMediaKind(file) === 'video';
+  const [url] = useState(() => URL.createObjectURL(file));
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  const [dur, setDur] = useState(0);
+  const [start, setStart] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const vref = useRef<HTMLVideoElement>(null);
+  const len = Math.min(5, Math.max(1, dur - start || 5));
+
+  const make = async () => {
+    setBusy(true); setErr('');
+    try {
+      let blob: Blob | null;
+      let kind: 'image' | 'video' = 'image';
+      if (isVideo) {
+        blob = await videoToSticker(file, start, len);
+        if (blob) kind = 'video';
+        else { setErr('متصفحك لا يدعم تسجيل الفيديو'); setBusy(false); return; }
+      } else {
+        blob = await imageToSticker(file);
+      }
+      const st: SavedSticker = { id: crypto.randomUUID(), kind, blob, at: Date.now() };
+      await stkPut(st);
+      onSaved(st);
+    } catch (e) {
+      console.error(e);
+      setErr('تعذّر إنشاء الملصق، جرّب ملفاً آخر');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SheetShell title="ملصق جديد" onClose={busy ? () => undefined : onClose}>
+      <div className="aspect-square max-h-72 mx-auto rounded-2xl bg-white/5 overflow-hidden flex items-center justify-center">
+        {isVideo
+          ? <video ref={vref} src={url} muted playsInline loop onLoadedMetadata={e => setDur(e.currentTarget.duration || 0)} className="w-full h-full object-contain" />
+          : <img src={url} alt="" className="w-full h-full object-contain" />}
+      </div>
+      {isVideo && dur > 0 && (
+        <div className="mt-3">
+          <div className="text-xs text-gray-400 mb-1">من الثانية {start.toFixed(1)} (المدة {len.toFixed(1)} ث، بحد أقصى 5)</div>
+          <input type="range" min={0} max={Math.max(0, dur - 1)} step={0.1} value={start} dir="ltr"
+            onChange={e => { const v = Number(e.target.value); setStart(v); if (vref.current) { vref.current.currentTime = v; void vref.current.play().catch(() => undefined); } }}
+            className="w-full accent-violet-500" />
+        </div>
+      )}
+      {err && <p className="text-xs text-rose-300 mt-2 text-center">{err}</p>}
+      <button onClick={() => void make()} disabled={busy} className="mt-4 w-full py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2 active:scale-95 transition-transform">
+        {busy ? <><RefreshCw size={15} className="animate-spin" /> جارٍ إنشاء الملصق...</> : <><Check size={15} /> إنشاء وإرسال الملصق</>}
+      </button>
+    </SheetShell>
+  );
+}
+
 function ChatView({ currentUser, chatUser, conversation, setConversations, onBack }: {
   currentUser: User; chatUser: User;
   conversation: Conversation | undefined;
@@ -7122,6 +7610,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [stickerStart, setStickerStart] = useState(false);
   const lastTap = useRef<{ id: string; t: number }>({ id: '', t: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
   const [recording, setRecording] = useState(false);
@@ -7465,7 +7954,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     const first = new Map<string, Message[]>();
     const hidden = new Set<string>();
     let run: Message[] = [];
-    const isVisual = (m: Message) => (m.media?.type === 'image' || m.media?.type === 'video') && !m.sharedPostId;
+    const isVisual = (m: Message) => (m.media?.type === 'image' || m.media?.type === 'video') && !m.sharedPostId && !isStickerName(m.media?.name);
     const flush = () => {
       if (run.length > 1) { first.set(run[0].id, run); run.slice(1).forEach(m => hidden.add(m.id)); }
       run = [];
@@ -7519,7 +8008,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           <ChevronRight size={20} />
         </button>
         <button onClick={() => openUserProfile(chatUser.id)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
-          <Avatar src={chatUser.avatar} name={chatUser.displayName} size="md" />
+          <Avatar userId={chatUser.id} src={chatUser.avatar} name={chatUser.displayName} size="md" />
           <div className="flex-1 min-w-0">
             <div className="font-medium text-white truncate">{chatUser.displayName}</div>
             {peerTyping
@@ -7570,7 +8059,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               className={`flex items-end gap-2 ${isMine ? 'flex-row-reverse' : ''}`}
             >
               {showAvatar && !isMine ? (
-                <button onClick={() => openUserProfile(chatUser.id)} className="shrink-0"><Avatar src={chatUser.avatar} name={chatUser.displayName} size="sm" /></button>
+                <button onClick={() => openUserProfile(chatUser.id)} className="shrink-0"><Avatar userId={chatUser.id} src={chatUser.avatar} name={chatUser.displayName} size="sm" /></button>
               ) : !isMine ? <div className="w-7" /> : null}
 
               <div className={`max-w-[88%] sm:max-w-[75%] ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
@@ -7581,7 +8070,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   )}
                   onClick={() => handleBubbleTap(msg)}
                   className={`relative select-none touch-pan-y px-4 py-2.5 rounded-2xl cursor-pointer transition-shadow ${highlightId === msg.id ? 'ring-2 ring-cyan-400' : ''} ${
-                    isMine
+                    isStickerName(msg.media?.name) && !msg.text ? 'bg-transparent !p-0'
+                    : isMine
                       ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded-bl-sm'
                       : 'bg-gray-800/90 backdrop-blur-sm text-gray-200 rounded-br-sm'
                   }`}
@@ -7615,7 +8105,12 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                       </div>
                     );
                   })()}
-                  {!albumMap.first.has(msg.id) && msg.media?.type === 'image' && (
+                  {!albumMap.first.has(msg.id) && isStickerName(msg.media?.name) && msg.media && (
+                    msg.media.type === 'video'
+                      ? <video src={msg.media.url} autoPlay loop muted playsInline className="w-36 h-36 object-contain pointer-events-none" />
+                      : <img src={msg.media.url} alt="" draggable={false} onLoad={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }} className="w-36 h-36 object-contain pointer-events-none" />
+                  )}
+                  {!albumMap.first.has(msg.id) && !isStickerName(msg.media?.name) && msg.media?.type === 'image' && (
                     <div className="mb-2 relative">
                       <img
                         src={msg.media.url}
@@ -7639,7 +8134,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                       <span className="absolute inset-0 flex items-center justify-center bg-black/25"><span className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-600/90 to-cyan-500/90 flex items-center justify-center"><Play size={22} className="text-white" fill="white" /></span></span>
                     </button>
                   )}
-                  {!albumMap.first.has(msg.id) && msg.media?.type === 'video' && !msg.sharedPostId && (
+                  {!albumMap.first.has(msg.id) && !isStickerName(msg.media?.name) && msg.media?.type === 'video' && !msg.sharedPostId && (
                     <div className="mb-2" onClick={e => e.stopPropagation()}>
                       <video
                         src={`${msg.media.url}#t=0.1`}
@@ -7837,6 +8332,9 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                 <button onClick={() => { fileRef.current?.click(); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95">
                   <Paperclip size={16} /> إرفاق
                 </button>
+                <button onClick={() => { setToolsOpen(false); inputRef.current?.blur(); setStickerStart(true); setEmojiOpen(true); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95">
+                  <Smile size={16} /> ملصقات
+                </button>
                 <button
                   onPointerDown={e => e.preventDefault()}
                   onMouseDown={e => e.preventDefault()}
@@ -7887,10 +8385,10 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               </motion.button>
             )}
           </div>
-          {emojiOpen && <EmojiPicker docked onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
+          {emojiOpen && <EmojiPicker key={stickerStart ? 's' : 'e'} docked onPick={insertEmoji} onClose={() => setEmojiOpen(false)} startOnStickers={stickerStart} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `kan-sticker.${stkExt(st.blob, st.kind)}` }); }} />}
         </div>
       )}
-      {viewer && <ImageViewer src={viewer.src} name={viewer.name} onClose={() => setViewer(null)} />}
+      {viewer && <ImageViewer src={viewer.src} name={viewer.name} gallery={messages.flatMap(x => x.media && !isStickerName(x.media.name) && (x.media.type === 'image' || x.media.type === 'video') ? [{ src: x.media.url, name: x.media.name, type: x.media.type as 'image' | 'video' }] : [])} onClose={() => setViewer(null)} />}
       {aiOpen && (
         <KanAIModal
           messages={messages}
