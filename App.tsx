@@ -9,7 +9,7 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Bookmark as BookmarkIcon
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, Bookmark as BookmarkIcon
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -1352,6 +1352,9 @@ applyTheme(getTheme());
 // Filled by App: last chat activity per person (used to list recent chats first when sharing).
 let recentChatActivity: () => Map<string, number> = () => new Map();
 // Tapping a reel on the home feed opens it inside the Reels tab.
+// "Use this audio" on a reel: opens the publish box with that sound ready.
+let pendingAudio: { url: string; name: string } | null = null;
+let createFromAudio: () => void = () => undefined;
 let openReelHandler: (postId: string) => void = () => undefined;
 function openReel(postId: string) { openReelHandler(postId); }
 // Only one piece of post music plays at a time.
@@ -3170,7 +3173,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
   };
   useEffect(() => {
     void load();
-    const t = window.setInterval(() => void load(), 60000);
+    const t = window.setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 60000);
     const onChanged = () => void load();
     window.addEventListener('kan-stories-changed', onChanged);
     return () => { window.clearInterval(t); window.removeEventListener('kan-stories-changed', onChanged); };
@@ -3958,7 +3961,7 @@ export default function App() {
       setStoryRings(byUser);
     };
     void load();
-    const t = window.setInterval(() => void load(), 60000);
+    const t = window.setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 60000);
     window.addEventListener('kan-stories-changed', load);
     return () => { off = true; window.clearInterval(t); window.removeEventListener('kan-stories-changed', load); };
   }, [currentUserId]);
@@ -4054,10 +4057,10 @@ export default function App() {
     let timer: number | undefined;
     // Likes and comments on posts you already see update live; new posts do not jump in.
     const refreshExisting = async () => {
-      const ids = postsRef.current.slice(0, 60).map(p => p.id);
+      const ids = postsRef.current.slice(0, 24).map(p => p.id);
       if (ids.length === 0) return;
       try {
-        const fresh = await fetchPosts({ ids, limit: 60 });
+        const fresh = await fetchPosts({ ids, limit: 24 });
         const byId = new Map(fresh.map(p => [p.id, p] as const));
         setPosts(prev => prev.map(p => byId.get(p.id) ?? p));
       } catch (e) {
@@ -4066,7 +4069,7 @@ export default function App() {
     };
     const schedule = () => {
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => { void refreshExisting(); void refreshUsers(); }, 800);
+      timer = window.setTimeout(() => { if (document.visibilityState !== 'visible') return; void refreshExisting(); void refreshUsers(); }, 2500);
     };
     const channel = supabase.channel('kan-live');
     for (const table of ['profiles', 'follows', 'comments', 'post_likes', 'comment_likes']) {
@@ -4382,6 +4385,7 @@ export default function App() {
   openPostHandler = (postId, commentId) => pushScreen({ k: 'post', postId, commentId });
   const [reelStart, setReelStart] = useState<string | null>(null);
   openReelHandler = id => { setReelStart(id); goTab('reels'); };
+  createFromAudio = () => goTab('create');
   const [introDone, setIntroDone] = useState(false);
   useEffect(() => {
     const t = window.setTimeout(() => setIntroDone(true), 1500);
@@ -4574,7 +4578,7 @@ export default function App() {
         <InstallBanner />
         <AnimatePresence mode="wait" initial={false}>
           {viewedUserId && (
-            <motion.div key={`user-${viewedUserId}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key={`user-${viewedUserId}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <UserProfile
                 userId={viewedUserId}
                 currentUser={currentUser}
@@ -4593,12 +4597,12 @@ export default function App() {
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'feed' && (
-            <motion.div key="feed" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key="feed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <Feed posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} frontier={feedFrontier} hasMore={feedHasMore} loading={feedLoading} newCount={newPostsCount} onRefresh={loadFeedFirst} onLoadMore={loadFeedMore} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'search' && (
-            <motion.div key="search" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key="search" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <SearchTab
                 users={users}
                 currentUser={currentUser}
@@ -4612,27 +4616,27 @@ export default function App() {
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'reels' && (
-            <motion.div key="reels" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key="reels" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <ReelsTab startId={reelStart} onBack={() => { setReelStart(null); goTab('feed'); }} posts={posts} setPosts={setPosts} users={users} setUsers={setUsers} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'videos' && (
-            <motion.div key="videos" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key="videos" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <VideosTab posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} setUsers={setUsers} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'create' && (
-            <motion.div key="create" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key="create" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <CreatePost currentUser={currentUser} setPosts={setPosts} setActiveTab={goTab} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'profile' && (
-            <motion.div key="profile" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <ProfileTab currentUser={currentUser} users={users} posts={posts} setUsers={setUsers} setPosts={setPosts} onOpenProfile={openProfile} onLoadPage={loadPostsPage} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'notifications' && (
-            <motion.div key="notifications" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key="notifications" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <NotificationsTab
                 currentUser={currentUser}
                 users={users}
@@ -4646,12 +4650,12 @@ export default function App() {
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'settings' && (
-            <motion.div key="settings" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <SettingsTab currentUser={currentUser} setUsers={setUsers} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'messages' && (
-            <motion.div key="messages" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key="messages" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <MessagesTab
                 currentUser={currentUser}
                 users={users}
@@ -5873,6 +5877,19 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
     tapTimer.current = window.setTimeout(togglePlay, 320);
   };
 
+  const audioName = post.music?.name ?? `${t('الصوت الأصلي')} · ${author.displayName}`;
+  const takeAudio = () => {
+    const src = post.music?.url ?? post.media?.url;
+    if (!src) return;
+    const p = pathOfUrl(src);
+    pendingAudio = { url: p && p.startsWith('b2/') ? kanPublicUrl(POST_MEDIA_BUCKET, p) : src, name: audioName.slice(0, 80) };
+    createFromAudio();
+  };
+  const report = async () => {
+    if (!window.confirm('الإبلاغ عن هذا المحتوى؟ يفحصه الذكاء الاصطناعي، وعدد البلاغات وحده لا يحظر أي حساب.')) return;
+    const { error } = await supabase.from('reports').insert({ post_id: post.id, reporter_id: currentUser.id });
+    window.alert(error && error.code !== '23505' ? 'تعذّر إرسال البلاغ' : 'وصل بلاغك، سيُفحص المحتوى');
+  };
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
   return (
@@ -5920,7 +5937,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       <div className="absolute bottom-[5.5rem] end-3 flex flex-col items-center gap-4 z-20" onClick={stop} onPointerDown={stop}>
         <div className="flex flex-col items-center">
           <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}>
-            <Heart size={21} className={isLiked ? 'fill-red-400' : ''} />
+            <Heart size={23} className={isLiked ? 'fill-red-400' : ''} />
           </button>
           {post.likes.length > 0 && (
             <button onClick={onShowLikes} className="text-[11px] text-white font-semibold drop-shadow">{post.likes.length}</button>
@@ -5928,22 +5945,25 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
         </div>
         <div className="flex flex-col items-center">
           <button onClick={onOpenComments} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white" aria-label={t('التعليقات')}>
-            <MessageCircle size={21} />
+            <MessageCircle size={23} />
           </button>
           <span className="text-[11px] text-white font-semibold drop-shadow">{commentCount > 0 ? commentCount : ''}</span>
         </div>
         <div className="flex flex-col items-center">
           <button onClick={() => void toggleSave()} className={`p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90 ${isSaved ? 'text-yellow-400' : 'text-white'}`} aria-label={t('حفظ')}>
-            <BookmarkIcon size={20} className={isSaved ? 'fill-yellow-400' : ''} />
+            <BookmarkIcon size={22} className={isSaved ? 'fill-yellow-400' : ''} />
           </button>
           <span className="text-[11px] text-white font-semibold drop-shadow">{isSaved ? t('محفوظ') : t('حفظ')}</span>
         </div>
         <div className="flex flex-col items-center">
           <button onClick={() => setShareOpen(true)} className="p-1.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] text-white active:scale-90" aria-label={t('مشاركة')}>
-            <Share2 size={20} />
+            <Share2 size={22} />
           </button>
           <span className="text-[11px] text-white font-semibold drop-shadow">{t('مشاركة')}</span>
         </div>
+        {post.userId !== currentUser.id && (
+          <button onClick={() => void report()} className="p-1.5 text-white/80 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] active:scale-90" aria-label="إبلاغ"><Flag size={20} /></button>
+        )}
       </div>
 
       {/* Author + caption */}
@@ -5964,6 +5984,9 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
           )}
         </div>
         {post.text && <p className="text-white text-base leading-relaxed line-clamp-3 whitespace-pre-wrap" dir="auto">{post.text}</p>}
+        <button onClick={takeAudio} className="mt-2 max-w-full inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 text-white text-xs font-semibold active:scale-95">
+          <Music size={13} className="shrink-0" /><span className="truncate" dir="auto">{audioName}</span><span className="shrink-0 text-cyan-300">· استخدم الصوت</span>
+        </button>
       </div>
 
       {/* Bottom bar: thin line while playing, full seek bar while paused */}
@@ -5994,22 +6017,43 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
 }) {
   useBackLayer(true, onClose);
   const [text, setText] = useState('');
+  const [replyTo, setReplyTo] = useState<{ parentId: string; name: string } | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const me = currentUser.id;
   const mutate = (fn: (p: Post) => Post) => setPosts(prev => prev.map(p => (p.id === post.id ? fn(p) : p)));
 
-  const add = async () => {
-    const body = text.trim();
+  const send = async (override?: string) => {
+    const body = (override ?? text).trim();
     if (!body) return;
     const id = crypto.randomUUID();
-    const comment: Comment = { id, userId: me, text: body, timestamp: Date.now(), likes: [], replies: [] };
-    mutate(p => ({ ...p, comments: [...p.comments, comment] }));
-    setText('');
-    const { error } = await supabase.from('comments').insert({ id, post_id: post.id, user_id: me, text: body });
+    const parentId = replyTo?.parentId ?? null;
+    if (parentId) {
+      const reply: Reply = { id, userId: me, text: body, timestamp: Date.now(), likes: [] };
+      mutate(p => ({ ...p, comments: p.comments.map(c => (c.id === parentId ? { ...c, replies: [...c.replies, reply] } : c)) }));
+    } else {
+      const comment: Comment = { id, userId: me, text: body, timestamp: Date.now(), likes: [], replies: [] };
+      mutate(p => ({ ...p, comments: [...p.comments, comment] }));
+    }
+    if (override === undefined) setText('');
+    setReplyTo(null);
+    const { error } = await supabase.from('comments').insert(parentId
+      ? { id, post_id: post.id, parent_id: parentId, user_id: me, text: body }
+      : { id, post_id: post.id, user_id: me, text: body });
     if (error) {
-      mutate(p => ({ ...p, comments: p.comments.filter(c => c.id !== id) }));
-      setText(body);
+      mutate(p => ({ ...p, comments: p.comments.filter(c => c.id !== id).map(c => ({ ...c, replies: c.replies.filter(r => r.id !== id) })) }));
+      if (override === undefined) setText(body);
       window.alert('تعذّر إضافة التعليق، حاول مرة أخرى');
     }
+  };
+
+  // A sticker is a small image kept in storage; the comment text is a marker the app draws as the sticker.
+  const sendSticker = async (st: SavedSticker) => {
+    setEmojiOpen(false);
+    if (st.kind !== 'image') { window.alert('الملصقات المتحركة غير مدعومة في التعليقات'); return; }
+    const path = `${me}/cs-${crypto.randomUUID()}.${stkExt(st.blob, st.kind)}`;
+    const { error: upErr } = await supabase.storage.from(POST_MEDIA_BUCKET).upload(path, st.blob, { contentType: st.blob.type || 'image/webp', cacheControl: '31536000' });
+    if (upErr) { console.error(upErr); window.alert('تعذّر إرسال الملصق'); return; }
+    await send(`[[sticker:${kanPublicUrl(POST_MEDIA_BUCKET, path)}]]`);
   };
 
   const remove = async (id: string) => {
@@ -6026,10 +6070,10 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
     }
   };
 
-  const rows: { id: string; userId: string; text: string; timestamp: number; reply: boolean }[] = [];
+  const rows: { id: string; top: string; userId: string; text: string; timestamp: number; reply: boolean }[] = [];
   for (const c of post.comments) {
-    rows.push({ id: c.id, userId: c.userId, text: c.text, timestamp: c.timestamp, reply: false });
-    for (const r of c.replies) rows.push({ id: r.id, userId: r.userId, text: r.text, timestamp: r.timestamp, reply: true });
+    rows.push({ id: c.id, top: c.id, userId: c.userId, text: c.text, timestamp: c.timestamp, reply: false });
+    for (const r of c.replies) rows.push({ id: r.id, top: c.id, userId: r.userId, text: r.text, timestamp: r.timestamp, reply: true });
   }
 
   return createPortal(
@@ -6056,22 +6100,36 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
                     )}
                   </div>
                   <CommentText text={r.text} cls="text-sm text-gray-200 whitespace-pre-wrap break-words" />
+                  <button onClick={() => setReplyTo({ parentId: r.top, name: u.displayName })} className="mt-1 text-xs text-gray-500 hover:text-cyan-300">رد</button>
                 </div>
               </div>
             );
           })}
         </div>
+        {replyTo && (
+          <div className="px-3 pt-2 flex items-center justify-between text-xs text-gray-400 border-t border-gray-800">
+            <span className="truncate" dir="auto">الرد على {replyTo.name}</span>
+            <button onClick={() => setReplyTo(null)} className="p-1 hover:text-white" aria-label="إلغاء الرد"><X size={14} /></button>
+          </div>
+        )}
         <div className="p-3 border-t border-gray-800 flex items-center gap-2">
+          <button onClick={() => setEmojiOpen(o => !o)} className="p-2.5 bg-gray-800 rounded-full text-yellow-300" aria-label="إيموجي وملصقات"><Smile size={18} /></button>
           <input
             value={text}
             onChange={e => setText(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && add()}
-            placeholder={t('اكتب تعليقاً...')}
+            onKeyDown={e => e.key === 'Enter' && void send()}
+            placeholder={replyTo ? t('اكتب رداً...') : t('اكتب تعليقاً...')}
             className="flex-1 min-w-0 w-full px-3 min-[400px]:px-4 py-2.5 bg-gray-800 rounded-full text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
-          <button onClick={add} className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white" aria-label="إرسال"><Send size={18} /></button>
+          <button onClick={() => void send()} className="p-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white" aria-label="إرسال"><Send size={18} /></button>
         </div>
       </div>
+      {emojiOpen && createPortal(
+        <div dir={DIR} className="fixed inset-x-0 bottom-0 z-[140] bg-gray-900 border-t border-white/10" onClick={e => e.stopPropagation()}>
+          <EmojiPicker docked onPick={em => setText(v => v + em)} onClose={() => setEmojiOpen(false)} onSticker={st => { void sendSticker(st); }} />
+        </div>,
+        document.body,
+      )}
     </div>,
     document.body
   );
@@ -6472,7 +6530,7 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
   const rmMusic = async (job: PubJob) => {
     setBusy(job.id);
     const old = job.music;
-    if (await save(job, job.extra, null)) rmPath(old?.url);
+    if (await save(job, job.extra, null) && old && old.size > 0) rmPath(old.url);
     setBusy(null);
   };
   const addMusic = async (job: PubJob, f: File) => {
@@ -6483,7 +6541,7 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
       if (error) throw error;
       const item: PubExtra = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${f.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: f.size };
       const old = job.music;
-      if (await save(job, job.extra, item)) rmPath(old?.url); else rmPath(item.url);
+      if (await save(job, job.extra, item)) { if (old && old.size > 0) rmPath(old.url); } else rmPath(item.url);
     } catch (e) { console.error(e); }
     setBusy(null);
   };
@@ -6541,7 +6599,11 @@ function CreatePost({ currentUser, setPosts }: {
   const [cover, setCover] = useState<{ blob: Blob; url: string; custom: boolean } | null>(null);
   const [coverBusy, setCoverBusy] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [kind, setKind] = useState<'post' | 'reel' | 'video'>('post');
+  const [kind, setKind] = useState<'post' | 'reel' | 'video'>(pendingAudio ? 'reel' : 'post');
+  const [remoteMusic, setRemoteMusic] = useState<{ url: string; name: string } | null>(() => pendingAudio);
+  const [editOpen, setEditOpen] = useState(!!pendingAudio);
+  useEffect(() => { pendingAudio = null; }, []);
+  useEffect(() => { if (music) setRemoteMusic(null); }, [music]);
   const [error, setError] = useState('');
   const [extra, setExtra] = useState<File[]>([]);
   const [music, setMusic] = useState<File | null>(null);
@@ -6611,12 +6673,12 @@ function CreatePost({ currentUser, setPosts }: {
   const handlePost = async () => {
     if (videoOnly && media?.type !== 'video') { setError(kind === 'reel' ? 'اختر فيديو لنشره كريل' : 'اختر الفيديو أولاً'); return; }
     if (kind === 'video' && !title.trim()) { setError('اكتب عنواناً للفيديو'); return; }
-    if (!text.trim() && !media && !music) { setError('اكتب شيئاً أو أضف صورة أو فيديو أو ملف'); return; }
+    if (!text.trim() && !media && !music && !remoteMusic) { setError('اكتب شيئاً أو أضف صورة أو فيديو أو ملف'); return; }
     const jobId = crypto.randomUUID();
     trackJob(jobId, 0, (text.trim() || title.trim() || media?.file.name || music?.name || '').slice(0, 40));
     setError('');
     // Publishing continues in the background: the form is free right away and you can post something else.
-    setText(''); setTitle(''); setMedia(null); setExtra([]); setMusic(null); clearCover();
+    setText(''); setTitle(''); setMedia(null); setExtra([]); setMusic(null); setRemoteMusic(null); clearCover();
     const uploaded: string[] = [];
     try {
       let mediaUrl: string | null = null;
@@ -6652,6 +6714,8 @@ function CreatePost({ currentUser, setPosts }: {
         if (mErr) throw mErr;
         uploaded.push(mp);
         musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size };
+      } else if (remoteMusic) {
+        musicItem = { type: 'file', url: remoteMusic.url, name: `kan-music|${remoteMusic.name}`, size: 0 };
       }
       if (kind === 'video' && cover) {
         const coverPath = `${currentUser.id}/${crypto.randomUUID()}-cover.${cover.blob.type === 'image/png' ? 'png' : cover.blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
@@ -6794,6 +6858,22 @@ function CreatePost({ currentUser, setPosts }: {
             <button onClick={() => setMusic(null)} className="p-1.5 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
           </div>
         )}
+        {!music && remoteMusic && (
+          <div className="mb-4 flex items-center gap-3 p-2.5 rounded-xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25">
+            <span className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white shrink-0"><Music size={16} /></span>
+            <div className="min-w-0 flex-1"><div className="text-sm text-white truncate" dir="auto">{remoteMusic.name}</div><div className="text-[11px] text-gray-400">صوت من ريل آخر</div></div>
+            <button onClick={() => setRemoteMusic(null)} className="p-1.5 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
+          </div>
+        )}
+        {editOpen && (
+          <div className="mb-3 rounded-xl bg-gray-800/50 border border-gray-700 p-3">
+            <div className="text-sm text-gray-300 mb-2">تعديلات</div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => musicRef.current?.click()} className="px-3 py-2 rounded-full bg-gray-900 text-xs text-fuchsia-300 flex items-center gap-1.5"><Music size={14} /> موسيقى من الجهاز</button>
+              <span className="px-3 py-2 rounded-full bg-gray-900/60 text-xs text-gray-500">منصات الموسيقى · قريباً</span>
+            </div>
+          </div>
+        )}
         {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
         <div className="flex items-center justify-between border-t border-gray-800 pt-3">
           <div className="flex items-center gap-2">
@@ -6812,8 +6892,8 @@ function CreatePost({ currentUser, setPosts }: {
               </button>
             )}
             <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (!f.type.startsWith('audio/') && !/\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(f.name)) { setError('اختر ملف صوت'); return; } if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); }} />
-            <button onClick={() => musicRef.current?.click()} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${music ? 'text-fuchsia-300' : 'text-fuchsia-400'}`} aria-label="موسيقى">
-              <Music size={20} />
+            <button onClick={() => setEditOpen(o => !o)} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${editOpen || music || remoteMusic ? 'text-fuchsia-300' : 'text-fuchsia-400'}`} aria-label="تعديلات">
+              <Sparkles size={20} />
             </button>
             <div className="relative">
               <button onClick={() => setEmojiOpen(o => !o)} className="p-2 text-yellow-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="إيموجي">
