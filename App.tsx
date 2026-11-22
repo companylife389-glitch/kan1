@@ -562,6 +562,13 @@ function soundEnabled(): boolean {
 function setSoundEnabled(on: boolean) {
   try { localStorage.setItem('kan_sound', on ? 'on' : 'off'); } catch { /* ignore */ }
 }
+// The pop-up banner shown while you are using the app (separate from the phone's push notifications).
+function toastsEnabled(): boolean {
+  try { return localStorage.getItem('kan_toasts') !== 'off'; } catch { return true; }
+}
+function setToastsEnabled(on: boolean) {
+  try { localStorage.setItem('kan_toasts', on ? 'on' : 'off'); } catch { /* ignore */ }
+}
 
 // Browsers only allow audio after a tap or key press, so the audio context is created on the first one.
 function unlockAudio() {
@@ -1160,6 +1167,7 @@ let backSeq = 0;
 let backListening = false;
 let sentinelArmed = false;
 let backFallback: () => boolean = () => false;
+let lastExitPress = 0;
 
 function setBackFallback(fn: () => boolean) { backFallback = fn; }
 
@@ -1182,7 +1190,12 @@ function ensureBackListener() {
     const top = backStack.pop();
     if (top) { top.close(); armSentinel(); return; }
     if (backFallback()) { armSentinel(); return; }
-    window.history.back(); // nothing to close: really leave
+    // Nothing left to close: the first Back only warns, a second one within 2.2s really leaves.
+    const now = Date.now();
+    if (now - lastExitPress < 2200) { window.history.back(); return; }
+    lastExitPress = now;
+    armSentinel();
+    window.dispatchEvent(new Event('kan-exit-hint'));
   });
 }
 
@@ -2727,10 +2740,7 @@ function ProfileStoryAvatar({ user, currentUser, users }: { user: User; currentU
   const [items, setItems] = useState<StoryItem[]>([]);
   const [seen, setSeen] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState(false);
-  const canSee = user.id === currentUser.id || currentUser.following.includes(user.id);
-
   useEffect(() => {
-    if (!canSee) { setItems([]); return; }
     let off = false;
     const load = async () => {
       const { data, error } = await supabase.from('stories').select(STORY_SELECT)
@@ -2747,7 +2757,7 @@ function ProfileStoryAvatar({ user, currentUser, users }: { user: User; currentU
     void load();
     window.addEventListener('kan-stories-changed', load);
     return () => { off = true; window.removeEventListener('kan-stories-changed', load); };
-  }, [user.id, canSee, currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user.id, currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (items.length === 0) return <Avatar src={user.avatar} name={user.displayName} size="xl" zoom />;
   const unseen = user.id === currentUser.id || items.some(i => !seen.has(i.id));
@@ -2811,14 +2821,15 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
     setComposer(f);
   };
 
-  const allowed = new Set([currentUser.id, ...currentUser.following]);
+  // Everyone's active stories show here (not only people you follow); people you follow come first.
   const byUser = new Map<string, StoryItem[]>();
-  for (const s of stories) if (allowed.has(s.userId)) byUser.set(s.userId, [...(byUser.get(s.userId) ?? []), s]);
+  for (const s of stories) byUser.set(s.userId, [...(byUser.get(s.userId) ?? []), s]);
   const hasUnseen = (g: StoryGroup) => g.items.some(i => !seen.has(i.id));
+  const followed = (g: StoryGroup) => currentUser.following.includes(g.userId);
   const others: StoryGroup[] = [...byUser.entries()]
     .filter(([id]) => id !== currentUser.id && users.some(u => u.id === id))
     .map(([userId, items]) => ({ userId, items }))
-    .sort((a, b) => Number(hasUnseen(b)) - Number(hasUnseen(a)) || b.items[b.items.length - 1].createdAt - a.items[a.items.length - 1].createdAt);
+    .sort((a, b) => Number(hasUnseen(b)) - Number(hasUnseen(a)) || Number(followed(b)) - Number(followed(a)) || b.items[b.items.length - 1].createdAt - a.items[a.items.length - 1].createdAt);
   const mine = byUser.get(currentUser.id);
   const viewerGroups: StoryGroup[] = [...(mine ? [{ userId: currentUser.id, items: mine }] : []), ...others];
   const offset = mine ? 1 : 0;
@@ -2955,8 +2966,14 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
   const isMine = story?.userId === currentUser.id;
   const videoRef = useRef<HTMLVideoElement>(null);
   const downY = useRef(0);
+  const downX = useRef(0);
   const holdTimer = useRef<number | undefined>(undefined);
   const held = useRef(false);
+  // Open someone's profile from inside the story (closes the story first).
+  const openPerson = (id: string) => {
+    onClose();
+    window.setTimeout(() => openUserProfile(id), 60);
+  };
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -3085,16 +3102,29 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
     <div
       dir="rtl"
       className="fixed inset-0 z-[140] bg-black flex items-center justify-center select-none"
-      onTouchStart={e => { downY.current = e.touches[0].clientY; }}
-      onTouchEnd={e => { if (e.changedTouches[0].clientY - downY.current > 110) onClose(); }}
+      onTouchStart={e => { downY.current = e.touches[0].clientY; downX.current = e.touches[0].clientX; }}
+      onTouchEnd={e => {
+        const dy = e.changedTouches[0].clientY - downY.current;
+        const dx = e.changedTouches[0].clientX - downX.current;
+        if (dy > 110 && Math.abs(dy) > Math.abs(dx)) { onClose(); return; }
+        // Swipe sideways: jump straight to the next / previous person's story.
+        if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+          if (dx < 0) { if (gi < groups.length - 1) { setGi(gi + 1); setSi(0); } else onClose(); }
+          else if (gi > 0) { setGi(gi - 1); setSi(0); }
+        }
+      }}
       onPointerDown={e => {
         held.current = false;
+        downX.current = e.clientX;
+        downY.current = e.clientY;
         window.clearTimeout(holdTimer.current);
         holdTimer.current = window.setTimeout(() => { held.current = true; setPaused(true); }, 220);
       }}
       onPointerUp={e => {
         window.clearTimeout(holdTimer.current);
         if (held.current) { setPaused(false); held.current = false; return; }
+        // A drag (swipe) is not a tap.
+        if (Math.abs(e.clientX - downX.current) > 25 || Math.abs(e.clientY - downY.current) > 25) return;
         const rect = e.currentTarget.getBoundingClientRect();
         if (e.clientX - rect.left > rect.width / 3) next(); else prev();
       }}
@@ -3133,11 +3163,13 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
             ))}
           </div>
           <div className="flex items-center gap-2.5 mt-2.5" {...ignore}>
-            {author && <Avatar src={author.avatar} name={author.displayName} size="md" />}
-            <div className="flex-1 min-w-0">
-              <div className="text-white text-sm font-semibold truncate">{isMine ? 'قصتك' : author?.displayName}</div>
-              <div className="text-white/70 text-[11px]">{formatTime(story.createdAt)}</div>
-            </div>
+            <button onClick={() => author && openPerson(author.id)} className="flex items-center gap-2.5 flex-1 min-w-0 text-right active:opacity-80">
+              {author && <Avatar src={author.avatar} name={author.displayName} size="md" />}
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-sm font-semibold truncate">{isMine ? 'قصتك' : author?.displayName}</div>
+                <div className="text-white/70 text-[11px]">{formatTime(story.createdAt)}</div>
+              </div>
+            </button>
             {isMine && <button onClick={() => void remove()} className="p-2 rounded-full bg-black/30 text-white" aria-label="حذف القصة"><Trash2 size={18} /></button>}
             <button onClick={onClose} className="p-2 rounded-full bg-black/30 text-white" aria-label="إغلاق"><X size={20} /></button>
           </div>
@@ -3193,10 +3225,11 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
             {(viewers ?? []).map(id => {
               const u = users.find(x => x.id === id);
               return u ? (
-                <div key={id} className="flex items-center gap-3 py-1.5">
+                <button key={id} onClick={() => openPerson(u.id)} className="w-full flex items-center gap-3 py-1.5 text-right rounded-xl hover:bg-white/5 active:bg-white/10 transition-colors">
                   <Avatar src={u.avatar} name={u.displayName} size="md" />
-                  <span className="text-sm text-white">{u.displayName}</span>
-                </div>
+                  <span className="text-sm text-white flex-1 truncate">{u.displayName}</span>
+                  {likers.includes(u.id) && <Heart size={15} className="fill-rose-500 text-rose-500 shrink-0" />}
+                </button>
               ) : null;
             })}
           </div>
@@ -3640,7 +3673,27 @@ export default function App() {
   // Latest screen state for the live handlers (they live inside long-running subscriptions).
   const [toast, setToast] = useState<InAppToast | null>(null);
   const toastRef = useRef<(t: Omit<InAppToast, 'id'>) => void>(() => undefined);
-  toastRef.current = t => setToast({ ...t, id: Date.now() });
+  toastRef.current = t => { if (toastsEnabled()) setToast({ ...t, id: Date.now() }); };
+  const [soundOn, setSoundOn] = useState(soundEnabled());
+  const [bannersOn, setBannersOn] = useState(toastsEnabled());
+  const toggleSoundQuick = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled(next);
+    if (next) { unlockAudio(); playSound('receive'); }
+  };
+  const toggleBannersQuick = () => {
+    const next = !bannersOn;
+    setBannersOn(next);
+    setToastsEnabled(next);
+    if (!next) setToast(null);
+  };
+  // First Back on the home screen only warns; a second one within a moment leaves the app.
+  useEffect(() => {
+    const onHint = () => setToast({ id: Date.now(), title: 'اضغط رجوع مرة أخرى للخروج', body: '', onOpen: () => undefined });
+    window.addEventListener('kan-exit-hint', onHint);
+    return () => window.removeEventListener('kan-exit-hint', onHint);
+  }, []);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const uiRef = useRef<{ tab: string; chatWith: string | null; groupId: string | null; users: User[]; groups: Group[] }>({ tab: 'feed', chatWith: null, groupId: null, users: [], groups: [] });
   uiRef.current = { tab: activeTab, chatWith: selectedChat, groupId: activeGroupId, users, groups };
@@ -4035,6 +4088,23 @@ export default function App() {
                   transition={{ duration: 0.18, ease: 'easeOut' }}
                   className="flex items-center gap-0.5 p-1 ml-2 rounded-full bg-gray-900/80 backdrop-blur-md border border-white/10 shadow-lg shadow-black/30"
                 >
+                  <button
+                    onClick={toggleSoundQuick}
+                    aria-label={soundOn ? 'إيقاف الصوت' : 'تشغيل الصوت'}
+                    aria-pressed={soundOn}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 ${soundOn ? 'text-cyan-300 hover:bg-white/10' : 'text-gray-500 hover:bg-white/10'}`}
+                  >
+                    {soundOn ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                  </button>
+                  <button
+                    onClick={toggleBannersQuick}
+                    aria-label={bannersOn ? 'إيقاف الإشعارات المنبثقة' : 'تشغيل الإشعارات المنبثقة'}
+                    aria-pressed={bannersOn}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 ${bannersOn ? 'text-violet-300 hover:bg-white/10' : 'text-gray-500 hover:bg-white/10'}`}
+                  >
+                    {bannersOn ? <Bell size={18} /> : <BellOff size={18} />}
+                  </button>
+                  <span className="w-px h-5 bg-white/10 mx-0.5" />
                   {([
                     { tab: 'notifications' as const, label: 'الإشعارات', Icon: Bell, badge: notifUnread },
                     { tab: 'messages' as const, label: 'الرسائل', Icon: MessageSquare, badge: unreadCount },
@@ -4086,7 +4156,7 @@ export default function App() {
         <InstallBanner />
         <AnimatePresence mode="wait" initial={false}>
           {viewedUserId && (
-            <motion.div key={`user-${viewedUserId}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div key={`user-${viewedUserId}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
               <UserProfile
                 userId={viewedUserId}
                 currentUser={currentUser}
@@ -4105,12 +4175,12 @@ export default function App() {
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'feed' && (
-            <motion.div key="feed" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div key="feed" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
               <Feed posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} frontier={feedFrontier} hasMore={feedHasMore} loading={feedLoading} newCount={newPostsCount} onRefresh={loadFeedFirst} onLoadMore={loadFeedMore} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'search' && (
-            <motion.div key="search" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div key="search" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
               <SearchTab
                 users={users}
                 currentUser={currentUser}
@@ -4124,27 +4194,27 @@ export default function App() {
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'reels' && (
-            <motion.div key="reels" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div key="reels" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
               <ReelsTab onBack={() => goTab('feed')} posts={posts} setPosts={setPosts} users={users} setUsers={setUsers} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'videos' && (
-            <motion.div key="videos" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div key="videos" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
               <VideosTab posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} setUsers={setUsers} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'create' && (
-            <motion.div key="create" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div key="create" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
               <CreatePost currentUser={currentUser} setPosts={setPosts} setActiveTab={goTab} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'profile' && (
-            <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div key="profile" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
               <ProfileTab currentUser={currentUser} users={users} posts={posts} setUsers={setUsers} setPosts={setPosts} onOpenProfile={openProfile} onLoadPage={loadPostsPage} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'notifications' && (
-            <motion.div key="notifications" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div key="notifications" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
               <NotificationsTab
                 currentUser={currentUser}
                 users={users}
@@ -4157,12 +4227,12 @@ export default function App() {
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'settings' && (
-            <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div key="settings" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
               <SettingsTab currentUser={currentUser} setUsers={setUsers} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'messages' && (
-            <motion.div key="messages" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div key="messages" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
               <MessagesTab
                 currentUser={currentUser}
                 users={users}
@@ -7669,7 +7739,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                         <Download size={12} /> تحميل
                       </button>
                     )}
-                    {isMine && msg.media?.type !== 'voice' && !msg.sharedPostId && (
+                    {isMine && msg.media?.type !== 'voice' && (
                       <button
                         onClick={() => { setEditing(msg); setActiveMsgId(null); }}
                         className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"
