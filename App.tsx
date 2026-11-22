@@ -433,7 +433,7 @@ async function fetchPosts(opts: FetchPostsOptions = {}): Promise<Post[]> {
     .order('created_at', { referencedTable: 'comments', ascending: true })
     .limit(opts.limit ?? 12);
   if (error) throw error;
-  return ((data ?? []) as unknown as PostRow[]).map(rowToPost);
+  return signPostsMedia(((data ?? []) as unknown as PostRow[]).map(rowToPost));
 }
 
 function mergePosts(prev: Post[], incoming: Post[]): Post[] {
@@ -477,7 +477,16 @@ async function signPaths(paths: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const unique = [...new Set(paths)];
   if (unique.length === 0) return out;
-  const { data, error } = await supabase.storage.from(CHAT_MEDIA_BUCKET).createSignedUrls(unique, SIGNED_URL_SECONDS);
+  const big = unique.filter(isB2);
+  const small = unique.filter(p => !isB2(p));
+  if (big.length) {
+    try {
+      const { urls } = await b2Call<{ urls: Record<string, string> }>({ action: 'get', bucket: CHAT_MEDIA_BUCKET, paths: big, seconds: SIGNED_URL_SECONDS });
+      for (const [p, u] of Object.entries(urls)) out.set(p, u);
+    } catch (e) { console.error(e); }
+  }
+  if (small.length === 0) return out;
+  const { data, error } = await supabase.storage.from(CHAT_MEDIA_BUCKET).createSignedUrls(small, SIGNED_URL_SECONDS);
   if (error) {
     console.error(error);
     return out;
@@ -990,60 +999,159 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
 
 // ============ Full-screen image viewer ============
 // ============ Uploads with a live percentage ============
-// Big videos are re-encoded at a lower bitrate in the browser before upload (the server accepts files up to 50 MB).
-// It runs at normal speed, so it takes about as long as the video itself; the progress bar shows this part first.
-async function compressVideo(file: Blob, onProgress?: (pct: number) => void): Promise<File | null> {
-  const MR = (window as unknown as { MediaRecorder?: typeof MediaRecorder }).MediaRecorder;
-  if (!MR) return null;
-  const url = URL.createObjectURL(file);
-  const v = document.createElement('video');
-  v.src = url; v.playsInline = true; v.preload = 'auto';
+// Files above B2_MIN_MB go straight from the browser to Backblaze B2 (signed by the b2-sign edge function),
+// in parallel 32 MB parts for big files. Their storage path starts with "b2/". Smaller files stay on Supabase Storage.
+const B2_MIN_MB = 20;
+const B2_PART_MB = 32;
+const B2_PARALLEL = 4;
+
+const kanPath = (path: string, size: number) => (size > B2_MIN_MB * 1024 * 1024 ? `b2/${path}` : path);
+const isB2 = (p: string) => p.startsWith('b2/');
+
+async function b2Call<T = Record<string, unknown>>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('b2-sign', { body });
+  if (error) throw new Error(error.message || 'b2-sign failed');
+  if (data && (data as { error?: string }).error) throw new Error(String((data as { error: string }).error));
+  return data as T;
+}
+
+function kanPublicUrl(bucket: string, path: string): string {
+  if (isB2(path)) return `kanb2://${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`; // private bucket: stable marker, signed when shown
+  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+}
+
+function kanRemove(bucket: string, paths: string[]) {
+  const big = paths.filter(isB2);
+  const small = paths.filter(p => !isB2(p));
+  if (big.length) void b2Call({ action: 'delete', bucket, paths: big }).catch(e => console.error(e));
+  return small.length ? supabase.storage.from(bucket).remove(small) : Promise.resolve({ data: [], error: null });
+}
+
+// ---- Private B2 bucket: the database keeps a stable marker (kanb2://post-media/b2/...); screens get short-lived signed URLs. ----
+const B2_URL_RE = /\/post-media\/(b2\/[^?#]+)/;
+const b2PathOf = (u?: string | null): string | null => {
+  const m = u ? B2_URL_RE.exec(u) : null;
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return null; }
+};
+// Back to the stable form (a signed URL must never be saved in the database).
+const stableUrl = (u: string): string => { const p = b2PathOf(u); return p ? `kanb2://${POST_MEDIA_BUCKET}/${p.split('/').map(encodeURIComponent).join('/')}` : u; };
+const b2UrlCache = new Map<string, { url: string; exp: number }>();
+async function signMediaUrls(urls: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const byPath = new Map<string, string[]>();
+  for (const u of urls) { const p = u ? b2PathOf(u) : null; if (u && p) byPath.set(p, [...(byPath.get(p) ?? []), u]); }
+  const now = Date.now();
+  const missing = [...byPath.keys()].filter(p => (b2UrlCache.get(p)?.exp ?? 0) <= now);
+  for (let i = 0; i < missing.length; i += 100) {
+    try {
+      const { urls: signed } = await b2Call<{ urls: Record<string, string> }>({ action: 'get', bucket: POST_MEDIA_BUCKET, paths: missing.slice(i, i + 100), seconds: SIGNED_URL_SECONDS });
+      for (const [p, u] of Object.entries(signed)) b2UrlCache.set(p, { url: u, exp: now + (SIGNED_URL_SECONDS - 3600) * 1000 });
+    } catch (e) { console.error(e); }
+  }
+  const out = new Map<string, string>();
+  for (const [p, list] of byPath) { const hit = b2UrlCache.get(p); if (hit) for (const u of list) out.set(u, hit.url); }
+  return out;
+}
+async function signPostsMedia(posts: Post[]): Promise<Post[]> {
+  const all: (string | undefined)[] = [];
+  for (const p of posts) all.push(p.media?.url, p.coverUrl, p.music?.url, ...(p.extraMedia ?? []).map(x => x.url));
+  if (!all.some(u => b2PathOf(u))) return posts;
+  const m = await signMediaUrls(all);
+  const sg = (u: string) => m.get(u) ?? u;
+  return posts.map(p => ({
+    ...p,
+    media: p.media ? { ...p.media, url: sg(p.media.url) } : undefined,
+    extraMedia: p.extraMedia ? p.extraMedia.map(x => ({ ...x, url: sg(x.url) })) : undefined,
+    music: p.music ? { ...p.music, url: sg(p.music.url) } : undefined,
+    coverUrl: p.coverUrl ? sg(p.coverUrl) : undefined,
+  }));
+}
+async function signStories(list: StoryItem[]): Promise<StoryItem[]> {
+  const m = await signMediaUrls(list.map(s => s.url));
+  return list.map(s => ({ ...s, url: m.get(s.url) ?? s.url }));
+}
+
+function putBlob(url: string, blob: Blob, headers: Record<string, string>, onBytes: (n: number) => void): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onBytes(e.loaded); };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve(xhr.getResponseHeader('ETag') ?? '') : reject(new Error(`b2 upload ${xhr.status}: ${xhr.responseText.slice(0, 120)}`)));
+    xhr.onerror = () => reject(new Error('network error'));
+    xhr.onabort = () => reject(new Error('upload aborted'));
+    xhr.send(blob);
+  });
+}
+
+async function uploadToB2(
+  bucket: string, path: string, file: Blob, contentType: string, cacheControl: string,
+  onProgress?: (pct: number) => void,
+): Promise<{ error: Error | null }> {
+  const cc = `max-age=${cacheControl}`;
+  const report = (loaded: number) => onProgress?.(Math.min(99, Math.round((loaded / Math.max(1, file.size)) * 100)));
+  let uploadId = '';
   try {
-    await new Promise<void>((res, rej) => { v.onloadedmetadata = () => res(); v.onerror = () => rej(new Error('load')); });
-    const dur = v.duration;
-    if (!isFinite(dur) || dur <= 0 || dur > 1500) return null; // longer than 25 min: not worth waiting for
-    const el = v as HTMLVideoElement & { captureStream?: () => MediaStream; mozCaptureStream?: () => MediaStream };
-    const stream = el.captureStream ? el.captureStream() : el.mozCaptureStream ? el.mozCaptureStream() : null;
-    if (!stream) return null;
-    const mime = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(m => MR.isTypeSupported(m));
-    const vbps = Math.round(Math.min(2_500_000, Math.max(250_000, (44 * 1024 * 1024 * 8) / dur - 96_000)));
-    const rec = new MR(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: vbps, audioBitsPerSecond: 96_000 });
-    const chunks: Blob[] = [];
-    rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-    const done = new Promise<void>(res => { rec.onstop = () => res(); });
-    v.ontimeupdate = () => onProgress?.(Math.min(99, Math.round((v.currentTime / dur) * 100)));
-    v.onended = () => { if (rec.state !== 'inactive') rec.stop(); };
-    rec.start(1000);
-    await v.play();
-    await done;
-    const type = (rec.mimeType || mime || 'video/webm').split(';')[0];
-    return new File(chunks, `video.${type === 'video/mp4' ? 'mp4' : 'webm'}`, { type });
-  } catch (e) { console.error(e); return null; }
-  finally { URL.revokeObjectURL(url); }
+    if (file.size <= 64 * 1024 * 1024) {
+      const r = await b2Call<{ url: string }>({ action: 'put', bucket, path });
+      await putBlob(r.url, file, { 'Content-Type': contentType, 'Cache-Control': cc }, report);
+    } else {
+      const init = await b2Call<{ uploadId: string }>({ action: 'mp_init', bucket, path, contentType, cacheControl: cc });
+      uploadId = init.uploadId;
+      const partSize = B2_PART_MB * 1024 * 1024;
+      const count = Math.ceil(file.size / partSize);
+      const loaded = new Array<number>(count).fill(0);
+      const etags: { n: number; etag: string }[] = [];
+      let next = 0;
+      const worker = async () => {
+        while (next < count) {
+          const i = next++;
+          const n = i + 1;
+          const chunk = file.slice(i * partSize, Math.min(file.size, (i + 1) * partSize));
+          let lastErr: unknown = null;
+          for (let attempt = 0; attempt < 4; attempt++) {
+            try {
+              const { urls } = await b2Call<{ urls: string[] }>({ action: 'mp_parts', bucket, path, uploadId, parts: [n] });
+              loaded[i] = 0;
+              const etag = await putBlob(urls[0], chunk, {}, b => { loaded[i] = b; report(loaded.reduce((x, y) => x + y, 0)); });
+              loaded[i] = chunk.size;
+              etags.push({ n, etag });
+              lastErr = null;
+              break;
+            } catch (e) { lastErr = e; await new Promise(r => setTimeout(r, 800 * (attempt + 1))); }
+          }
+          if (lastErr) throw lastErr;
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(B2_PARALLEL, count) }, () => worker()));
+      await b2Call({ action: 'mp_complete', bucket, path, uploadId, parts: etags });
+    }
+    onProgress?.(100);
+    return { error: null };
+  } catch (e) {
+    if (uploadId) void b2Call({ action: 'mp_abort', bucket, path, uploadId }).catch(() => { /* ignore */ });
+    return { error: e instanceof Error ? e : new Error(String(e)) };
+  }
 }
 
 async function uploadWithProgress(
   bucket: string, path: string, file: Blob, contentType: string, cacheControl: string,
   onProgress?: (pct: number) => void,
 ): Promise<{ error: Error | null }> {
-  let base = 0;
-  if (file.size > 45 * 1024 * 1024 && (file.type || contentType).startsWith('video/')) {
-    const small = await compressVideo(file, pct => onProgress?.(Math.round(pct * 0.6)));
-    if (small) { file = small; contentType = small.type || contentType; base = 60; }
-  }
-  if (file.size > 50 * 1024 * 1024) return { error: new Error('file too large (max 50 MB after compression)') };
+  if (isB2(path)) return uploadToB2(bucket, path, file, contentType, cacheControl, onProgress);
+  if (file.size > 50 * 1024 * 1024) return { error: new Error('file too large for direct storage') };
   const { data: { session } } = await supabase.auth.getSession();
-  const base = import.meta.env.VITE_SUPABASE_URL as string;
+  const supaUrl = import.meta.env.VITE_SUPABASE_URL as string;
   const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
   return new Promise(resolve => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${base}/storage/v1/object/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`);
+    xhr.open('POST', `${supaUrl}/storage/v1/object/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`);
     xhr.setRequestHeader('Authorization', `Bearer ${session?.access_token ?? anon}`);
     xhr.setRequestHeader('apikey', anon);
     xhr.setRequestHeader('Content-Type', contentType);
     xhr.setRequestHeader('Cache-Control', `max-age=${cacheControl}`);
     xhr.setRequestHeader('x-upsert', 'false');
-    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress?.(Math.min(99, base + Math.round((e.loaded / e.total) * (100 - base)))); };
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress?.(Math.min(99, Math.round((e.loaded / e.total) * 100))); };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) { onProgress?.(100); resolve({ error: null }); }
       else resolve({ error: new Error(`upload failed ${xhr.status}: ${xhr.responseText.slice(0, 160)}`) });
@@ -1539,8 +1647,8 @@ function KanAIModal({ messages, me, other, nameOf, onClose, onUseReply }: {
 }
 
 // ============ Emoji ============
-const MAX_FILE_MB = 50; // other files
-const MAX_VIDEO_MB = 2048; // videos are compressed before upload
+const MAX_FILE_MB = 5120; // any file (big ones go to Backblaze B2)
+const MAX_VIDEO_MB = 5120; // videos upload as-is, no compression
 const maxMbFor = (f: File) => (f.type.startsWith('video/') ? MAX_VIDEO_MB : MAX_FILE_MB);
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
 
@@ -1628,7 +1736,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
       const captionSource = comment ? comment.text : [post.title, post.text].filter(Boolean).join('\n');
       const { error } = await supabase.from('stories').insert({
         user_id: currentUser.id,
-        media_url: hasVisual ? url : '',
+        media_url: hasVisual ? stableUrl(url) : '',
         media_type: hasVisual ? type : 'image',
         caption: (captionSource || `${author.displayName} (@${author.username})`).slice(0, 300),
         shared_post_id: post.id,
@@ -1686,7 +1794,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
       playSound('send');
     } catch (e) {
       console.error(e);
-      if (path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([path]);
+      if (path) void kanRemove(CHAT_MEDIA_BUCKET, [path]);
       setNote('تعذّر الإرسال، حاول مرة أخرى');
     }
     setBusy(null);
@@ -2162,7 +2270,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
     if (opts.file) {
       mime = (opts.file.type || '').split(';')[0];
       const ext = CHAT_EXT[mime] ?? (opts.fileName ? safeExt(opts.fileName) : opts.mediaType === 'voice' ? 'webm' : 'bin');
-      path = `${group.id}/${crypto.randomUUID()}.${ext}`;
+      path = opts.file ? kanPath(`${group.id}/${crypto.randomUUID()}.${ext}`, opts.file.size) : `${group.id}/${crypto.randomUUID()}.${ext}`;
     }
     const at = Date.now();
     const msg: GroupMessage = {
@@ -2195,7 +2303,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
       } catch (e) {
         console.error(e);
         trackUp(id, null);
-        if (path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([path]);
+        if (path) void kanRemove(CHAT_MEDIA_BUCKET, [path]);
         patchMsgs(list => list.filter(m => m.id !== id));
         setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
       }
@@ -2228,7 +2336,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
     patchMsgs(list => list.filter(x => x.id !== m.id));
     const { error: err } = await supabase.from('group_messages').delete().eq('id', m.id);
     if (err) { console.error(err); setError('تعذّر حذف الرسالة'); void reload(); return; }
-    if (m.media?.path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([m.media.path]);
+    if (m.media?.path) void kanRemove(CHAT_MEDIA_BUCKET, [m.media.path]);
   };
 
   const react = async (m: GroupMessage, emoji: string) => {
@@ -2874,7 +2982,7 @@ function ProfileStoryAvatar({ user, currentUser, users }: { user: User; currentU
         .eq('user_id', user.id).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true }).limit(50);
       if (off) return;
       if (error) { console.error(error); return; }
-      const list = ((data ?? []) as StoryRow[]).map(rowToStory);
+      const list = await signStories(((data ?? []) as StoryRow[]).map(rowToStory));
       setItems(list);
       if (list.length > 0 && user.id !== currentUser.id) {
         const { data: v } = await supabase.from('story_views').select('story_id').eq('viewer_id', currentUser.id).in('story_id', list.map(s => s.id));
@@ -2926,7 +3034,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
       .order('created_at', { ascending: true })
       .limit(400);
     if (error) { console.error(error); return; }
-    setStories(((data ?? []) as StoryRow[]).map(rowToStory));
+    setStories(await signStories(((data ?? []) as StoryRow[]).map(rowToStory)));
     const { data: v } = await supabase.from('story_views').select('story_id').eq('viewer_id', currentUser.id).gt('viewed_at', new Date(Date.now() - 86400000).toISOString());
     setSeen(new Set((v ?? []).map(x => (x as { story_id: string }).story_id)));
   };
@@ -3030,13 +3138,13 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
     if (busy) return;
     setBusy(true);
     setErr('');
-    const path = `${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[file.type] ?? safeExt(file.name)}`;
+    const path = kanPath(`${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[file.type] ?? safeExt(file.name)}`, file.size);
     try {
       const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, file, file.type || 'application/octet-stream', '31536000', setPct);
       if (upErr) throw upErr;
-      const url = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+      const url = kanPublicUrl(POST_MEDIA_BUCKET, path);
       const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300) });
-      if (insErr) { void supabase.storage.from(POST_MEDIA_BUCKET).remove([path]); throw insErr; }
+      if (insErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); throw insErr; }
       notifyStoriesChanged();
       onDone();
     } catch (e) {
@@ -3217,7 +3325,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
     if (error) { console.error(error); return; }
     // A shared post's media belongs to the post, so only delete files this story uploaded itself.
     const p = story.sharedPostId ? null : mediaPath(story.url);
-    if (p) void supabase.storage.from(POST_MEDIA_BUCKET).remove([p]);
+    if (p) void kanRemove(POST_MEDIA_BUCKET, [p]);
     onChanged();
     notifyStoriesChanged();
     onClose();
@@ -5202,7 +5310,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
     const path = `${me}/cs-${crypto.randomUUID()}.${stkExt(st.blob, st.kind)}`;
     const { error: upErr } = await supabase.storage.from(POST_MEDIA_BUCKET).upload(path, st.blob, { contentType: st.blob.type || 'image/webp', cacheControl: '31536000' });
     if (upErr) { console.error(upErr); window.alert('تعذّر إرسال الملصق'); return; }
-    const marker = `[[sticker:${supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl}]]`;
+    const marker = `[[sticker:${kanPublicUrl(POST_MEDIA_BUCKET, path)}]]`;
     if (parentId) await addReply(parentId, marker); else await addComment(marker);
   };
 
@@ -5307,7 +5415,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
       return;
     }
     const path = removed.media ? mediaPath(removed.media.url) : null;
-    if (path) void supabase.storage.from(POST_MEDIA_BUCKET).remove([path]);
+    if (path) void kanRemove(POST_MEDIA_BUCKET, [path]);
   };
 
   return (
@@ -6404,14 +6512,14 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         while (nextIdx < files.length) {
           const i = nextIdx++;
           const f = files[i];
-          const p = `${currentUser.id}/${crypto.randomUUID()}.${MEDIA_EXT[f.type] ?? safeExt(f.name)}`;
+          const p = kanPath(`${currentUser.id}/${crypto.randomUUID()}.${MEDIA_EXT[f.type] ?? safeExt(f.name)}`, f.size);
           const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, p, f, f.type || 'application/octet-stream', '31536000', pct => {
             pcts[i] = pct;
             setPostPct(Math.round(pcts.reduce((x, y) => x + y, 0) / files.length));
           });
           if (upErr) throw upErr;
           uploaded.push(p);
-          results[i] = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(p).data.publicUrl;
+          results[i] = kanPublicUrl(POST_MEDIA_BUCKET, p);
         }
       };
       await Promise.all([worker(), worker(), worker()]);
@@ -6421,11 +6529,11 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         files.slice(offset).map((f, k) => ({ type: detectMediaKind(f), url: results[offset + k], name: f.name.slice(0, 200), size: f.size }));
       let musicItem: { type: 'file'; url: string; name: string; size: number } | null = null;
       if (music) {
-        const mp = `${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`;
+        const mp = kanPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
         if (mErr) throw mErr;
         uploaded.push(mp);
-        musicItem = { type: 'file', url: supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(mp).data.publicUrl, name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size };
+        musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size };
       }
       if (kind === 'video' && cover) {
         const coverPath = `${currentUser.id}/${crypto.randomUUID()}-cover.${cover.blob.type === 'image/png' ? 'png' : cover.blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
@@ -6434,7 +6542,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
           .upload(coverPath, cover.blob, { contentType: cover.blob.type || 'image/jpeg', cacheControl: '31536000' });
         if (coverErr) throw coverErr;
         uploaded.push(coverPath);
-        coverUrl = supabase.storage.from(POST_MEDIA_BUCKET).getPublicUrl(coverPath).data.publicUrl;
+        coverUrl = kanPublicUrl(POST_MEDIA_BUCKET, coverPath);
       }
       const id = crypto.randomUUID();
       const { error: insErr } = await supabase.from('posts').insert({
@@ -6464,7 +6572,8 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
         cursor: new Date().toISOString(),
         timestamp: Date.now(), likes: [], comments: [], bookmarks: [],
       };
-      setPosts(prev => [newPost, ...prev.filter(p => p.id !== id)]);
+      const [shownPost] = await signPostsMedia([newPost]);
+      setPosts(prev => [shownPost, ...prev.filter(p => p.id !== id)]);
       if (media && media.url) URL.revokeObjectURL(media.url);
       clearCover();
       setText('');
@@ -6476,7 +6585,7 @@ function CreatePost({ currentUser, setPosts, setActiveTab }: {
       setActiveTab('feed');
     } catch (e) {
       console.error(e);
-      if (uploaded.length > 0) void supabase.storage.from(POST_MEDIA_BUCKET).remove(uploaded);
+      if (uploaded.length > 0) void kanRemove(POST_MEDIA_BUCKET, uploaded);
       setError('تعذّر النشر، حاول مرة أخرى');
     } finally {
       setPosting(false);
@@ -8074,7 +8183,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       return false;
     }
     const id = crypto.randomUUID();
-    const path = opts.file ? `${convId}/${crypto.randomUUID()}.${CHAT_EXT[opts.file.type] ?? safeExt(opts.fileName)}` : null;
+    const path = opts.file ? kanPath(`${convId}/${crypto.randomUUID()}.${CHAT_EXT[opts.file.type] ?? safeExt(opts.fileName)}`, opts.file.size) : null;
     const msg: Message = {
       id, senderId: currentUser.id, text: body, timestamp: Date.now(), read: false,
       replyToId: opts.replyToId,
@@ -8109,7 +8218,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       } catch (e) {
         console.error(e);
         trackUp(id, null);
-        if (path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([path]);
+        if (path) void kanRemove(CHAT_MEDIA_BUCKET, [path]);
         setConversations(prev => prev.map(c => (c.id === convId ? { ...c, messages: c.messages.filter(m => m.id !== id) } : c)));
         setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
       }
@@ -8273,7 +8382,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       setError('تعذّر حذف الرسالة، حاول مرة أخرى');
       return;
     }
-    if (msg.media?.path) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove([msg.media.path]);
+    if (msg.media?.path) void kanRemove(CHAT_MEDIA_BUCKET, [msg.media.path]);
   };
 
   // Files sent together (same sender, within two minutes, no text) are shown as one album bubble.
@@ -8307,7 +8416,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       return;
     }
     const paths = items.map(i => i.media?.path).filter((p): p is string => !!p);
-    if (paths.length) void supabase.storage.from(CHAT_MEDIA_BUCKET).remove(paths);
+    if (paths.length) void kanRemove(CHAT_MEDIA_BUCKET, paths);
   };
 
   const lastSeenId = [...messages].reverse().find(m => m.senderId === currentUser.id && m.read)?.id;
