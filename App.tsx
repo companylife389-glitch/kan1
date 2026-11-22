@@ -43,6 +43,109 @@ const EN: Record<string, string> = {
 };
 const DIR = LANG === 'en' ? 'ltr' : 'rtl';
 const t = (ar: string): string => (LANG === 'en' ? EN[ar] ?? ar : ar);
+// More English strings. The page text, placeholders and alerts are translated at runtime (see kanTr below).
+Object.assign(EN, {
+  "(أنت)": "(You)", "· معدّلة": "· edited", "6 أحرف على الأقل": "At least 6 characters", "أدخل اسم المستخدم وكلمة المرور": "Enter your username and password",
+  "أرسل في محادثة...": "Send in a chat...", "أرسلت لك إشعاراً تجريبياً، اخرج من التطبيق لتراه": "A test notification was sent. Leave the app to see it",
+  "ألوان دافئة": "Warm colors", "أنت": "You", "أنت:": "You:", "أنشئ مجموعة وأضف أصدقاءك": "Create a group and add your friends",
+  "أي فيديو يُنشر يظهر هنا بتصميم الريلز": "Any video you post shows up here in reels style", "إخفاء": "Hide", "إرسال": "Send", "إرسال إشعار تجريبي": "Send a test notification",
+  "إرسال الرد": "Send reply", "إزالة": "Remove", "إزالة الصورة": "Remove photo", "إزالة الكل": "Remove all", "إزالة الموسيقى": "Remove music", "إشعار الهاتف": "Phone notification",
+  "إشعار جديد": "New notification", "إشعارات الرسائل": "Message notifications", "إعادة المحاولة": "Try again", "إعدادات الإشعارات": "Notification settings", "إغلاق": "Close",
+  "إلغاء الرد": "Cancel reply", "إلغاء الملفات": "Cancel files", "إنشاء المجموعة": "Create group", "إنشاء وإرسال الملصق": "Create and send sticker", "إيقاف الإشعارات المنبثقة": "Turn off pop-up notifications",
+  "إيقاف الصوت": "Mute", "إيموجي": "Emoji", "ابحث عن شخص...": "Search for a person...", "ابحث في الفيديوهات...": "Search videos...", "ابدأ المحادثة في المجموعة 👋": "Start the conversation in the group 👋",
+  "ابدأ بالبحث عن أشخاص": "Start by searching for people", "اختر الفيديو أولاً": "Choose the video first", "اختر صورة": "Choose a photo", "اختر صورة أو فيديو": "Choose a photo or video",
+  "اختر صورة فقط": "Choose a photo only", "اختر فيديو لنشره كريل": "Choose a video to post as a reel", "اختر ما يصلك وما لا يصلك": "Choose what reaches you", "اختر ملف صوت": "Choose an audio file", "اختر ملف فيديو": "Choose a video file",
+  "اسأل KAN أي سؤال أو اطلب منه يقرأ الشات...": "Ask KAN anything or have it read the chat...", "اسأل KAN غير متاح الآن، حاول بعد شوية.": "Ask KAN is unavailable right now, try again later.", "استنى دقيقة وحاول تاني.": "Wait a minute and try again.",
+  "اسم المجموعة": "Group name", "اسم المستخدم أو كلمة المرور غير صحيحة": "Wrong username or password", "اسم المستخدم مستخدم بالفعل": "Username is already taken",
+  "اسم المستخدم من 3 إلى 30 حرفاً (حروف وأرقام و _ و . فقط)": "Username must be 3 to 30 characters (letters, numbers, _ and . only)", "اصنع أول ملصق من صورة أو فيديو قصير": "Make your first sticker from a photo or short video",
+  "اضغط رجوع مرة أخرى للخروج": "Press back again to exit", "افتح KAN من شاشتك الرئيسية مثل أي تطبيق": "Open KAN from your home screen like any app", "اقترح رد مناسب على آخر رسالة": "Suggest a reply to the last message",
+  "اكتب رسالة للمجموعة...": "Write a message to the group...", "اكتب شيئاً أو أضف صورة أو فيديو أو ملف": "Write something or add a photo, video or file", "اكتب شيئاً عن نفسك...": "Write something about yourself...",
+  "اكتب عنواناً للفيديو": "Write a title for the video", "اكتب وصفاً للريل...": "Write a caption for the reel...", "الآن": "now", "الإشعارات تعمل على هذا الجهاز ✅": "Notifications are working on this device ✅",
+  "الإشعارات محظورة لهذا الموقع. افتح إعدادات الموقع في المتصفح واسمح بالإشعارات.": "Notifications are blocked for this site. Open the site settings in your browser and allow notifications.",
+  "الإشعارات محظورة، فعّلها من إعدادات المتصفح": "Notifications are blocked, enable them in your browser settings", "الإعجابات والتعليقات والمتابعون الجدد ستظهر هنا": "Likes, comments and new followers will show up here",
+  "الاسم الكامل": "Full name", "الاسم المعروض غير صالح": "Invalid display name", "الاسم المعروض مطلوب": "Display name is required", "البريد الإلكتروني غير صالح": "Invalid email", "التالي": "Next", "التعليق": "Comment",
+  "التعليقات والردود": "Comments and replies", "الرد على رسالتك": "Replied to your message", "الرسائل الخاصة": "Private messages", "السابق": "Previous", "السرعة": "Speed", "الصورة الشخصية (اختياري)": "Profile photo (optional)",
+  "العربية": "العربية", "العنوان": "Title", "الغلاف يجب أن يكون صورة JPG أو PNG أو WebP": "The cover must be a JPG, PNG or WebP image", "المتابعون الجدد": "New followers", "المزيد": "More", "المزيد من الفيديوهات": "More videos",
+  "المستخدم غير موجود": "User not found", "الملصقات المتحركة غير مدعومة في التعليقات": "Animated stickers are not supported in comments", "الملف كبير جداً (الحد 80 ميجا)": "The file is too large (80 MB limit)",
+  "المنشور": "Post", "النص لا يمكن أن يكون فارغاً": "The text can't be empty", "انشر ريل": "Post a reel", "انشر فيديو": "Post a video", "بدون غلاف": "No cover", "تابع أشخاصاً لتظهر منشوراتهم هنا": "Follow people to see their posts here",
+  "تحميل الصورة": "Download photo", "ترقية": "Promote", "تسجيل صوتي": "Voice recording", "تشغيل الإشعارات المنبثقة": "Turn on pop-up notifications", "تصلك حتى لو كان الموقع مغلقاً": "You get them even when the site is closed",
+  "تظهر حول صورة أي شخص لديه قصة نشطة، ورمادية بعد أن تشاهدها": "Shows around the photo of anyone with an active story, and turns gray once you watch it", "تعديل التعليق": "Edit comment", "تعديل الرد": "Edit reply",
+  "تعديل الرسالة": "Edit message", "تعديل المنشور": "Edit post", "تعذّر إرسال الرد": "Couldn't send the reply", "تعذّر إرسال الرسالة الصوتية": "Couldn't send the voice message", "تعذّر إرسال الرسالة، حاول مرة أخرى": "Couldn't send the message, try again",
+  "تعذّر إرسال الملصق": "Couldn't send the sticker", "تعذّر إضافة التعليق، حاول مرة أخرى": "Couldn't add the comment, try again", "تعذّر إضافة الرد، حاول مرة أخرى": "Couldn't add the reply, try again",
+  "تعذّر إنشاء الحساب، حاول مرة أخرى": "Couldn't create the account, try again", "تعذّر إنشاء المجموعة، حاول مرة أخرى": "Couldn't create the group, try again", "تعذّر إنشاء الملصق، جرّب ملفاً آخر": "Couldn't create the sticker, try another file",
+  "تعذّر الإرسال، حاول مرة أخرى": "Couldn't send, try again", "تعذّر الحذف، حاول مرة أخرى": "Couldn't delete, try again", "تعذّر العثور على ملفك الشخصي": "Couldn't find your profile", "تعذّر النسخ": "Couldn't copy",
+  "تعذّر النشر، حاول مرة أخرى": "Couldn't publish, try again", "تعذّر تحميل البيانات من الخادم": "Couldn't load data from the server", "تعذّر تغيير الاسم": "Couldn't change the name", "تعذّر تغيير الصورة": "Couldn't change the photo",
+  "تعذّر تفعيل الإشعارات": "Couldn't enable notifications", "تعذّر تفعيل الإشعارات، حاول مرة أخرى.": "Couldn't enable notifications, try again.", "تعذّر تنفيذ العملية": "Couldn't complete the action",
+  "تعذّر حذف الألبوم، حاول مرة أخرى": "Couldn't delete the album, try again", "تعذّر حذف التعليق، حاول مرة أخرى": "Couldn't delete the comment, try again", "تعذّر حذف الرد، حاول مرة أخرى": "Couldn't delete the reply, try again",
+  "تعذّر حذف الرسالة": "Couldn't delete the message", "تعذّر حذف الرسالة، حاول مرة أخرى": "Couldn't delete the message, try again", "تعذّر حذف المنشور، حاول مرة أخرى": "Couldn't delete the post, try again",
+  "تعذّر حفظ الإعداد": "Couldn't save the setting", "تعذّر حفظ التعديل، حاول مرة أخرى": "Couldn't save the edit, try again", "تعذّر حفظ التغييرات، حاول مرة أخرى": "Couldn't save the changes, try again",
+  "تعذّر حفظ الخلفية": "Couldn't save the background", "تعذّر رفع صورة الخلفية": "Couldn't upload the background", "تعذّر عرض الإشعار": "Couldn't show the notification", "تعذّر عرض الإشعار التجريبي.": "Couldn't show the test notification.",
+  "تعذّر نشر القصة، حاول مرة أخرى": "Couldn't post the story, try again", "تعذّرت الإزالة": "Couldn't remove", "تعذّرت الإضافة": "Couldn't add", "تعذّرت المشاركة في القصة": "Couldn't share to the story", "تعذّرت المغادرة": "Couldn't leave",
+  "تعليق": "Comment", "تعليق على منشورك أو رد على تعليقك": "A comment on your post or a reply to your comment", "تغيير الخلفية": "Change background", "تغيير صورة المجموعة": "Change group photo", "تم": "Done",
+  "تم إرسال ردك ✓": "Reply sent ✓", "تم إنشاء الحساب، سجّل الدخول الآن.": "Account created, log in now.", "تم الإرسال": "Sent", "تم النسخ": "Copied", "تم نسخ الرابط": "Link copied", "تمت المشاركة في قصتك ✓": "Shared to your story ✓", "تمت المشاهدة": "Seen",
+  "تم رفض الإذن. فعّل الإشعارات لهذا الموقع من إعدادات المتصفح ثم حاول مرة أخرى.": "Permission denied. Enable notifications for this site in your browser settings and try again.", "تيليجرام": "Telegram", "ثبّت KAN على جهازك": "Install KAN on your device",
+  "جارٍ إنشاء الملصق...": "Creating sticker...", "جارٍ الإنشاء...": "Creating...", "جارٍ الالتقاط...": "Capturing...", "جميع الحقول مطلوبة": "All fields are required", "جهازك أو متصفحك لا يدعم إشعارات الهاتف": "Your device or browser doesn't support phone notifications",
+  "حجم الصورة يجب أن لا يتجاوز 8 ميجابايت": "The photo must not exceed 8 MB", "حجم الغلاف يجب أن لا يتجاوز 5 ميجابايت": "The cover must not exceed 5 MB", "حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت": "The music must not exceed 20 MB",
+  "حدث خطأ في الاتصال، حاول مرة أخرى": "Connection error, try again", "حدث خطأ، حاول مرة أخرى": "Something went wrong, try again", "حذف الرد": "Delete reply", "حذف القصة": "Delete story", "حذف الملصق": "Delete sticker",
+  "حذف كل ملفات الألبوم للجميع؟": "Delete all the album's files for everyone?", "حذف ملصقات": "Delete stickers", "حذف هذا التعليق؟": "Delete this comment?", "حذف هذا الرد؟": "Delete this reply?", "حذف هذه الرسالة للجميع؟": "Delete this message for everyone?", "حذف هذه القصة؟": "Delete this story?",
+  "حلل المحادثة وقل لي ما المطلوب مني": "Analyze the chat and tell me what's expected of me", "دعوات المجموعات": "Group invites", "رسائل المجموعات": "Group messages", "رسائل المحادثات العادية": "Regular chat messages", "رسائل جديدة في مجموعاتك": "New messages in your groups",
+  "رسالة": "Message", "رسالة جديدة": "New message", "رسالة غير متاحة": "Message unavailable", "ريل 🎬": "Reel 🎬", "سجّل الدخول من جديد وحاول تاني.": "Log in again and try again.", "شاهدها الكل": "Everyone saw it", "شوهدت": "Seen", "صورة": "Photo",
+  "صورة / فيديو / ملف": "Photo / video / file", "صورة الغلاف": "Cover photo", "عرض التعليق": "View comment", "عرض القصة": "View story", "عرض المنشور": "View post",
+  "على الآيفون: اضغط زر المشاركة في Safari ثم «إضافة إلى الشاشة الرئيسية».": "On iPhone: tap the Share button in Safari, then “Add to Home Screen”.", "عندما يتابعك شخص": "When someone follows you", "عندما يضيفك أحد إلى مجموعة": "When someone adds you to a group",
+  "عندما يعجب أحد بمنشورك": "When someone likes your post", "عنوان الفيديو": "Video title", "عيّن مشرفاً آخر قبل المغادرة": "Assign another admin before leaving", "فتح الريل": "Open reel", "فشل رفع الصورة": "Photo upload failed", "فشل قراءة الملف": "Couldn't read the file",
+  "في التطبيق": "In the app", "فيديو": "Video", "فيديو ▶️": "Video ▶️", "قصة جديدة": "New story", "كلمة المرور غير مقبولة (6 أحرف على الأقل)": "Password not accepted (at least 6 characters)", "كلمة المرور يجب أن تكون 6 أحرف على الأقل": "Password must be at least 6 characters",
+  "لا أحد بعد": "No one yet", "لا توجد تعليقات بعد. كن أول من يعلّق!": "No comments yet. Be the first to comment!", "لا توجد ريلز بعد": "No reels yet", "لا توجد فيديوهات بعد": "No videos yet", "لا توجد مجموعات بعد": "No groups yet",
+  "لا توجد ملفات منشورة بعد. انشر أول ملف!": "No files posted yet. Post the first one!", "لا توجد منشورات": "No posts", "لا توجد نتائج": "No results", "لا يمكن الوصول للميكروفون. يرجى السماح بالوصول.": "Can't access the microphone. Please allow access.",
+  "لا يمكن تشغيل هذا الفيديو على هذا الجهاز (صيغة غير مدعومة).": "This video can't be played on this device (unsupported format).", "لا يمكن تشغيل هذا الفيديو على هذا الجهاز. قد يكون بصيغة لا يدعمها المتصفح (مثل تسجيلات الآيفون HEVC).": "This video can't be played on this device. It may be in a format the browser doesn't support (like iPhone HEVC recordings).",
+  "لا يوجد أحد": "No one", "لتصلك إشعارات الهاتف اسمح بالإشعارات في المتصفح": "Allow notifications in the browser to get phone notifications", "لخّص المحادثة باختصار": "Summarize the chat briefly", "لم يشاهدها أحد بعد": "No one has seen it yet", "متصفحك لا يدعم تسجيل الفيديو": "Your browser doesn't support video recording",
+  "مثال: القاهرة، مصر": "Example: Cairo, Egypt", "مجموعة": "Group", "محاولات كثيرة، حاول لاحقاً": "Too many attempts, try later", "مستخدم": "User", "مسح": "Clear", "مسح كل الإشعارات": "Clear all notifications", "مشاركة التعليق": "Share comment", "مشرف": "Admin",
+  "معلومات المجموعة": "Group info", "مغادرة المجموعة": "Leave group", "ملء الشاشة": "Full screen", "ملصق جديد": "New sticker", "ملف": "File", "من شاهدها": "Who saw it", "موسيقى": "Music", "نسخ": "Copy", "نسخ الرابط": "Copy link",
+  "نغمة عند وصول رسالة أو إرسالها": "A tone when a message arrives or is sent", "هذا البريد مسجّل بالفعل": "This email is already registered", "هذا المتصفح لا يدعم الإشعارات.": "This browser doesn't support notifications.", "هذا المنشور غير متاح، ربما تم حذفه": "This post isn't available, it may have been deleted",
+  "هكذا ستظهر لك الرسائل خارج التطبيق 👋": "This is how messages will look outside the app 👋", "واتساب": "WhatsApp", "وصف الفيديو (اختياري)...": "Video description (optional)...", "وصلت للحد اليومي لـ «اسأل KAN». جرّب بكرة.": "You've hit the daily limit for “Ask KAN”. Try tomorrow.",
+  "يتابعك": "Follows you", "يرجى اختيار صورة فقط": "Please choose a photo only", "يرجى تأكيد بريدك الإلكتروني أولاً": "Please confirm your email first",
+  "↪️ منشور مني": "↪️ A post from me", "🎤 رسالة صوتية": "🎤 Voice message", "🎥 فيديو": "🎥 Video", "🎬 ريل": "🎬 Reel", "🏷️ ملصق": "🏷️ Sticker", "💡 اقترح رد": "💡 Suggest a reply", "📎 ملف": "📎 File", "📝 لخّص الشات": "📝 Summarize chat", "📷 صورة": "📷 Photo", "📷 وسائط": "📷 Media", "🔍 المطلوب مني؟": "🔍 What's expected of me?",
+  "أضف تعليقاً...": "Add a comment...", "متابعة": "Follow", "متابَع": "Following", "الصوت": "Sound", "كتم الصوت": "Mute", "تشغيل الصوت": "Unmute", "إيقاف مؤقت": "Pause", "تشغيل": "Play",
+});
+const EN_RULES: [RegExp, (m: RegExpExecArray) => string][] = [
+  [/^منذ (\d+) د$/, m => `${m[1]}m ago`], [/^منذ (\d+) س$/, m => `${m[1]}h ago`], [/^منذ (\d+) ي$/, m => `${m[1]}d ago`], [/^منذ (\d+) يوم$/, m => `${m[1]}d ago`],
+  [/^(\d+) عضو$/, m => `${m[1]} members`], [/^جارٍ النشر\.\.\. (\d+)%$/, m => `Publishing... ${m[1]}%`], [/^الصورة (\d+)$/, m => `Photo ${m[1]}`], [/^تحميل الكل \((\d+)\)$/, m => `Download all (${m[1]})`],
+  [/^(.*) على KAN$/, m => `${m[1]} on KAN`], [/^عرض صورة (.+)$/, m => `View ${m[1]}'s photo`], [/^الرد على (.+)$/, m => `Reply to ${m[1]}`], [/^رد على (.+)\.\.\.$/, m => `Reply to ${m[1]}...`],
+  [/^تم تجاهل (\d+) ملف.*$/, m => `${m[1]} file(s) skipped because they exceed the allowed size`],
+];
+const kanTr = (raw: string): string => {
+  const k = raw.trim();
+  if (!k || !/[\u0600-\u06FF]/.test(k)) return raw;
+  let out = EN[k];
+  if (out === undefined) for (const [re, f] of EN_RULES) { const m = re.exec(k); if (m) { out = f(m); break; } }
+  return out === undefined ? raw : raw.replace(k, out);
+};
+// English mode: anything still written in Arabic on screen (text, placeholders, titles, alerts) is translated as it appears.
+if (LANG === 'en' && typeof window !== 'undefined') {
+  const nativeAlert = window.alert.bind(window);
+  const nativeConfirm = window.confirm.bind(window);
+  window.alert = (m?: unknown) => nativeAlert(kanTr(String(m ?? '')));
+  window.confirm = (m?: string) => nativeConfirm(kanTr(String(m ?? '')));
+  const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+  const fixNode = (n: Node) => {
+    if (n.nodeType === 3) { const v = n.nodeValue ?? ''; const o = kanTr(v); if (o !== v) n.nodeValue = o; return; }
+    if (n.nodeType !== 1) return;
+    const el = n as Element;
+    for (const a of ATTRS) { const v = el.getAttribute(a); if (v) { const o = kanTr(v); if (o !== v) el.setAttribute(a, o); } }
+    el.childNodes.forEach(fixNode);
+  };
+  const start = () => {
+    fixNode(document.body);
+    new MutationObserver(list => {
+      for (const r of list) {
+        if (r.type === 'childList') r.addedNodes.forEach(fixNode);
+        else if (r.type === 'characterData') fixNode(r.target);
+        else fixNode(r.target);
+      }
+    }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+  };
+  if (document.body) start(); else window.addEventListener('DOMContentLoaded', start);
+}
+
 
 // ============ Types ============
 interface ChatBackground {
@@ -1010,7 +1113,11 @@ const isB2 = (p: string) => p.startsWith('b2/');
 
 async function b2Call<T = Record<string, unknown>>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('b2-sign', { body });
-  if (error) throw new Error(error.message || 'b2-sign failed');
+  if (error) {
+    let msg = error.message || 'b2-sign failed';
+    try { const j = await (error as { context?: Response }).context?.json(); if (j && j.error) msg = String(j.error); } catch { /* keep message */ }
+    throw new Error(msg);
+  }
   if (data && (data as { error?: string }).error) throw new Error(String((data as { error: string }).error));
   return data as T;
 }
@@ -3576,123 +3683,19 @@ function EmojiPicker({ onPick, onClose, docked = false, onSticker, startOnSticke
 }
 
 // ============ Double-tap love: the burst follows the "like style" chosen in Settings ============
-type LikeStyle = 'heart' | 'coin' | 'flames';
-const getLikeStyle = (): LikeStyle => {
-  try { const v = localStorage.getItem('kan_like_style'); return v === 'heart' || v === 'flames' ? v : 'coin'; } catch { return 'coin'; }
-};
-const setLikeStyleStored = (v: LikeStyle) => {
-  try { localStorage.setItem('kan_like_style', v); } catch { /* ignore */ }
-  window.dispatchEvent(new Event('kan-like-style'));
-};
-function useLikeStyle(): LikeStyle {
-  const [v, setV] = useState<LikeStyle>(getLikeStyle);
-  useEffect(() => {
-    const on = () => setV(getLikeStyle());
-    window.addEventListener('kan-like-style', on);
-    return () => window.removeEventListener('kan-like-style', on);
-  }, []);
-  return v;
-}
-
-// Premium like bursts: crystal heart, gold coin, diamond. Each one is a layered SVG with glow, shine and sparkles.
-function Sparkle4({ x, y, s, d, c }: { x: number; y: number; s: number; d: number; c: string }) {
-  return (
-    <motion.svg viewBox="0 0 24 24" className="absolute" style={{ left: '50%', top: '50%', width: s, height: s, marginLeft: x - s / 2, marginTop: y - s / 2, filter: `drop-shadow(0 0 6px ${c})` }}
-      initial={{ scale: 0, rotate: 0, opacity: 0 }} animate={{ scale: [0, 1.15, 0], rotate: [0, 90, 180], opacity: [0, 1, 0] }} transition={{ duration: 0.9, delay: d, ease: 'easeOut' }}>
-      <path fill={c} d="M12 0c.8 6.2 5.8 11.2 12 12-6.2.8-11.2 5.8-12 12-.8-6.2-5.8-11.2-12-12C6.2 11.2 11.2 6.2 12 0z" />
-    </motion.svg>
-  );
-}
+// Double-tap like: one heart in the KAN colours (violet to cyan) that pops and fades.
 function CoinBurst({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
-  const style = useLikeStyle();
-  const big = size === 'lg';
-  const dim = big ? 112 : 58;
-  const k = big ? 1 : 0.52;
-  const uid = `lk-${size}-${style}`;
-  const sparks = (cols: string[]) => [[-70, -46, 20, 0.15], [74, -38, 16, 0.25], [-58, 54, 14, 0.3], [62, 58, 22, 0.1], [0, -82, 15, 0.35], [2, 84, 13, 0.2]]
-    .map(([x, y, s, d], i) => <Sparkle4 key={i} x={x * k} y={y * k} s={s * k + 4} d={d} c={cols[i % cols.length]} />);
-  const ring = (c: string) => (
-    <motion.span className="absolute rounded-full" style={{ width: dim, height: dim, border: `2px solid ${c}`, boxShadow: `0 0 18px ${c}` }}
-      initial={{ scale: 0.4, opacity: 0.9 }} animate={{ scale: 2.2, opacity: 0 }} transition={{ duration: 0.75, ease: 'easeOut' }} />
-  );
-  let inner: React.ReactNode;
-  if (style === 'heart') {
-    // Crystal heart: ruby body, inner facets, white gloss, pops with a bounce and sheds mini hearts.
-    inner = (
-      <div className="relative flex items-center justify-center" style={{ width: dim, height: dim }}>
-        {ring('rgba(251,113,133,.85)')}
-        {sparks(['#fde68a', '#fff', '#fda4af'])}
-        {[-1, 0, 1].map(i => (
-          <motion.svg key={i} viewBox="0 0 24 24" className="absolute" style={{ width: 16 * k + 6, height: 16 * k + 6, left: '50%', top: '50%', marginLeft: -8 * k - 3, marginTop: -8 * k - 3 }}
-            initial={{ y: 0, x: 0, opacity: 0, scale: 0.4 }} animate={{ y: -95 * k, x: i * 34 * k, opacity: [0, 1, 0], scale: [0.4, 1, 0.7] }} transition={{ duration: 1, delay: 0.2 + Math.abs(i) * 0.08 }}>
-            <path fill="#fb7185" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-          </motion.svg>
-        ))}
-        <motion.div initial={{ scale: 0, rotate: -14, opacity: 0 }} animate={{ scale: [0, 1.4, 0.92, 1.12, 1], rotate: [-14, 6, -3, 0, 0], opacity: [0, 1, 1, 1, 0] }} transition={{ duration: 1.1, ease: 'easeOut', times: [0, 0.25, 0.45, 0.65, 1] }}
-          style={{ filter: 'drop-shadow(0 0 16px rgba(244,63,94,.85)) drop-shadow(0 6px 10px rgba(0,0,0,.5))' }}>
-          <svg width={dim} height={dim} viewBox="0 0 24 24" aria-hidden>
-            <defs>
-              <linearGradient id={`${uid}-a`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#fda4af" /><stop offset=".45" stopColor="#f43f5e" /><stop offset="1" stopColor="#7f1d1d" /></linearGradient>
-              <linearGradient id={`${uid}-b`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" stopOpacity=".85" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></linearGradient>
-            </defs>
-            <path fill={`url(#${uid}-a)`} stroke="#ffe4e6" strokeWidth=".6" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-            <path fill="#be123c" fillOpacity=".55" d="M12 21.35L7.5 3C4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35z" />
-            <path fill="#fb7185" fillOpacity=".5" d="M12 5.09L7.5 3 9.5 11 12 21.35 14.5 11 16.5 3z" />
-            <path fill={`url(#${uid}-b)`} d="M5.2 6.2c.5-1.7 2-2.6 3.6-2.5-1.9.5-3 1.6-3.3 3.6-.2 1.3.1 2.2.6 3-.9-.8-1.3-2.5-.9-4.1z" />
-          </svg>
-        </motion.div>
-      </div>
-    );
-  } else if (style === 'flames') {
-    // Diamond: cut facets in KAN colours with a light sweep and a halo.
-    inner = (
-      <div className="relative flex items-center justify-center" style={{ width: dim, height: dim }}>
-        {ring('rgba(34,211,238,.85)')}
-        {sparks(['#fff', '#67e8f9', '#c4b5fd'])}
-        <motion.div initial={{ scale: 0, y: 30, opacity: 0 }} animate={{ scale: [0, 1.25, 1, 1.06, 1], y: [30, -6, 0, 0, 0], opacity: [0, 1, 1, 1, 0] }} transition={{ duration: 1.15, ease: 'easeOut', times: [0, 0.3, 0.5, 0.7, 1] }}
-          style={{ filter: 'drop-shadow(0 0 18px rgba(34,211,238,.8)) drop-shadow(0 0 10px rgba(167,139,250,.7))' }}>
-          <svg width={dim} height={dim} viewBox="0 0 24 24" aria-hidden>
-            <defs>
-              <linearGradient id={`${uid}-a`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#e0f2fe" /><stop offset=".5" stopColor="#22d3ee" /><stop offset="1" stopColor="#7c3aed" /></linearGradient>
-              <linearGradient id={`${uid}-s`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#fff" stopOpacity="0" /><stop offset=".5" stopColor="#fff" stopOpacity=".9" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></linearGradient>
-              <clipPath id={`${uid}-c`}><path d="M6 3h12l4 6-10 12L2 9z" /></clipPath>
-            </defs>
-            <path d="M6 3h12l4 6-10 12L2 9z" fill={`url(#${uid}-a)`} stroke="#fff" strokeWidth=".6" strokeLinejoin="round" />
-            <path d="M2 9h20M9 3L7 9l5 12M15 3l2 6-5 12M6 3l1 6M18 3l-1 6" fill="none" stroke="#fff" strokeOpacity=".75" strokeWidth=".5" />
-            <path d="M7 9l5 12 5-12z" fill="#4c1d95" fillOpacity=".35" />
-            <g clipPath={`url(#${uid}-c)`}>
-              <motion.rect y="0" width="7" height="24" fill={`url(#${uid}-s)`} transform="skewX(-20)" initial={{ x: -12 }} animate={{ x: 34 }} transition={{ duration: 0.8, delay: 0.25, ease: 'easeInOut' }} />
-            </g>
-          </svg>
-        </motion.div>
-      </div>
-    );
-  } else {
-    // Gold coin: metallic rim, embossed K, spins in 3D and lands with a flash.
-    inner = (
-      <div className="relative flex items-center justify-center" style={{ width: dim, height: dim, perspective: 600 }}>
-        {ring('rgba(251,191,36,.9)')}
-        {sparks(['#fde68a', '#fff', '#fbbf24'])}
-        <motion.div initial={{ scale: 0.2, rotateY: 0, opacity: 0 }} animate={{ scale: [0.2, 1.25, 1, 1.05, 1], rotateY: [0, 540, 720, 720, 720], opacity: [0, 1, 1, 1, 0] }} transition={{ duration: 1.2, ease: 'easeOut', times: [0, 0.4, 0.6, 0.8, 1] }}
-          style={{ filter: 'drop-shadow(0 0 18px rgba(251,191,36,.8)) drop-shadow(0 6px 10px rgba(0,0,0,.5))' }}>
-          <svg width={dim} height={dim} viewBox="0 0 24 24" aria-hidden>
-            <defs>
-              <radialGradient id={`${uid}-a`} cx=".35" cy=".3" r=".9"><stop offset="0" stopColor="#fffbeb" /><stop offset=".35" stopColor="#fcd34d" /><stop offset=".75" stopColor="#d97706" /><stop offset="1" stopColor="#78350f" /></radialGradient>
-              <linearGradient id={`${uid}-r`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#fef3c7" /><stop offset=".5" stopColor="#b45309" /><stop offset="1" stopColor="#fde68a" /></linearGradient>
-            </defs>
-            <circle cx="12" cy="12" r="11" fill={`url(#${uid}-r)`} />
-            <circle cx="12" cy="12" r="9" fill={`url(#${uid}-a)`} stroke="#92400e" strokeWidth=".4" />
-            <circle cx="12" cy="12" r="7.3" fill="none" stroke="#fff7d6" strokeOpacity=".7" strokeWidth=".35" strokeDasharray="1 .9" />
-            <path d="M9.2 7.2v9.6M9.4 12l4.6-4.8M10.8 11l3.6 5.8" fill="none" stroke="#78350f" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" transform="translate(.4 .5)" opacity=".45" />
-            <path d="M9.2 7.2v9.6M9.4 12l4.6-4.8M10.8 11l3.6 5.8" fill="none" stroke="#fff7d6" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M5 8.5C6.2 5.6 9 4 12 4c-3 .6-5.2 2.4-6.2 5z" fill="#fff" fillOpacity=".6" />
-          </svg>
-        </motion.div>
-      </div>
-    );
-  }
+  const dim = size === 'lg' ? 96 : 48;
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">{inner}</div>
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+      <motion.div initial={{ scale: 0.3, opacity: 0 }} animate={{ scale: [0.3, 1.2, 1, 1], opacity: [0, 1, 1, 0] }} transition={{ duration: 0.9, ease: 'easeOut', times: [0, 0.3, 0.55, 1] }}
+        style={{ filter: 'drop-shadow(0 4px 14px rgba(124,58,237,.55))' }}>
+        <svg width={dim} height={dim} viewBox="0 0 24 24" aria-hidden>
+          <defs><linearGradient id={`kan-heart-${size}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#7c3aed" /><stop offset="1" stopColor="#06b6d4" /></linearGradient></defs>
+          <path fill={`url(#kan-heart-${size})`} d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+        </svg>
+      </motion.div>
+    </div>
   );
 }
 
@@ -5727,14 +5730,12 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
   const boxRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
-  const [ctl, setCtl] = useState(false);
+  const [boost, setBoost] = useState(false);
+  const holdTimer = useRef<number | undefined>(undefined);
+  const held = useRef(false);
   const [prog, setProg] = useState(0);
   const [dur, setDur] = useState(0);
   const [scrub, setScrub] = useState(false);
-  const [boost, setBoost] = useState(false);
-  const ctlTimer = useRef<number | undefined>(undefined);
-  const holdTimer = useRef<number | undefined>(undefined);
-  const held = useRef(false);
   const barRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
   const [landscape, setLandscape] = useState(false);
@@ -5777,13 +5778,11 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
     return () => observer.disconnect();
   }, []);
 
-  const flash = () => { setCtl(true); window.clearTimeout(ctlTimer.current); ctlTimer.current = window.setTimeout(() => setCtl(false), 2500); };
   const togglePlay = () => {
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) { void video.play().catch(() => undefined); setPaused(false); }
     else { video.pause(); setPaused(true); }
-    flash();
   };
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const seekTo = (clientX: number) => {
@@ -5794,6 +5793,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
     v.currentTime = k * v.duration;
     setProg(k);
   };
+
   // Hold the video: 2x speed while the finger stays down.
   const startHold = (e: React.PointerEvent) => {
     if (e.target !== e.currentTarget && (e.target as HTMLElement).tagName !== 'VIDEO') return;
@@ -5810,7 +5810,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
     setBoost(false);
   };
 
-  // One tap: pause / play (the controls show on top). Double tap: love it. Hold: 2x speed.
+  // One tap: pause / play. Double tap: love it. Hold: 2x.
   const handleTap = () => {
     if (held.current) { held.current = false; return; }
     const now = Date.now();
@@ -5829,8 +5829,6 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
   };
 
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
-  const showTop = ctl || paused;
-  const ctlBtn = 'w-10 h-10 rounded-full bg-black/55 backdrop-blur text-white flex items-center justify-center active:scale-90';
 
   return (
     <div ref={boxRef} className="relative h-full w-full snap-start snap-always bg-black overflow-hidden select-none touch-manipulation" onClick={handleTap}
@@ -5858,81 +5856,71 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/35 pointer-events-none" />
       {coinId > 0 && <CoinBurst key={coinId} />}
-      {boost && <div className="absolute top-[max(4rem,calc(env(safe-area-inset-top)+3.25rem))] inset-x-0 flex justify-center pointer-events-none z-30"><span className="px-3 py-1 rounded-full bg-black/60 backdrop-blur text-white text-xs font-bold">2x ⏩</span></div>}
 
-      {/* Top controls: appear when the video is tapped (and stay while paused). */}
-      <div className={`absolute top-[max(0.75rem,env(safe-area-inset-top))] end-3 z-30 flex items-center gap-2 transition-opacity duration-200 ${showTop ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={stop} onPointerDown={stop}>
-        <button onClick={togglePlay} className={ctlBtn} aria-label={paused ? t('تشغيل') : t('إيقاف مؤقت')}>
-          {paused ? <Play size={18} fill="white" className="translate-x-px" /> : <Pause size={18} fill="white" />}
-        </button>
-        <button onClick={() => { onToggleMute(); flash(); }} className={ctlBtn} aria-label={muted ? t('تشغيل الصوت') : t('كتم الصوت')}>
-          {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-        </button>
-      </div>
+      {boost && <div className="absolute top-[max(4rem,calc(env(safe-area-inset-top)+3.25rem))] inset-x-0 flex justify-center pointer-events-none z-30"><span className="px-3 py-1 rounded-full bg-black/60 backdrop-blur text-white text-sm font-bold">2x</span></div>}
+      {paused && !failed && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <span className="w-20 h-20 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white"><Pause size={34} fill="white" /></span>
+        </div>
+      )}
 
       {/* Side actions */}
-      <div className="absolute bottom-[7.5rem] end-3 flex flex-col items-center gap-5 z-20" onClick={stop} onPointerDown={stop}>
+      <div className="absolute bottom-[5.5rem] end-3 flex flex-col items-center gap-5 z-20" onClick={stop} onPointerDown={stop}>
         <div className="flex flex-col items-center">
           <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`p-2.5 rounded-full bg-black/40 ${isLiked ? 'text-red-400' : 'text-white'}`} aria-label={t('إعجاب')}>
-            <Heart size={26} className={isLiked ? 'fill-red-400' : ''} />
+            <Heart size={30} className={isLiked ? 'fill-red-400' : ''} />
           </button>
           {post.likes.length > 0 && (
-            <button onClick={onShowLikes} className="text-xs text-white mt-1 font-medium">{post.likes.length}</button>
+            <button onClick={onShowLikes} className="text-sm text-white mt-1 font-medium">{post.likes.length}</button>
           )}
         </div>
         <div className="flex flex-col items-center">
           <button onClick={onOpenComments} className="p-2.5 rounded-full bg-black/40 text-white" aria-label={t('التعليقات')}>
-            <MessageCircle size={26} />
+            <MessageCircle size={30} />
           </button>
-          <span className="text-xs text-white mt-1 font-medium">{commentCount > 0 ? commentCount : ''}</span>
+          <span className="text-sm text-white mt-1 font-medium">{commentCount > 0 ? commentCount : ''}</span>
         </div>
         <div className="flex flex-col items-center">
           <button onClick={() => void toggleSave()} className={`p-2.5 rounded-full bg-black/40 active:scale-90 ${isSaved ? 'text-yellow-400' : 'text-white'}`} aria-label={t('حفظ')}>
-            <BookmarkIcon size={25} className={isSaved ? 'fill-yellow-400' : ''} />
+            <BookmarkIcon size={29} className={isSaved ? 'fill-yellow-400' : ''} />
           </button>
-          <span className="text-xs text-white mt-1 font-medium">{isSaved ? t('محفوظ') : t('حفظ')}</span>
+          <span className="text-sm text-white mt-1 font-medium">{isSaved ? t('محفوظ') : t('حفظ')}</span>
         </div>
         <div className="flex flex-col items-center">
           <button onClick={() => setShareOpen(true)} className="p-2.5 rounded-full bg-black/40 text-white active:scale-90" aria-label={t('مشاركة')}>
-            <Share2 size={24} />
+            <Share2 size={28} />
           </button>
-          <span className="text-xs text-white mt-1 font-medium">{t('مشاركة')}</span>
+          <span className="text-sm text-white mt-1 font-medium">{t('مشاركة')}</span>
         </div>
       </div>
 
       {/* Author + caption */}
-      <div className="absolute bottom-[7.5rem] start-4 end-20 text-start z-20" onClick={stop} onPointerDown={stop}>
+      <div className="absolute bottom-[5.5rem] start-4 end-20 text-start z-20" onClick={stop} onPointerDown={stop}>
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2 min-w-0">
-            <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="sm" />
-            <span className="text-white font-semibold text-sm truncate max-w-[9rem]">{author.displayName}</span>
-            <span className="text-white/60 text-xs truncate max-w-[6rem]">@{author.username}</span>
+            <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="md" />
+            <span className="text-white font-bold text-base truncate max-w-[12rem]">{author.displayName}</span>
+            <span className="text-white/70 text-sm truncate max-w-[8rem]">@{author.username}</span>
           </button>
           {author.id !== currentUser.id && (
             <button
               onClick={() => toggleFollow(author.id)}
-              className={`shrink-0 px-3.5 py-1 rounded-full text-xs font-semibold active:scale-95 transition-all ${isFollowing ? 'bg-white/15 text-white border border-white/25 backdrop-blur' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-md shadow-violet-500/30'}`}
+              className={`shrink-0 px-5 py-2 rounded-full text-sm font-bold active:scale-95 transition-all ${isFollowing ? 'bg-white/15 text-white border border-white/25 backdrop-blur' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-md shadow-violet-500/30'}`}
             >
               {isFollowing ? t('متابَع') : t('متابعة')}
             </button>
           )}
         </div>
-        {post.text && <p className="text-white text-sm leading-relaxed line-clamp-3 whitespace-pre-wrap" dir="auto">{post.text}</p>}
+        {post.text && <p className="text-white text-base leading-relaxed line-clamp-3 whitespace-pre-wrap" dir="auto">{post.text}</p>}
       </div>
-
-      {/* Add a comment: glowing pill at the bottom */}
-      <button onClick={e => { e.stopPropagation(); onOpenComments(); }} onPointerDown={stop}
-        className="absolute z-20 inset-x-3 bottom-[calc(max(0.35rem,env(safe-area-inset-bottom))+2.1rem)] h-12 rounded-full p-[1.5px] bg-gradient-to-r from-violet-500 via-cyan-400 to-fuchsia-500 shadow-lg shadow-violet-500/30 active:scale-[0.98] transition-transform">
-        <span className="flex h-full w-full items-center gap-2.5 rounded-full bg-black/75 backdrop-blur-md ps-1.5 pe-1.5">
-          <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="sm" />
-          <span className="flex-1 text-start text-sm text-white/75 truncate">{t('أضف تعليقاً...')}</span>
-          {commentCount > 0 && <span className="text-xs text-cyan-300 font-semibold">{commentCount}</span>}
-          <span className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white"><MessageCircle size={16} /></span>
-        </span>
-      </button>
 
       {/* Bottom bar: thin line while playing, full seek bar while paused */}
       <div dir="ltr" className="absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))]" onClick={stop} onPointerDown={stop}>
+        <div className="flex justify-start mb-1">
+          <button onClick={onToggleMute} className="w-10 h-10 rounded-full bg-black/55 backdrop-blur text-white flex items-center justify-center active:scale-90" aria-label={muted ? t('تشغيل الصوت') : t('كتم الصوت')}>
+            {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+          </button>
+        </div>
         {paused && <div className="flex justify-between text-[11px] text-white/80 font-medium mb-0.5 px-0.5"><span>{fmt(prog * dur)}</span><span>{fmt(dur)}</span></div>}
         <div ref={barRef} className={`relative flex items-center touch-none ${paused ? 'h-7 cursor-pointer' : 'h-3 pointer-events-none'}`}
           onPointerDown={e => { if (!paused) return; (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId); setScrub(true); seekTo(e.clientX); }}
@@ -7164,34 +7152,6 @@ function NotificationSettings() {
   );
 }
 
-function LikeStylePicker() {
-  const cur = useLikeStyle();
-  const [demo, setDemo] = useState(0);
-  const opts: { id: LikeStyle; label: string; hint: string }[] = [
-    { id: 'heart', label: t('قلب كريستال'), hint: 'ياقوتة لامعة وقلوب صغيرة تتطاير' },
-    { id: 'coin', label: t('عملة ذهبية'), hint: 'عملة ذهب تدور وتنزل بلمعة' },
-    { id: 'flames', label: t('ألماسة'), hint: 'ألماسة مقطوعة بلمعة تعبر عليها' },
-  ];
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-      <div className="text-sm font-semibold text-white mb-1">{t('شكل الإعجاب')}</div>
-      <p className="text-xs text-gray-400 mb-3">يظهر عند الضغط مرتين على المنشور أو الرسالة</p>
-      <div className="grid grid-cols-3 gap-2">
-        {opts.map(o => (
-          <button key={o.id} onClick={() => { setLikeStyleStored(o.id); setDemo(n => n + 1); }}
-            className={`rounded-xl border p-2.5 text-center active:scale-95 transition-transform ${cur === o.id ? 'border-violet-400 bg-violet-500/15 text-white' : 'border-white/10 bg-white/5 text-gray-300'}`}>
-            <div className="text-sm font-semibold">{o.label}</div>
-            <div className="text-[10px] text-gray-400 mt-0.5 leading-4">{o.hint}</div>
-          </button>
-        ))}
-      </div>
-      <div className="relative h-36 mt-3 rounded-xl bg-black/20 border border-white/5 overflow-hidden">
-        {demo > 0 ? <CoinBurst key={demo} /> : <p className="absolute inset-0 flex items-center justify-center text-xs text-gray-500">اختر شكلاً لمعاينته</p>}
-      </div>
-    </div>
-  );
-}
-
 function LangPicker() {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
@@ -7277,7 +7237,6 @@ function SettingsTab({ currentUser, setUsers }: {
   return (
     <div className="px-4 py-4 space-y-4">
       <h2 className="text-xl font-bold text-white">{t('الإعدادات')}</h2>
-      <LikeStylePicker />
       <RingStylePicker />
       <LangPicker />
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
