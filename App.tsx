@@ -101,7 +101,7 @@ Object.assign(EN, {
   "مثال: القاهرة، مصر": "Example: Cairo, Egypt", "مجموعة": "Group", "محاولات كثيرة، حاول لاحقاً": "Too many attempts, try later", "مستخدم": "User", "مسح": "Clear", "مسح كل الإشعارات": "Clear all notifications", "مشاركة التعليق": "Share comment", "مشرف": "Admin",
   "معلومات المجموعة": "Group info", "مغادرة المجموعة": "Leave group", "ملء الشاشة": "Full screen", "ملصق جديد": "New sticker", "ملف": "File", "من شاهدها": "Who saw it", "موسيقى": "Music", "نسخ": "Copy", "نسخ الرابط": "Copy link",
   "نغمة عند وصول رسالة أو إرسالها": "A tone when a message arrives or is sent", "هذا البريد مسجّل بالفعل": "This email is already registered", "هذا المتصفح لا يدعم الإشعارات.": "This browser doesn't support notifications.", "هذا المنشور غير متاح، ربما تم حذفه": "This post isn't available, it may have been deleted",
-  "هكذا ستظهر لك الرسائل خارج التطبيق 👋": "This is how messages will look outside the app 👋", "واتساب": "WhatsApp", "ارفع إصبعك للإلغاء": "Release to cancel", "‹ اسحب للإلغاء": "‹ Slide to cancel", "وصف الفيديو (اختياري)...": "Video description (optional)...", "وصلت للحد اليومي لـ «اسأل KIX». جرّب بكرة.": "You've hit the daily limit for “Ask KIX”. Try tomorrow.",
+  "هكذا ستظهر لك الرسائل خارج التطبيق 👋": "This is how messages will look outside the app 👋", "واتساب": "WhatsApp", "سينمائي": "Cinema", "نيون": "Neon", "غروب": "Sunset", "ذهبي": "Golden", "شتوي": "Winter", "بوب": "Pop", "ليلي": "Night", "حلم": "Dream", "عادي": "Normal", "دافئ": "Warm", "بارد": "Cool", "أبيض وأسود": "B&W", "ساطع": "Bright", "كلاسيك": "Classic", "دراما": "Drama", "🎨 فلتر": "🎨 Filter", "🎨 فلتر ✓": "🎨 Filter ✓", "صورة أو فيديو": "Photo or video", "🎨 الخلفية": "🎨 Background", "اكتب شيئاً...": "Write something...", "سرعة الصوت": "Voice speed", "نص": "Text", "ملصق": "Sticker", "استطلاع": "Poll", "سؤال": "Question", "جدولة": "Schedule", "الموضع": "Position", "الجميع": "Everyone", "تعديل القائمة": "Edit list", "إلغاء": "Cancel", "الهايلايت": "Highlights", "اكتب إجابتك...": "Write your answer...", "تم إرسال إجابتك ✓": "Answer sent ✓", "اختر وقتاً في المستقبل": "Pick a time in the future", "تم التثبيت في الهايلايت ⭐": "Pinned to highlights ⭐", "تمت الإزالة من الهايلايت": "Removed from highlights", "تابع بعض الأشخاص أولاً": "Follow some people first", "اكتب نصاً فوق الصورة...": "Write text on the picture...", "سؤال الاستطلاع": "Poll question", "الخيار الأول": "Option 1", "الخيار الثاني": "Option 2", "اطرح سؤالاً على متابعيك": "Ask your followers a question", "Aa نص": "Aa Text", "😀 ملصق": "😀 Sticker", "📊 استطلاع": "📊 Poll", "❓ سؤال": "❓ Question", "🕒 جدولة": "🕒 Schedule", "🕒 مجدولة ✓": "🕒 Scheduled ✓", "👥 الجمهور": "👥 Everyone", "👥 مقربين ✓": "👥 Close friends ✓", "أصدقاء مقربين": "Close friends", "صوت": "votes", "↪️ تفاعل على قصتك": "↪️ Reacted to your story", "ارفع إصبعك للإلغاء": "Release to cancel", "‹ اسحب للإلغاء": "‹ Slide to cancel", "وصف الفيديو (اختياري)...": "Video description (optional)...", "وصلت للحد اليومي لـ «اسأل KIX». جرّب بكرة.": "You've hit the daily limit for “Ask KIX”. Try tomorrow.",
   "يتابعك": "Follows you", "يرجى اختيار صورة فقط": "Please choose a photo only", "يرجى تأكيد بريدك الإلكتروني أولاً": "Please confirm your email first",
   "↪️ منشور مني": "↪️ A post from me", "🎤 رسالة صوتية": "🎤 Voice message", "🎥 فيديو": "🎥 Video", "🎬 ريل": "🎬 Reel", "🏷️ ملصق": "🏷️ Sticker", "💡 اقترح رد": "💡 Suggest a reply", "📎 ملف": "📎 File", "📝 لخّص الشات": "📝 Summarize chat", "📷 صورة": "📷 Photo", "📷 وسائط": "📷 Media", "🔍 المطلوب مني؟": "🔍 What's expected of me?",
   "أضف تعليقاً...": "Add a comment...", "متابعة": "Follow", "متابَع": "Following", "الصوت": "Sound", "كتم الصوت": "Mute", "تشغيل الصوت": "Unmute", "إيقاف مؤقت": "Pause", "تشغيل": "Play",
@@ -288,7 +288,7 @@ const RING_BG: Record<Exclude<RingStyle, 'off'>, string> = {
   green: 'linear-gradient(135deg,#22c55e,#10b981)',
 };
 const getRingStyle = (): RingStyle => {
-  try { const v = localStorage.getItem('kan_story_ring'); return v === 'insta' || v === 'green' || v === 'off' ? v : 'kan'; } catch { return 'kan'; }
+  return 'kan'; // one fixed KIX ring: gradient while unseen, gray once seen
 };
 const setRingStyleStored = (v: RingStyle) => {
   try { localStorage.setItem('kan_story_ring', v); } catch { /* ignore */ }
@@ -3149,19 +3149,20 @@ function SplashScreen() {
 }
 
 // ============ Stories strip (design only, not wired up yet) ============
-interface StoryItem { id: string; userId: string; url: string; type: 'image' | 'video'; caption: string; createdAt: number; sharedPostId?: string }
+interface StoryItem { id: string; userId: string; url: string; type: 'image' | 'video'; caption: string; createdAt: number; sharedPostId?: string; extra?: StoryExtra | null; highlight?: boolean }
 interface StoryGroup { userId: string; items: StoryItem[] }
 
-type StoryRow = { id: string; user_id: string; media_url: string | null; media_type: 'image' | 'video'; caption: string; created_at: string; shared_post_id: string | null };
-const STORY_SELECT = 'id, user_id, media_url, media_type, caption, created_at, shared_post_id';
+type StoryRow = { id: string; user_id: string; media_url: string | null; media_type: 'image' | 'video'; caption: string; created_at: string; shared_post_id: string | null; extra?: StoryExtra | null; highlight?: boolean };
+const STORY_SELECT = 'id, user_id, media_url, media_type, caption, created_at, shared_post_id, extra, highlight';
+const pubFilter = () => `publish_at.is.null,publish_at.lte.${new Date().toISOString()}`;
 const rowToStory = (r: StoryRow): StoryItem => ({
   id: r.id, userId: r.user_id, url: r.media_url ?? '', type: r.media_type, caption: r.caption,
-  createdAt: new Date(r.created_at).getTime(), sharedPostId: r.shared_post_id ?? undefined,
+  createdAt: new Date(r.created_at).getTime(), sharedPostId: r.shared_post_id ?? undefined, extra: r.extra ?? null, highlight: !!r.highlight,
 });
 const notifyStoriesChanged = () => window.dispatchEvent(new Event('kan-stories-changed'));
 
 // The picture on a profile: a coloured ring when that person has an active story (24h); tap to watch it.
-function ProfileStoryAvatar({ user, currentUser, users }: { user: User; currentUser: User; users: User[] }) {
+function ProfileStoryAvatarBase({ user, currentUser, users }: { user: User; currentUser: User; users: User[] }) {
   const [items, setItems] = useState<StoryItem[]>([]);
   const [seen, setSeen] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState(false);
@@ -3169,7 +3170,7 @@ function ProfileStoryAvatar({ user, currentUser, users }: { user: User; currentU
     let off = false;
     const load = async () => {
       const { data, error } = await supabase.from('stories').select(STORY_SELECT)
-        .eq('user_id', user.id).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true }).limit(50);
+        .eq('user_id', user.id).gt('expires_at', new Date().toISOString()).or(pubFilter()).order('created_at', { ascending: true }).limit(50);
       if (off) return;
       if (error) { console.error(error); return; }
       const list = await signStories(((data ?? []) as StoryRow[]).map(rowToStory));
@@ -3213,6 +3214,8 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
   const [seen, setSeen] = useState<Set<string>>(new Set());
   const [openAt, setOpenAt] = useState<number | null>(null);
   const [composer, setComposer] = useState<File | null>(null);
+  const [addMenu, setAddMenu] = useState(false);
+  const [textComposer, setTextComposer] = useState(false);
   const [hint, setHint] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -3221,6 +3224,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
       .from('stories')
       .select(STORY_SELECT)
       .gt('expires_at', new Date().toISOString())
+      .or(pubFilter())
       .order('created_at', { ascending: true })
       .limit(400);
     if (error) { console.error(error); return; }
@@ -3266,12 +3270,12 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
       </div>
       <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={pick} />
       <div className="flex gap-3.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
-        <button onClick={() => (mine ? setOpenAt(0) : fileRef.current?.click())} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
+        <button onClick={() => (mine ? setOpenAt(0) : setAddMenu(true))} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
           <div className="relative">
             <div className={`w-[62px] h-[62px] rounded-full p-[2.5px] ${mine ? 'bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400' : 'border-2 border-dashed border-violet-400/40'}`}>
               <div className={`w-full h-full rounded-full overflow-hidden ${mine ? 'bg-gray-950 p-[2px]' : ''}`}><Avatar noRing src={currentUser.avatar} name={currentUser.displayName} size="lg" /></div>
             </div>
-            <span onClick={e => { e.stopPropagation(); fileRef.current?.click(); }} className="absolute -bottom-0.5 -left-0.5 w-6 h-6 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 text-white flex items-center justify-center ring-2 ring-gray-950 shadow-md"><Plus size={14} /></span>
+            <span onClick={e => { e.stopPropagation(); setAddMenu(true); }} className="absolute -bottom-0.5 -left-0.5 w-6 h-6 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 text-white flex items-center justify-center ring-2 ring-gray-950 shadow-md"><Plus size={14} /></span>
           </div>
           <span className="text-[11px] text-gray-300 truncate w-full text-center">{t('قصتك')}</span>
         </button>
@@ -3299,6 +3303,16 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute left-1/2 -translate-x-1/2 top-7 px-3.5 py-1.5 rounded-full bg-gray-800 border border-white/10 text-xs text-white shadow-lg z-10">{hint}</motion.div>
         )}
       </AnimatePresence>
+      {addMenu && createPortal(
+        <div dir={DIR} className="fixed inset-0 z-[150] bg-black/60 flex items-end justify-center" onClick={() => setAddMenu(false)}>
+          <div className="kan-theme-text w-full max-w-md bg-gray-900 rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-2" onClick={e => e.stopPropagation()}>
+            <button onClick={() => { setAddMenu(false); fileRef.current?.click(); }} className="w-full py-3 rounded-xl bg-gray-800 text-white font-semibold">📷 صورة أو فيديو</button>
+            <button onClick={() => { setAddMenu(false); setTextComposer(true); }} className="w-full py-3 rounded-xl bg-gray-800 text-white font-semibold">Aa نص</button>
+          </div>
+        </div>,
+        document.body,
+      )}
+      {textComposer && <TextStoryComposer currentUser={currentUser} onClose={() => setTextComposer(false)} onDone={() => { setTextComposer(false); void load(); }} />}
       {composer && <StoryComposer file={composer} currentUser={currentUser} onClose={() => setComposer(null)} onDone={() => { setComposer(null); void load(); }} />}
       {openAt !== null && viewerGroups[openAt] && (
         <StoryViewer
@@ -3309,10 +3323,249 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
           onSeen={id => setSeen(prev => (prev.has(id) ? prev : new Set(prev).add(id)))}
           onChanged={() => void load()}
           onClose={() => setOpenAt(null)}
-          onAdd={() => { setOpenAt(null); fileRef.current?.click(); }}
+          onAdd={() => { setOpenAt(null); setAddMenu(true); }}
         />
       )}
     </div>
+  );
+}
+
+// ============ Story extras: text + stickers, poll, question box, close friends, highlights ============
+const STORY_BGS = ['linear-gradient(135deg,#6d28d9,#c026d3,#06b6d4)', 'linear-gradient(135deg,#f97316,#ec4899)', 'linear-gradient(135deg,#0ea5e9,#6366f1)', 'linear-gradient(135deg,#10b981,#0e7490)', 'linear-gradient(135deg,#ef4444,#7c2d12)', 'linear-gradient(135deg,#111827,#4b5563)'];
+const STORY_FILTERS: { n: string; f: string }[] = [{ n: 'عادي', f: 'none' }, { n: 'دافئ', f: 'sepia(0.35) saturate(1.4) contrast(1.05)' }, { n: 'بارد', f: 'hue-rotate(185deg) saturate(1.1) brightness(1.05)' }, { n: 'أبيض وأسود', f: 'grayscale(1) contrast(1.1)' }, { n: 'ساطع', f: 'brightness(1.2) saturate(1.3)' }, { n: 'كلاسيك', f: 'sepia(0.7) contrast(0.95) brightness(1.05)' }, { n: 'دراما', f: 'contrast(1.4) saturate(0.9) brightness(0.92)' }, { n: 'سينمائي', f: 'contrast(1.25) sepia(0.2) hue-rotate(-12deg) saturate(1.2) brightness(0.95)' }, { n: 'نيون', f: 'saturate(2.1) contrast(1.2) hue-rotate(320deg) brightness(1.05)' }, { n: 'غروب', f: 'sepia(0.5) saturate(1.9) hue-rotate(-18deg) brightness(1.08)' }, { n: 'ذهبي', f: 'sepia(0.6) saturate(2) hue-rotate(-8deg) brightness(1.1) contrast(1.05)' }, { n: 'شتوي', f: 'hue-rotate(200deg) saturate(0.8) brightness(1.12) contrast(1.05)' }, { n: 'بوب', f: 'saturate(2.3) contrast(1.15) brightness(1.03)' }, { n: 'ليلي', f: 'brightness(0.82) contrast(1.3) hue-rotate(210deg) saturate(1.3)' }, { n: 'حلم', f: 'brightness(1.12) contrast(0.88) saturate(1.35) sepia(0.12)' }];
+const bakeFilter = async (f: File, css: string): Promise<File | null> => {
+  try {
+    const bmp = await createImageBitmap(f);
+    const sc = Math.min(1, 2160 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc);
+    const ctx = c.getContext('2d');
+    if (!ctx || !('filter' in ctx)) return null;
+    ctx.filter = css;
+    ctx.drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise<Blob | null>(r => c.toBlob(r, 'image/jpeg', 0.92));
+    return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
+  } catch { return null; }
+};
+type StoryExtra = { bg?: number; filter?: number; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number }[]; stickers?: string[]; poll?: { q: string; a: string; b: string }; ask?: string };
+
+function StoryOverlays({ extra, onMove }: { extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk', x: number, y: number) => void }) {
+  const root = useRef<HTMLDivElement>(null);
+  if (!extra) return null;
+  const clamp = (n: number) => Math.max(4, Math.min(96, n));
+  const drag = (k: 'text' | 'stk') => (onMove ? {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => { e.currentTarget.setPointerCapture(e.pointerId); e.stopPropagation(); },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      if (!e.currentTarget.hasPointerCapture(e.pointerId) || !root.current) return;
+      const r = root.current.getBoundingClientRect();
+      onMove(k, clamp(((e.clientX - r.left) / r.width) * 100), clamp(((e.clientY - r.top) / r.height) * 100));
+    },
+    className: 'pointer-events-auto cursor-grab touch-none',
+  } : { className: '' });
+  return (
+    <div ref={root} className="absolute inset-0 pointer-events-none z-[5] kan-always-white">
+      {(extra.texts ?? []).map((x, i) => {
+        const d = drag('text');
+        return <div key={i} onPointerDown={d.onPointerDown} onPointerMove={d.onPointerMove} className={`absolute max-w-[88%] text-center text-white text-3xl font-extrabold leading-snug drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] whitespace-pre-wrap break-words ${d.className}`} style={{ left: `${x.x ?? 50}%`, top: `${x.y}%`, transform: 'translate(-50%,-50%)' }} dir="auto">{x.t}</div>;
+      })}
+      {(extra.stickers ?? []).length > 0 && (() => {
+        const d = drag('stk');
+        return <div onPointerDown={d.onPointerDown} onPointerMove={d.onPointerMove} className={`absolute flex justify-center gap-3 text-6xl drop-shadow-lg ${d.className}`} style={{ left: `${extra.sp?.x ?? 50}%`, top: `${extra.sp?.y ?? 28}%`, transform: 'translate(-50%,-50%)' }}>{extra.stickers!.map((e, i) => <span key={i}>{e}</span>)}</div>;
+      })()}
+    </div>
+  );
+}
+
+function StoryPoll({ story, meId, isMine }: { story: StoryItem; meId: string; isMine: boolean }) {
+  const poll = story.extra?.poll;
+  const [mine, setMine] = useState<number | null>(null);
+  const [counts, setCounts] = useState<[number, number]>([0, 0]);
+  const loadCounts = async () => {
+    const { data } = await supabase.rpc('story_poll_counts', { sid: story.id });
+    const c: [number, number] = [0, 0];
+    for (const r of (data ?? []) as { choice: number; n: number | string }[]) c[r.choice === 1 ? 1 : 0] = Number(r.n);
+    setCounts(c);
+  };
+  useEffect(() => {
+    let off = false;
+    void (async () => {
+      const { data } = await supabase.from('story_votes').select('choice').eq('story_id', story.id).eq('user_id', meId).maybeSingle();
+      if (!off) setMine(data ? (data as { choice: number }).choice : null);
+      await loadCounts();
+    })();
+    return () => { off = true; };
+  }, [story.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!poll) return null;
+  const show = mine !== null || isMine;
+  const total = counts[0] + counts[1];
+  const pct = (i: 0 | 1) => (total ? Math.round((counts[i] / total) * 100) : 0);
+  const vote = async (c: 0 | 1) => {
+    if (show) return;
+    setMine(c);
+    const { error } = await supabase.from('story_votes').insert({ story_id: story.id, user_id: meId, choice: c });
+    if (error) { setMine(null); return; }
+    void loadCounts();
+  };
+  return (
+    <div className="kan-always-white rounded-2xl bg-black/55 backdrop-blur p-3 text-white">
+      <div className="text-center font-bold text-base mb-2" dir="auto">{poll.q}</div>
+      <div className="grid grid-cols-2 gap-2">
+        {([0, 1] as const).map(i => (
+          <button key={i} onClick={() => void vote(i)} className={`relative overflow-hidden rounded-xl border px-2 py-2.5 text-sm font-bold ${mine === i ? 'border-white' : 'border-white/30'} bg-white/10`}>
+            {show && <span className="absolute inset-y-0 start-0 bg-white/25" style={{ width: `${pct(i)}%` }} />}
+            <span className="relative" dir="auto">{i === 0 ? poll.a : poll.b}{show ? ` · ${pct(i)}%` : ''}</span>
+          </button>
+        ))}
+      </div>
+      {isMine && <div className="text-center text-[11px] text-white/70 mt-1.5">{total} صوت</div>}
+    </div>
+  );
+}
+
+function StoryAsk({ story, meId, isMine, onFocusChange }: { story: StoryItem; meId: string; isMine: boolean; onFocusChange: (b: boolean) => void }) {
+  const [txt, setTxt] = useState('');
+  const [sent, setSent] = useState(false);
+  const q = story.extra?.ask;
+  if (!q) return null;
+  const send = async () => {
+    const body = txt.trim();
+    if (!body || sent || isMine) return;
+    setSent(true);
+    try {
+      const convId = await getOrCreateConversation(meId, story.userId);
+      const { error } = await supabase.from('messages').insert({
+        id: crypto.randomUUID(), conversation_id: convId, sender_id: meId,
+        text: `❓ ${q}\n${body}`.slice(0, 1000),
+        media_path: null, media_type: null, media_duration: null, media_name: null, media_size: null, reply_to_id: null,
+      });
+      if (error) throw error;
+      playSound('send');
+      setTxt('');
+    } catch (e) { console.error(e); setSent(false); }
+  };
+  return (
+    <div className="kan-always-white rounded-2xl bg-black/55 backdrop-blur p-3 text-white">
+      <div className="text-center font-bold text-base mb-2" dir="auto">❓ {q}</div>
+      {!isMine && (sent
+        ? <div className="text-center text-sm text-white/80">تم إرسال إجابتك ✓</div>
+        : (
+          <div className="flex items-center gap-2">
+            <input value={txt} onChange={e => setTxt(e.target.value.slice(0, 300))} onFocus={() => onFocusChange(true)} onBlur={() => onFocusChange(false)} onKeyDown={e => { if (e.key === 'Enter') void send(); }} placeholder="اكتب إجابتك..." className="flex-1 min-w-0 h-10 px-3 rounded-full bg-white/15 border border-white/25 text-[16px] text-white placeholder-white/60 focus:outline-none" />
+            <button onClick={() => void send()} aria-label="إرسال" className="w-10 h-10 shrink-0 rounded-full bg-white/25 text-white flex items-center justify-center"><Send size={16} /></button>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+// Pick which of the people you follow are close friends (they alone see "close friends" stories).
+function CloseFriendsModal({ meId, onClose }: { meId: string; onClose: () => void }) {
+  useBackLayer(true, onClose);
+  const [people, setPeople] = useState<{ id: string; name: string }[]>([]);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let off = false;
+    void (async () => {
+      const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', meId).limit(500);
+      const ids = (f ?? []).map(x => (x as { following_id: string }).following_id);
+      const { data: p } = ids.length ? await supabase.from('profiles').select('id, display_name').in('id', ids) : { data: [] };
+      const { data: c } = await supabase.from('close_friends').select('friend_id').eq('user_id', meId);
+      if (off) return;
+      setPeople(((p ?? []) as { id: string; display_name: string }[]).map(x => ({ id: x.id, name: x.display_name })));
+      setSel(new Set((c ?? []).map(x => (x as { friend_id: string }).friend_id)));
+      setLoading(false);
+    })();
+    return () => { off = true; };
+  }, [meId]);
+  const toggle = async (id: string) => {
+    const on = sel.has(id);
+    setSel(prev => { const n = new Set(prev); if (on) n.delete(id); else n.add(id); return n; });
+    const { error } = on
+      ? await supabase.from('close_friends').delete().eq('user_id', meId).eq('friend_id', id)
+      : await supabase.from('close_friends').insert({ user_id: meId, friend_id: id });
+    if (error) { console.error(error); setSel(prev => { const n = new Set(prev); if (on) n.add(id); else n.delete(id); return n; }); }
+  };
+  return createPortal(
+    <div dir={DIR} className="fixed inset-0 z-[160] bg-black/70 flex items-end justify-center" onClick={onClose}>
+      <div className="kan-theme-text w-full max-w-md max-h-[75vh] bg-gray-900 rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-white">أصدقاء مقربين ({sel.size})</h3>
+          <button onClick={onClose} className="p-1.5 rounded-full bg-white/10 text-white" aria-label="إغلاق"><X size={18} /></button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
+          {loading && <div className="text-center text-gray-400 text-sm py-6">...</div>}
+          {!loading && people.length === 0 && <div className="text-center text-gray-400 text-sm py-6">تابع بعض الأشخاص أولاً</div>}
+          {people.map(p => (
+            <button key={p.id} onClick={() => void toggle(p.id)} className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-gray-800 text-white">
+              <span className="truncate">{p.name}</span>
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${sel.has(p.id) ? 'bg-emerald-500 text-white' : 'border border-gray-500'}`}>{sel.has(p.id) ? '✓' : ''}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// Small star on a profile picture: opens that person's pinned stories (highlights), which stay after 24h.
+function HighlightBadge({ user, currentUser, users }: { user: User; currentUser: User; users: User[] }) {
+  const [items, setItems] = useState<StoryItem[]>([]);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let off = false;
+    const load = async () => {
+      const { data } = await supabase.from('stories').select(STORY_SELECT).eq('user_id', user.id).eq('highlight', true).order('created_at', { ascending: true }).limit(60);
+      if (off) return;
+      setItems(await signStories(((data ?? []) as StoryRow[]).map(rowToStory)));
+    };
+    void load();
+    window.addEventListener('kan-stories-changed', load);
+    return () => { off = true; window.removeEventListener('kan-stories-changed', load); };
+  }, [user.id]);
+  if (items.length === 0) return null;
+  return (
+    <>
+      <button onClick={() => setOpen(true)} aria-label="الهايلايت" className="absolute -bottom-1 -end-1 z-10 w-8 h-8 rounded-full bg-amber-500 border-2 border-gray-950 flex items-center justify-center text-base leading-none active:scale-90">⭐</button>
+      {open && (
+        <StoryViewer groups={[{ userId: user.id, items }]} startGroup={0} users={users} currentUser={currentUser} onSeen={() => undefined} onChanged={notifyStoriesChanged} onClose={() => setOpen(false)} />
+      )}
+    </>
+  );
+}
+
+function ProfileStoryAvatar({ user, currentUser, users }: { user: User; currentUser: User; users: User[] }) {
+  return <div className="relative shrink-0"><ProfileStoryAvatarBase user={user} currentUser={currentUser} users={users} /><HighlightBadge user={user} currentUser={currentUser} users={users} /></div>;
+}
+
+function TextStoryComposer({ currentUser, onClose, onDone }: { currentUser: User; onClose: () => void; onDone: () => void }) {
+  useBackLayer(true, onClose);
+  const [text, setText] = useState('');
+  const [bg, setBg] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const publish = async () => {
+    if (busy || !text.trim()) return;
+    setBusy(true);
+    const { error } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: '', media_type: 'image', caption: text.trim().slice(0, 300), extra: { bg }, audience: 'all' });
+    if (error) { console.error(error); setErr('تعذّر نشر القصة، حاول مرة أخرى'); setBusy(false); return; }
+    notifyStoriesChanged();
+    onDone();
+  };
+  return createPortal(
+    <div dir={DIR} className="kan-always-white fixed inset-0 z-[140] flex flex-col" style={{ background: STORY_BGS[bg] }}>
+      <div className="flex items-center justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
+        <button onClick={onClose} disabled={busy} className="p-2 rounded-full bg-black/25 text-white" aria-label="إغلاق"><X size={20} /></button>
+        <button onClick={() => setBg(b => (b + 1) % STORY_BGS.length)} className="px-4 py-2 rounded-full bg-black/25 text-white text-sm font-semibold">🎨 الخلفية</button>
+        <button onClick={() => void publish()} disabled={busy || !text.trim()} className="px-5 py-2 rounded-full bg-white text-black text-sm font-bold disabled:opacity-50 active:scale-95 transition-transform">{busy ? '...' : 'نشر'}</button>
+      </div>
+      <div className="flex-1 min-h-0 flex items-center justify-center p-8">
+        <textarea autoFocus value={text} onChange={e => setText(e.target.value.slice(0, 300))} placeholder="اكتب شيئاً..." dir="auto" className="w-full h-full max-h-[60vh] resize-none bg-transparent text-white text-3xl font-extrabold leading-snug text-center placeholder-white/60 focus:outline-none" style={{ boxShadow: 'none' }} />
+      </div>
+      {err && <div className="absolute bottom-10 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500/90 text-white text-xs">{err}</div>}
+    </div>,
+    document.body,
   );
 }
 
@@ -3325,16 +3578,47 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [pct, setPct] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [tool, setTool] = useState<'' | 'text' | 'sticker' | 'poll' | 'ask' | 'aud' | 'sched' | 'filter'>('filter');
+  const [txt, setTxt] = useState('');
+  const [txtY, setTxtY] = useState(50);
+  const [txtX, setTxtX] = useState(50);
+  const [stkPos, setStkPos] = useState({ x: 50, y: 28 });
+  const [flt, setFlt] = useState(0);
+  const [fltName, setFltName] = useState('');
+  const swipeX = useRef(0);
+  const pickFlt = (i: number) => { const n = (i + STORY_FILTERS.length) % STORY_FILTERS.length; setFlt(n); setFltName(STORY_FILTERS[n].n); window.setTimeout(() => setFltName(''), 900); };
+  const [stk, setStk] = useState<string[]>([]);
+  const [pq, setPq] = useState('');
+  const [pa, setPa] = useState('');
+  const [pb, setPb] = useState('');
+  const [ask, setAsk] = useState('');
+  const [aud, setAud] = useState<'all' | 'close'>('all');
+  const [sched, setSched] = useState('');
+  const [cfOpen, setCfOpen] = useState(false);
+  const extra: StoryExtra = {
+    texts: txt.trim() ? [{ t: txt.trim().slice(0, 200), y: txtY, x: txtX }] : undefined,
+    sp: stk.length ? stkPos : undefined,
+    filter: flt > 0 ? flt : undefined,
+    stickers: stk.length ? stk : undefined,
+    poll: pq.trim() && pa.trim() && pb.trim() ? { q: pq.trim().slice(0, 100), a: pa.trim().slice(0, 30), b: pb.trim().slice(0, 30) } : undefined,
+    ask: ask.trim() ? ask.trim().slice(0, 120) : undefined,
+  };
+  const hasExtra = Object.values(extra).some(Boolean);
   const publish = async () => {
     if (busy) return;
+    const at = sched ? new Date(sched) : null;
+    if (at && at.getTime() < Date.now() + 60000) { setErr('اختر وقتاً في المستقبل'); return; }
     setBusy(true);
     setErr('');
-    const path = kanPath(`${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[file.type] ?? safeExt(file.name)}`, file.size);
+    let upFile: File = file;
+    let baked = false;
+    if (!isVideo && flt > 0) { const b = await bakeFilter(file, STORY_FILTERS[flt].f); if (b) { upFile = b; baked = true; } }
+    const path = kanPath(`${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[upFile.type] ?? safeExt(upFile.name)}`, upFile.size);
     try {
-      const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, file, file.type || 'application/octet-stream', '31536000', setPct);
+      const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, upFile, upFile.type || 'application/octet-stream', '31536000', setPct);
       if (upErr) throw upErr;
       const url = kanPublicUrl(POST_MEDIA_BUCKET, path);
-      const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300) });
+      const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = baked ? { ...extra, filter: undefined } : extra; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
       if (insErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); throw insErr; }
       notifyStoriesChanged();
       onDone();
@@ -3351,17 +3635,34 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
         <span className="text-white font-semibold text-sm">قصة جديدة</span>
         <span className="w-9" />
       </div>
-      <div className="flex-1 min-h-0 flex items-center justify-center">
+      <div className="relative flex-1 min-h-0 flex items-center justify-center" onTouchStart={e => { swipeX.current = e.touches[0].clientX; }} onTouchEnd={e => { const dx = e.changedTouches[0].clientX - swipeX.current; if (Math.abs(dx) > 70) pickFlt(flt + (dx < 0 ? 1 : -1)); }}>
         {isVideo
-          ? <video src={previewUrl} className="max-w-full max-h-full" controls playsInline muted />
-          : <img src={previewUrl} alt="" className="max-w-full max-h-full object-contain" />}
+          ? <video src={previewUrl} className="max-w-full max-h-full" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted />
+          : <img src={previewUrl} alt="" style={{ filter: STORY_FILTERS[flt].f }} className="max-w-full max-h-full object-contain" />}
+        {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
+        <StoryOverlays extra={extra} onMove={(k, x, y) => { if (k === 'text') { setTxtX(x); setTxtY(y); } else setStkPos({ x, y }); }} />
+      </div>
+      <div className="px-3 pb-1">
+        {tool === 'text' && <div className="flex gap-2 mb-2"><input value={txt} onChange={e => setTxt(e.target.value.slice(0, 200))} placeholder="اكتب نصاً فوق الصورة..." className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><button onClick={() => { setTxtX(50); setTxtY(y => (y === 50 ? 20 : y === 20 ? 80 : 50)); }} className="px-3 rounded-full bg-white/10 text-white text-sm">الموضع</button></div>}
+        {tool === 'sticker' && <div className="flex gap-2 overflow-x-auto no-scrollbar mb-2">{['😍', '🔥', '😂', '🎉', '❤️', '😎', '🙏', '💯', '⭐', '👏'].map(e => <button key={e} onClick={() => setStk(s => (s.includes(e) ? s.filter(x => x !== e) : s.length < 3 ? [...s, e] : s))} className={`text-3xl shrink-0 w-12 h-12 rounded-full ${stk.includes(e) ? 'bg-white/30' : 'bg-white/10'}`}>{e}</button>)}</div>}
+        {tool === 'filter' && <div className="flex gap-2.5 overflow-x-auto no-scrollbar mb-2">{STORY_FILTERS.map((f, i) => <button key={f.n} onClick={() => pickFlt(i)} className="shrink-0 flex flex-col items-center gap-1 w-16"><span className={`block w-16 h-16 rounded-xl overflow-hidden ${flt === i ? 'ring-2 ring-white' : 'opacity-80'}`}>{isVideo ? <video src={`${previewUrl}#t=0.1`} preload="metadata" muted playsInline style={{ filter: f.f }} className="w-full h-full object-cover pointer-events-none" /> : <img src={previewUrl} alt="" style={{ filter: f.f }} className="w-full h-full object-cover" />}</span><span className={`text-[11px] ${flt === i ? 'text-white font-bold' : 'text-white/70'}`}>{f.n}</span></button>)}</div>}
+        {tool === 'poll' && <div className="space-y-2 mb-2"><input value={pq} onChange={e => setPq(e.target.value)} placeholder="سؤال الاستطلاع" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><div className="flex gap-2"><input value={pa} onChange={e => setPa(e.target.value)} placeholder="الخيار الأول" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><input value={pb} onChange={e => setPb(e.target.value)} placeholder="الخيار الثاني" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div></div>}
+        {tool === 'ask' && <div className="mb-2"><input value={ask} onChange={e => setAsk(e.target.value)} placeholder="اطرح سؤالاً على متابعيك" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>}
+        {tool === 'aud' && <div className="flex gap-2 mb-2">{([['all', 'الجميع'], ['close', 'أصدقاء مقربين']] as const).map(([k, l]) => <button key={k} onClick={() => setAud(k)} className={`flex-1 py-2 rounded-full text-sm ${aud === k ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white'}`}>{l}</button>)}<button onClick={() => setCfOpen(true)} className="px-3 rounded-full bg-white/10 text-white text-sm">تعديل القائمة</button></div>}
+        {tool === 'sched' && <div className="flex gap-2 mb-2"><input type="datetime-local" value={sched} onChange={e => setSched(e.target.value)} style={{ colorScheme: 'dark' }} className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" />{sched && <button onClick={() => setSched('')} className="px-3 rounded-full bg-white/10 text-white text-sm">إلغاء</button>}</div>}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+          {([['text', 'Aa نص', !!txt.trim()], ['sticker', '😀 ملصق', stk.length > 0], ['poll', '📊 استطلاع', !!extra.poll], ['ask', '❓ سؤال', !!extra.ask], ['aud', aud === 'close' ? '👥 مقربين ✓' : '👥 الجمهور', aud === 'close'], ['filter', flt > 0 ? '🎨 فلتر ✓' : '🎨 فلتر', flt > 0], ['sched', sched ? '🕒 مجدولة ✓' : '🕒 جدولة', !!sched]] as const).map(([k, l, on]) => (
+            <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm ${tool === k ? 'bg-white text-black' : on ? 'bg-emerald-500/80 text-white' : 'bg-white/10 text-white'}`}>{l}</button>
+          ))}
+        </div>
       </div>
       <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2">
         <input value={caption} onChange={e => setCaption(e.target.value.slice(0, 300))} placeholder="أضف تعليقاً..." className="flex-1 px-4 py-2.5 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" />
         <button onClick={() => void publish()} disabled={busy} className="px-5 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-70 active:scale-95 transition-transform">
-          {busy ? <><RefreshCw size={15} className="animate-spin" /> {pct}%</> : <><Send size={15} /> نشر</>}
+          {busy ? <><RefreshCw size={15} className="animate-spin" /> {pct}%</> : <><Send size={15} /> {sched ? 'جدولة' : 'نشر'}</>}
         </button>
       </div>
+      {cfOpen && <CloseFriendsModal meId={currentUser.id} onClose={() => setCfOpen(false)} />}
       {err && <div className="absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500/90 text-white text-xs">{err}</div>}
     </div>,
     document.body,
@@ -3385,12 +3686,24 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
   const [likers, setLikers] = useState<string[]>([]);
   const [replyText, setReplyText] = useState('');
   const [replyFocus, setReplyFocus] = useState(false);
+  const [pinned, setPinned] = useState<Record<string, boolean>>({});
   const [sentNote, setSentNote] = useState('');
   const [burst, setBurst] = useState(0);
   const group = groups[gi];
   const story = group?.items[si];
   const author = users.find(u => u.id === group?.userId);
   const isMine = story?.userId === currentUser.id;
+  const isPinned = story ? (pinned[story.id] ?? !!story.highlight) : false;
+  const togglePin = async () => {
+    if (!story) return;
+    const nv = !isPinned;
+    setPinned(p => ({ ...p, [story.id]: nv }));
+    const { error } = await supabase.from('stories').update({ highlight: nv }).eq('id', story.id);
+    if (error) { console.error(error); setPinned(p => ({ ...p, [story.id]: !nv })); return; }
+    setSentNote(nv ? 'تم التثبيت في الهايلايت ⭐' : 'تمت الإزالة من الهايلايت');
+    window.setTimeout(() => setSentNote(''), 1800);
+    notifyStoriesChanged();
+  };
   const videoRef = useRef<HTMLVideoElement>(null);
   const downY = useRef(0);
   const downX = useRef(0);
@@ -3467,6 +3780,22 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
   };
 
   // A reply goes to the owner's private chat.
+  const [flyEm, setFlyEm] = useState<{ e: string; k: number } | null>(null);
+  const sendReaction = async (em: string) => {
+    if (!story || story.userId === currentUser.id) return;
+    setFlyEm({ e: em, k: Date.now() });
+    window.setTimeout(() => setFlyEm(null), 1000);
+    try {
+      const convId = await getOrCreateConversation(currentUser.id, story.userId);
+      await supabase.from('messages').insert({
+        id: crypto.randomUUID(), conversation_id: convId, sender_id: currentUser.id,
+        text: `↪️ تفاعل على قصتك\n${em}`,
+        media_path: null, media_type: null, media_duration: null, media_name: null, media_size: null, reply_to_id: null,
+      });
+      playSound('send');
+    } catch (e) { console.error(e); }
+  };
+
   const sendReply = async () => {
     const body = replyText.trim();
     if (!body || !story || story.userId === currentUser.id) return;
@@ -3565,12 +3894,12 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
       <div className="relative w-full h-full max-w-md bg-black overflow-hidden">
         {!story.url
           ? (
-            <div className="absolute inset-0 flex items-center justify-center p-8 bg-gradient-to-br from-violet-700 via-fuchsia-600 to-cyan-500">
+            <div className="absolute inset-0 flex items-center justify-center p-8 kan-always-white" style={{ background: STORY_BGS[story.extra?.bg ?? 0] ?? STORY_BGS[0] }}>
               <p className="text-white text-2xl font-bold leading-10 text-center whitespace-pre-wrap break-words line-clamp-[10]" dir="auto">{story.caption}</p>
             </div>
           )
           : story.type === 'image'
-          ? <img src={story.url} alt="" draggable={false} className="absolute inset-0 w-full h-full object-contain" />
+          ? <img src={story.url} alt="" draggable={false} style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f }} className="absolute inset-0 w-full h-full object-contain" />
           : (
             <video
               key={story.id}
@@ -3578,6 +3907,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
               src={story.url}
               autoPlay
               playsInline
+              style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f }}
               className="absolute inset-0 w-full h-full object-contain"
               onLoadedMetadata={e => setDuration((e.currentTarget.duration || 5) * 1000)}
               onTimeUpdate={e => { const d = e.currentTarget.duration; if (d > 0) setProgress(e.currentTarget.currentTime / d); }}
@@ -3585,6 +3915,13 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
               onError={() => setProgress(1)}
             />
           )}
+        <StoryOverlays extra={story.extra} />
+        {(story.extra?.poll || story.extra?.ask) && (
+          <div {...ignore} className="absolute inset-x-14 top-[44%] z-10 space-y-3">
+            {story.extra?.poll && <StoryPoll key={`p${story.id}`} story={story} meId={currentUser.id} isMine={isMine} />}
+            {story.extra?.ask && <StoryAsk key={`a${story.id}`} story={story} meId={currentUser.id} isMine={isMine} onFocusChange={setPaused} />}
+          </div>
+        )}
         {/* Visible navigation: RTL, so the right arrow goes back and the left arrow goes forward. */}
         {(gi > 0 || si > 0) && (
           <button {...ignore} onClick={e => { e.stopPropagation(); prev(); }} aria-label="السابق" className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center active:scale-90 transition-transform">
@@ -3613,6 +3950,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
             </button>
             {isMine && onAdd && <button onClick={onAdd} className="p-2 rounded-full bg-black/30 text-white" aria-label="إضافة قصة"><Plus size={20} /></button>}
             {isMine && <button onClick={() => void remove()} className="p-2 rounded-full bg-black/30 text-white" aria-label="حذف القصة"><Trash2 size={18} /></button>}
+            {isMine && <button onClick={() => void togglePin()} className="p-2 rounded-full bg-black/30 text-white text-base leading-none" aria-label="هايلايت">{isPinned ? '⭐' : '☆'}</button>}
             <button onClick={onClose} className="p-2 rounded-full bg-black/30 text-white" aria-label="إغلاق"><X size={20} /></button>
           </div>
         </div>
@@ -3634,7 +3972,10 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
               <span className="px-4 py-1.5 rounded-full bg-white/15 text-white text-sm flex items-center gap-2"><Heart size={16} className="fill-rose-400 text-rose-400" /> {likers.length}</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2" {...ignore} dir={DIR}>
+            <div {...ignore} dir={DIR}>
+              {!replyFocus && <div className="flex items-center justify-between gap-1 mb-2 px-1">{['🔥', '😂', '😍', '😮', '😢', '👏'].map(em => <button key={em} onClick={() => void sendReaction(em)} className="text-2xl w-11 h-11 rounded-full bg-white/10 active:scale-125 transition-transform">{em}</button>)}</div>}
+              {flyEm && <motion.div key={flyEm.k} initial={{ opacity: 1, y: 0, scale: 0.6 }} animate={{ opacity: 0, y: -170, scale: 1.8 }} transition={{ duration: 0.9 }} className="fixed inset-x-0 bottom-40 text-center text-6xl pointer-events-none z-50">{flyEm.e}</motion.div>}
+            <div className="flex items-center gap-2">
               <input
                 value={replyText}
                 onChange={e => setReplyText(e.target.value.slice(0, 500))}
@@ -3654,6 +3995,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
                     </motion.span>
                   </button>
                 )}
+            </div>
             </div>
           )}
         </div>
@@ -7664,7 +8006,6 @@ function SettingsTab({ currentUser, setUsers }: {
   return (
     <div className="px-4 py-4 space-y-4">
       <h2 className="text-xl font-bold text-white">{t('الإعدادات')}</h2>
-      <RingStylePicker />
       <LangPicker />
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
         <div className="text-sm font-semibold text-white mb-1">{t('المظهر')}</div>
@@ -8080,6 +8421,9 @@ function VoicePlayer({ url, knownDuration = 0 }: { url: string; knownDuration?: 
   // the duration we measured while recording.
   const [duration, setDuration] = useState(knownDuration);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [rate, setRate] = useState<number>(() => { try { return Number(localStorage.getItem('kix_voice_rate')) || 1; } catch { return 1; } });
+  useEffect(() => { if (audioRef.current) audioRef.current.playbackRate = rate; }, [rate, playing]);
+  const cycleRate = () => setRate(r => { const n = r === 1 ? 1.5 : r === 1.5 ? 2 : 1; try { localStorage.setItem('kix_voice_rate', String(n)); } catch { /* ignore */ } return n; });
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -8129,6 +8473,7 @@ function VoicePlayer({ url, knownDuration = 0 }: { url: string; knownDuration?: 
         </div>
         <span className="text-[10px] opacity-70 font-mono">{formatDuration(duration || 0)}</span>
       </div>
+      <button onClick={e => { e.stopPropagation(); cycleRate(); }} aria-label="سرعة الصوت" className="shrink-0 min-w-[34px] px-1.5 py-0.5 rounded-full bg-white/20 text-[11px] font-bold tabular-nums">{rate}x</button>
     </div>
   );
 }
