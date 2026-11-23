@@ -9,7 +9,7 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon
+  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon, ChevronDown, Repeat, PictureInPicture2
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -185,7 +185,7 @@ interface Reply {
 }
 
 interface Post {
-  music?: { url: string; name: string; start?: number };
+  music?: { url: string; name: string; start?: number; end?: number };
   id: string;
   userId: string;
   text: string;
@@ -487,7 +487,7 @@ function rowToPost(row: PostRow): Post {
       : undefined,
     music: (() => {
       const m = (Array.isArray(row.media_extra) ? row.media_extra : []).find(x => (x.name ?? '').startsWith('kan-music|'));
-      return m ? { url: m.url, name: (m.name ?? '').slice(10) || 'موسيقى', start: typeof (m as { start?: number }).start === 'number' ? (m as { start?: number }).start : undefined } : undefined;
+      return m ? { url: m.url, name: (m.name ?? '').slice(10) || 'موسيقى', start: typeof (m as { start?: number }).start === 'number' ? (m as { start?: number }).start : undefined, end: typeof (m as { end?: number }).end === 'number' ? (m as { end?: number }).end : undefined } : undefined;
     })(),
     isReel: row.is_reel,
     isVideo: row.is_video,
@@ -869,7 +869,7 @@ function fmtClock(t: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
 }
 
-const PLAYER_SPEEDS = [1, 1.25, 1.5, 2, 0.5];
+const PLAYER_SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.5, 0.75];
 
 // KIX video player: big play button, double-tap to skip 10s, scrub bar with buffering, speed, volume, fullscreen.
 function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
@@ -900,6 +900,9 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
   const [fs, setFs] = useState(false);
   const [flash, setFlash] = useState<{ side: 'back' | 'fwd'; n: number } | null>(null);
   const [boost, setBoost] = useState(false);
+  const [loop, setLoop] = useState(false);
+  const kbRef = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  const resumeKey = `kan-pos:${src.split('?')[0].slice(-120)}`;
   const holdTimer = useRef<number | undefined>(undefined);
   const heldRef = useRef(false);
 
@@ -932,6 +935,25 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
+
+  // Keyboard shortcuts (while the pointer is over the player or it is full screen).
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => kbRef.current(e);
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
+  // Long videos remember where you stopped.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const v = videoRef.current;
+      if (!v || !v.duration || v.duration < 120) return;
+      try {
+        if (!v.paused && v.currentTime > 5 && v.currentTime < v.duration - 5) localStorage.setItem(resumeKey, String(Math.floor(v.currentTime)));
+        else if (v.currentTime >= v.duration - 5) localStorage.removeItem(resumeKey);
+      } catch { /* storage unavailable */ }
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [resumeKey]);
 
   if (failed) {
     return (
@@ -1012,6 +1034,30 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
     setSpeedMenu(false);
   };
 
+  const togglePip = async () => {
+    const v = videoRef.current as (HTMLVideoElement & { requestPictureInPicture?: () => Promise<unknown> }) | null;
+    try { if (document.pictureInPictureElement) await document.exitPictureInPicture(); else await v?.requestPictureInPicture?.(); } catch { /* not supported */ }
+  };
+  kbRef.current = (e: KeyboardEvent) => {
+    const wrap = wrapRef.current, v = videoRef.current;
+    if (!wrap || !v) return;
+    const tg = e.target as HTMLElement | null;
+    if (tg && (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA' || tg.isContentEditable)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!(wrap.matches(':hover') || document.fullscreenElement === wrap)) return;
+    const k = e.key.toLowerCase();
+    if (k === ' ' || k === 'k') { e.preventDefault(); toggle(); }
+    else if (k === 'arrowleft' || k === 'j') { e.preventDefault(); skip(k === 'j' ? -10 : -5); }
+    else if (k === 'arrowright' || k === 'l') { e.preventDefault(); skip(k === 'l' ? 10 : 5); }
+    else if (k === 'm') setMuted(m => !m);
+    else if (k === 'f') toggleFullscreen();
+    else if (k === 'p') void togglePip();
+    else if (k === '>' || k === '<') { const i = PLAYER_SPEEDS.slice().sort((a, b) => a - b); const at = i.indexOf(speed); changeSpeed(i[Math.max(0, Math.min(i.length - 1, at + (k === '>' ? 1 : -1)))]); }
+    else if (/^[0-9]$/.test(k) && v.duration) v.currentTime = (v.duration * Number(k)) / 10;
+    else return;
+    poke();
+  };
+
   const pct = dur > 0 ? (cur / dur) * 100 : 0;
   const bufPct = dur > 0 ? (buffered / dur) * 100 : 0;
   const wide = className.includes('w-auto');
@@ -1031,9 +1077,10 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
         playsInline
         autoPlay={autoPlay}
         muted={muted}
+        loop={loop}
         preload="metadata"
         className="block w-full h-full max-h-[inherit] object-contain"
-        onLoadedMetadata={e => { setDur(e.currentTarget.duration || 0); if (autoPlay) void e.currentTarget.play().catch(() => undefined); }}
+        onLoadedMetadata={e => { const v = e.currentTarget; setDur(v.duration || 0); try { const p = Number(localStorage.getItem(resumeKey)); if (!autoPlay && v.duration >= 120 && p > 5 && p < v.duration - 5) v.currentTime = p; } catch { /* storage unavailable */ } if (autoPlay) void v.play().catch(() => undefined); }}
         onDurationChange={e => setDur(e.currentTarget.duration || 0)}
         onTimeUpdate={e => { if (!scrubbing) setCur(e.currentTarget.currentTime); }}
         onProgress={e => { const b = e.currentTarget.buffered; if (b.length) setBuffered(b.end(b.length - 1)); }}
@@ -1114,6 +1161,8 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
               <button onClick={e => { e.stopPropagation(); changeSpeed(PLAYER_SPEEDS[(PLAYER_SPEEDS.indexOf(speed) + 1) % PLAYER_SPEEDS.length]); }} className="px-2 py-1 rounded-full hover:bg-white/10 text-xs font-semibold tabular-nums" aria-label="السرعة">
                 {speed}x
               </button>
+              <button onClick={e => { e.stopPropagation(); setLoop(l => !l); }} className={`p-1.5 rounded-full hover:bg-white/10 ${loop ? 'text-cyan-300' : ''}`} aria-label="تكرار"><Repeat size={17} /></button>
+              {typeof document !== 'undefined' && document.pictureInPictureEnabled && <button onClick={e => { e.stopPropagation(); void togglePip(); }} className="p-1.5 rounded-full hover:bg-white/10" aria-label="صورة داخل صورة"><PictureInPicture2 size={18} /></button>}
               <button onClick={e => { e.stopPropagation(); toggleFullscreen(); }} className="p-1.5 rounded-full hover:bg-white/10" aria-label="ملء الشاشة">
                 {fs ? <Minimize size={19} /> : <Maximize size={19} />}
               </button>
@@ -1134,7 +1183,7 @@ const B2_PART_MB = 8;
 const B2_PARALLEL = 16;
 
 // Background publishing: uploads keep running while you move around; the progress shows inside the publish box.
-type PubExtra = { type: 'image' | 'video' | 'file'; url: string; name: string; size: number; start?: number };
+type PubExtra = { type: 'image' | 'video' | 'file'; url: string; name: string; size: number; start?: number; end?: number };
 type PubJob = { id: string; label: string; pct: number; status: 'run' | 'done' | 'fail'; postId?: string; extra: PubExtra[]; music: PubExtra | null };
 let pubList: PubJob[] = [];
 const pubSubs = new Set<() => void>();
@@ -2434,9 +2483,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
     },
   );
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [group.messages.length]);
+  const { fab, onScroll, onUserScroll, jumpDown } = useChatStick(scrollRef, group.messages, currentUser.id, group.id);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { first, rest } = takeFiles(e, !!media, setError);
@@ -2581,7 +2628,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             }}
           />
         )}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" onClick={() => { setActiveMsgId(null); setReactingTo(null); }}>
+        <div ref={scrollRef} onScroll={onScroll} onWheel={onUserScroll} onTouchMove={onUserScroll} className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" onClick={() => { setActiveMsgId(null); setReactingTo(null); }}>
           {group.messages.length === 0 && <p className="text-center text-gray-500 text-sm py-12">ابدأ المحادثة في المجموعة 👋</p>}
           {group.messages.map((m, i) => {
             if (m.isSystem) {
@@ -2704,6 +2751,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
               </motion.div>
             );
           })}
+          <ScrollDownFab fab={fab} onClick={jumpDown} />
         </div>
 
         {(
@@ -3332,7 +3380,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
 
 // ============ Story extras: text + stickers, poll, question box, close friends, highlights ============
 const STORY_BGS = ['linear-gradient(135deg,#6d28d9,#c026d3,#06b6d4)', 'linear-gradient(135deg,#f97316,#ec4899)', 'linear-gradient(135deg,#0ea5e9,#6366f1)', 'linear-gradient(135deg,#10b981,#0e7490)', 'linear-gradient(135deg,#ef4444,#7c2d12)', 'linear-gradient(135deg,#111827,#4b5563)'];
-const STORY_FILTERS: { n: string; f: string }[] = [{ n: 'عادي', f: 'none' }, { n: 'دافئ', f: 'sepia(0.35) saturate(1.4) contrast(1.05)' }, { n: 'بارد', f: 'hue-rotate(185deg) saturate(1.1) brightness(1.05)' }, { n: 'أبيض وأسود', f: 'grayscale(1) contrast(1.1)' }, { n: 'ساطع', f: 'brightness(1.2) saturate(1.3)' }, { n: 'كلاسيك', f: 'sepia(0.7) contrast(0.95) brightness(1.05)' }, { n: 'دراما', f: 'contrast(1.4) saturate(0.9) brightness(0.92)' }, { n: 'سينمائي', f: 'contrast(1.25) sepia(0.2) hue-rotate(-12deg) saturate(1.2) brightness(0.95)' }, { n: 'نيون', f: 'saturate(2.1) contrast(1.2) hue-rotate(320deg) brightness(1.05)' }, { n: 'غروب', f: 'sepia(0.5) saturate(1.9) hue-rotate(-18deg) brightness(1.08)' }, { n: 'ذهبي', f: 'sepia(0.6) saturate(2) hue-rotate(-8deg) brightness(1.1) contrast(1.05)' }, { n: 'شتوي', f: 'hue-rotate(200deg) saturate(0.8) brightness(1.12) contrast(1.05)' }, { n: 'بوب', f: 'saturate(2.3) contrast(1.15) brightness(1.03)' }, { n: 'ليلي', f: 'brightness(0.82) contrast(1.3) hue-rotate(210deg) saturate(1.3)' }, { n: 'حلم', f: 'brightness(1.12) contrast(0.88) saturate(1.35) sepia(0.12)' }];
+const STORY_FILTERS: { n: string; f: string }[] = [{ n: 'عادي', f: 'none' }, { n: 'دافئ', f: 'sepia(0.35) saturate(1.4) contrast(1.05)' }, { n: 'بارد', f: 'hue-rotate(185deg) saturate(1.1) brightness(1.05)' }, { n: 'أبيض وأسود', f: 'grayscale(1) contrast(1.1)' }, { n: 'ساطع', f: 'brightness(1.2) saturate(1.3)' }, { n: 'كلاسيك', f: 'sepia(0.7) contrast(0.95) brightness(1.05)' }, { n: 'دراما', f: 'contrast(1.4) saturate(0.9) brightness(0.92)' }, { n: 'سينمائي', f: 'contrast(1.25) sepia(0.2) hue-rotate(-12deg) saturate(1.2) brightness(0.95)' }, { n: 'نيون', f: 'saturate(2.1) contrast(1.2) hue-rotate(320deg) brightness(1.05)' }, { n: 'غروب', f: 'sepia(0.5) saturate(1.9) hue-rotate(-18deg) brightness(1.08)' }, { n: 'ذهبي', f: 'sepia(0.6) saturate(2) hue-rotate(-8deg) brightness(1.1) contrast(1.05)' }, { n: 'شتوي', f: 'hue-rotate(200deg) saturate(0.8) brightness(1.12) contrast(1.05)' }, { n: 'بوب', f: 'saturate(2.3) contrast(1.15) brightness(1.03)' }, { n: 'ليلي', f: 'brightness(0.82) contrast(1.3) hue-rotate(210deg) saturate(1.3)' }, { n: 'حلم', f: 'brightness(1.12) contrast(0.88) saturate(1.35) sepia(0.12)' }, { n: 'فيلم', f: 'contrast(1.15) sepia(0.15) saturate(0.85) brightness(0.97)' }, { n: 'مضيء', f: 'brightness(1.18) contrast(0.95) saturate(1.1)' }, { n: 'عميق', f: 'contrast(1.35) saturate(1.25) brightness(0.9)' }, { n: 'ربيع', f: 'hue-rotate(-10deg) saturate(1.5) brightness(1.08)' }, { n: 'ريترو', f: 'sepia(0.45) contrast(1.1) saturate(0.8) hue-rotate(-15deg)' }, { n: 'جليد', f: 'hue-rotate(170deg) saturate(0.7) brightness(1.15) contrast(1.1)' }, { n: 'قوي', f: 'contrast(1.5) saturate(1.5)' }];
 const bakeFilter = async (f: File, css: string): Promise<File | null> => {
   try {
     const bmp = await createImageBitmap(f);
@@ -3347,7 +3395,7 @@ const bakeFilter = async (f: File, css: string): Promise<File | null> => {
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
 };
-type StoryExtra = { bg?: number; filter?: number; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number }[]; stickers?: string[]; poll?: { q: string; a: string; b: string }; ask?: string };
+type StoryExtra = { bg?: number; filter?: number; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string }; ask?: string };
 
 function StoryOverlays({ extra, onMove }: { extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk', x: number, y: number) => void }) {
   const root = useRef<HTMLDivElement>(null);
@@ -3366,7 +3414,7 @@ function StoryOverlays({ extra, onMove }: { extra?: StoryExtra | null; onMove?: 
     <div ref={root} className="absolute inset-0 pointer-events-none z-[5] kan-always-white">
       {(extra.texts ?? []).map((x, i) => {
         const d = drag('text');
-        return <div key={i} onPointerDown={d.onPointerDown} onPointerMove={d.onPointerMove} className={`absolute max-w-[88%] text-center text-white text-3xl font-extrabold leading-snug drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] whitespace-pre-wrap break-words ${d.className}`} style={{ left: `${x.x ?? 50}%`, top: `${x.y}%`, transform: 'translate(-50%,-50%)' }} dir="auto">{x.t}</div>;
+        return <div key={i} onPointerDown={d.onPointerDown} onPointerMove={d.onPointerMove} className={`absolute max-w-[88%] text-center text-white text-3xl font-extrabold leading-snug drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] whitespace-pre-wrap break-words ${d.className}`} style={{ left: `${x.x ?? 50}%`, top: `${x.y}%`, transform: 'translate(-50%,-50%)', color: x.c, fontSize: x.s ? `${x.s}px` : undefined, ...(x.bg ? { background: 'rgba(0,0,0,0.55)', padding: '0.25em 0.6em', borderRadius: '0.6em', textShadow: 'none' } : null) }} dir="auto">{x.t}</div>;
       })}
       {(extra.stickers ?? []).length > 0 && (() => {
         const d = drag('stk');
@@ -3582,6 +3630,9 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [txt, setTxt] = useState('');
   const [txtY, setTxtY] = useState(50);
   const [txtX, setTxtX] = useState(50);
+  const [txtC, setTxtC] = useState('#ffffff');
+  const [txtS, setTxtS] = useState(30);
+  const [txtB, setTxtB] = useState(false);
   const [stkPos, setStkPos] = useState({ x: 50, y: 28 });
   const [flt, setFlt] = useState(0);
   const [fltName, setFltName] = useState('');
@@ -3596,7 +3647,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [sched, setSched] = useState('');
   const [cfOpen, setCfOpen] = useState(false);
   const extra: StoryExtra = {
-    texts: txt.trim() ? [{ t: txt.trim().slice(0, 200), y: txtY, x: txtX }] : undefined,
+    texts: txt.trim() ? [{ t: txt.trim().slice(0, 200), y: txtY, x: txtX, c: txtC !== '#ffffff' ? txtC : undefined, s: txtS !== 30 ? txtS : undefined, bg: txtB || undefined }] : undefined,
     sp: stk.length ? stkPos : undefined,
     filter: flt > 0 ? flt : undefined,
     stickers: stk.length ? stk : undefined,
@@ -3636,14 +3687,26 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
         <span className="w-9" />
       </div>
       <div className="relative flex-1 min-h-0 flex items-center justify-center" onTouchStart={e => { swipeX.current = e.touches[0].clientX; }} onTouchEnd={e => { const dx = e.changedTouches[0].clientX - swipeX.current; if (Math.abs(dx) > 70) pickFlt(flt + (dx < 0 ? 1 : -1)); }}>
-        {isVideo
-          ? <video src={previewUrl} className="max-w-full max-h-full" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted />
-          : <img src={previewUrl} alt="" style={{ filter: STORY_FILTERS[flt].f }} className="max-w-full max-h-full object-contain" />}
-        {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
-        <StoryOverlays extra={extra} onMove={(k, x, y) => { if (k === 'text') { setTxtX(x); setTxtY(y); } else setStkPos({ x, y }); }} />
+        <div className="relative h-full max-w-full aspect-[9/16] bg-black rounded-2xl overflow-hidden ring-1 ring-white/10 flex items-center justify-center">
+          {isVideo
+            ? <video src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay />
+            : <img src={previewUrl} alt="" style={{ filter: STORY_FILTERS[flt].f }} className="w-full h-full object-contain" />}
+          <span className="absolute top-2 inset-x-0 mx-auto w-fit px-2.5 py-0.5 rounded-full bg-black/50 text-white/80 text-[11px] pointer-events-none z-10">معاينة كما ستظهر · 9:16</span>
+          {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
+          <StoryOverlays extra={extra} onMove={(k, x, y) => { if (k === 'text') { setTxtX(x); setTxtY(y); } else setStkPos({ x, y }); }} />
+        </div>
       </div>
       <div className="px-3 pb-1">
-        {tool === 'text' && <div className="flex gap-2 mb-2"><input value={txt} onChange={e => setTxt(e.target.value.slice(0, 200))} placeholder="اكتب نصاً فوق الصورة..." className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><button onClick={() => { setTxtX(50); setTxtY(y => (y === 50 ? 20 : y === 20 ? 80 : 50)); }} className="px-3 rounded-full bg-white/10 text-white text-sm">الموضع</button></div>}
+        {tool === 'text' && <div className="mb-2 space-y-2">
+          <div className="flex gap-2"><input value={txt} onChange={e => setTxt(e.target.value.slice(0, 200))} placeholder="اكتب نصاً فوق الصورة..." className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><button onClick={() => { setTxtX(50); setTxtY(y => (y === 50 ? 20 : y === 20 ? 80 : 50)); }} className="px-3 rounded-full bg-white/10 text-white text-sm">الموضع</button></div>
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {['#ffffff', '#fde047', '#fb7185', '#f472b6', '#a78bfa', '#22d3ee', '#4ade80', '#fb923c', '#000000'].map(c => <button key={c} onClick={() => setTxtC(c)} aria-label="لون النص" className={`shrink-0 w-7 h-7 rounded-full border-2 ${txtC === c ? 'border-white scale-110' : 'border-white/30'}`} style={{ background: c }} />)}
+            <span className="w-px h-5 bg-white/20 shrink-0" />
+            <button onClick={() => setTxtS(s => Math.max(18, s - 4))} className="shrink-0 w-8 h-8 rounded-full bg-white/10 text-white text-xs font-bold">A-</button>
+            <button onClick={() => setTxtS(s => Math.min(64, s + 4))} className="shrink-0 w-8 h-8 rounded-full bg-white/10 text-white text-base font-bold">A+</button>
+            <button onClick={() => setTxtB(b => !b)} className={`shrink-0 px-3 h-8 rounded-full text-xs ${txtB ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>خلفية</button>
+          </div>
+        </div>}
         {tool === 'sticker' && <div className="flex gap-2 overflow-x-auto no-scrollbar mb-2">{['😍', '🔥', '😂', '🎉', '❤️', '😎', '🙏', '💯', '⭐', '👏'].map(e => <button key={e} onClick={() => setStk(s => (s.includes(e) ? s.filter(x => x !== e) : s.length < 3 ? [...s, e] : s))} className={`text-3xl shrink-0 w-12 h-12 rounded-full ${stk.includes(e) ? 'bg-white/30' : 'bg-white/10'}`}>{e}</button>)}</div>}
         {tool === 'filter' && <div className="flex gap-2.5 overflow-x-auto no-scrollbar mb-2">{STORY_FILTERS.map((f, i) => <button key={f.n} onClick={() => pickFlt(i)} className="shrink-0 flex flex-col items-center gap-1 w-16"><span className={`block w-16 h-16 rounded-xl overflow-hidden ${flt === i ? 'ring-2 ring-white' : 'opacity-80'}`}>{isVideo ? <video src={`${previewUrl}#t=0.1`} preload="metadata" muted playsInline style={{ filter: f.f }} className="w-full h-full object-cover pointer-events-none" /> : <img src={previewUrl} alt="" style={{ filter: f.f }} className="w-full h-full object-cover" />}</span><span className={`text-[11px] ${flt === i ? 'text-white font-bold' : 'text-white/70'}`}>{f.n}</span></button>)}</div>}
         {tool === 'poll' && <div className="space-y-2 mb-2"><input value={pq} onChange={e => setPq(e.target.value)} placeholder="سؤال الاستطلاع" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><div className="flex gap-2"><input value={pa} onChange={e => setPa(e.target.value)} placeholder="الخيار الأول" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><input value={pb} onChange={e => setPb(e.target.value)} placeholder="الخيار الثاني" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div></div>}
@@ -5675,7 +5738,7 @@ function sortComments(list: Comment[], me: User, focusId?: string | null): Comme
 function MusicBar({ music, auto = false }: { music: { url: string; name: string; start?: number }; auto?: boolean }) {
   const ref = useRef<HTMLAudioElement>(null);
   const start = music.start ?? 0;
-  const win = music.start !== undefined ? 30 : Infinity;
+  const win = music.start !== undefined ? (music.end && music.end > start ? music.end - start : 30) : Infinity;
   const [on, setOn] = useState(false);
   useEffect(() => () => { const a = ref.current; if (a) { a.pause(); if (playingAudio === a) playingAudio = null; } }, []);
   const toggle = () => {
@@ -6147,7 +6210,7 @@ function EditPostSheet({ post, setPosts, onClose }: { post: Post; setPosts: Reac
         uploadedPath = mp;
         musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${newMusic.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: newMusic.size };
       } else if (music) {
-        musicItem = oldRow ?? { type: 'file', url: rawUrl(music.url), name: `kan-music|${music.name}`, size: 0, start: music.start };
+        musicItem = oldRow ?? { type: 'file', url: rawUrl(music.url), name: `kan-music|${music.name}`, size: 0, start: music.start, end: music.end };
       }
       const kept = items.map(it => ({ ...it, url: rawUrl(it.url) }));
       const [main, ...rest] = kept;
@@ -6174,7 +6237,7 @@ function EditPostSheet({ post, setPosts, onClose }: { post: Post; setPosts: Reac
         title: hasTitle ? (newTitle || undefined) : post.title,
         media: main ? { type: main.type, url: main.url, name: main.name, size: main.size } : undefined,
         extraMedia: rest.length ? rest.map(x => ({ type: x.type, url: x.url, name: x.name, size: x.size })) : undefined,
-        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10), start: musicItem.start } : undefined,
+        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10), start: musicItem.start, end: musicItem.end } : undefined,
       };
       const [shown] = await signPostsMedia([base]);
       setPosts(prev => prev.map(p => (p.id === post.id ? shown : p)));
@@ -6307,6 +6370,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
   const [paused, setPaused] = useState(false);
   const [boost, setBoost] = useState(false);
   const holdTimer = useRef<number | undefined>(undefined);
+  const holdPause = useRef(false);
   const held = useRef(false);
   const [prog, setProg] = useState(0);
   const [dur, setDur] = useState(0);
@@ -6387,14 +6451,20 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
     if (e.target !== e.currentTarget && (e.target as HTMLElement).tagName !== 'VIDEO') return;
     held.current = false;
     window.clearTimeout(holdTimer.current);
+    const r = e.currentTarget.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    const center = fx > 0.25 && fx < 0.75 && fy > 0.2 && fy < 0.8;
     holdTimer.current = window.setTimeout(() => {
       const v = videoRef.current;
-      if (v && !v.paused) { held.current = true; v.playbackRate = 2; setBoost(true); }
-    }, 350);
+      if (!v || v.paused) return;
+      held.current = true;
+      if (center) { holdPause.current = true; v.pause(); } else { v.playbackRate = 2; setBoost(true); }
+    }, center ? 220 : 350);
   };
   const endHold = () => {
     window.clearTimeout(holdTimer.current);
-    if (videoRef.current) videoRef.current.playbackRate = 1;
+    const v = videoRef.current;
+    if (v) { v.playbackRate = 1; if (holdPause.current) { holdPause.current = false; void v.play().catch(() => undefined); } }
     setBoost(false);
   };
 
@@ -7052,7 +7122,7 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
     const { error } = await supabase.from('posts').update({ media_extra: music ? [...extra, music] : extra }).eq('id', job.postId);
     if (error) return false;
     pubSet(l => l.map(j => (j.id === job.id ? { ...j, extra, music } : j)));
-    const [s] = await signPostsMedia([{ extraMedia: extra.length ? extra : undefined, music: music ? { url: music.url, name: music.name.slice(10), start: music.start } : undefined } as Post]);
+    const [s] = await signPostsMedia([{ extraMedia: extra.length ? extra : undefined, music: music ? { url: music.url, name: music.name.slice(10), start: music.start, end: music.end } : undefined } as Post]);
     setPosts(prev => prev.map(p => (p.id === job.postId ? { ...p, extraMedia: s.extraMedia, music: s.music } : p)));
     return true;
   };
@@ -7125,27 +7195,46 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
 }
 
 // Pick the part of the song that plays with the post (like Instagram): preview it and slide to the start you like.
-function MusicTrimmer({ file, start, onStart }: { file: File; start: number; onStart: (n: number) => void }) {
+function MusicTrimmer({ file, start, end, onStart, onEnd }: { file: File; start: number; end: number; onStart: (n: number) => void; onEnd: (n: number) => void }) {
   const [url] = useState(() => URL.createObjectURL(file));
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
   const ref = useRef<HTMLAudioElement>(null);
   const [dur, setDur] = useState(0);
   const [on, setOn] = useState(false);
-  const fmt = (n: number) => `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}`;
+  const [cur, setCur] = useState(0);
+  const fmt = (n: number) => `${Math.floor(n / 60)}:${(n % 60).toFixed(1).padStart(4, '0')}`;
+  const round = (n: number) => Math.round(n * 10) / 10;
+  const total = Math.max(1, dur);
+  const eff = end > start ? Math.min(end, total) : Math.min(total, start + 30);
   const play = (from: number) => { const a = ref.current; if (!a) return; a.currentTime = from; void a.play().catch(() => undefined); };
+  const setS = (v: number) => { const s = round(Math.max(0, Math.min(v, total - 1))); onStart(s); if (eff <= s + 1) onEnd(round(Math.min(total, s + 30))); if (on) play(s); };
+  const setE = (v: number) => { const e = round(Math.min(total, Math.max(v, start + 1))); onEnd(e); if (on) play(Math.max(start, e - 2)); };
+  const nudge = 'w-7 h-7 shrink-0 rounded-full bg-white/10 text-white text-sm leading-none';
   return (
-    <div className="mb-4 -mt-2 p-3 rounded-xl bg-gray-800/60 border border-gray-700">
+    <div className="mb-4 -mt-2 p-3 rounded-xl bg-gray-800/60 border border-gray-700 space-y-2">
       <audio ref={ref} src={url} preload="metadata" onLoadedMetadata={e => setDur(e.currentTarget.duration || 0)} onPlay={() => setOn(true)} onPause={() => setOn(false)}
-        onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= start + 30) a.pause(); }} />
+        onTimeUpdate={e => { const a = e.currentTarget; setCur(a.currentTime); if (a.currentTime >= eff) a.pause(); }} />
       <div className="flex items-center gap-3">
         <button onClick={() => { const a = ref.current; if (!a) return; if (on) a.pause(); else play(start); }} className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 text-white flex items-center justify-center" aria-label="تشغيل المقطع">
           {on ? <Pause size={16} fill="white" /> : <Play size={16} fill="white" className="translate-x-px" />}
         </button>
-        <div className="flex-1 min-w-0">
-          <div className="text-xs text-gray-300 mb-1">يبدأ من {fmt(start)} · يشتغل {dur ? Math.min(30, Math.max(1, Math.round(dur - start))) : 30} ثانية</div>
-          <input type="range" min={0} max={Math.max(0, Math.floor(dur) - 1)} step={1} value={Math.min(start, Math.max(0, Math.floor(dur) - 1))} dir="ltr" disabled={!dur}
-            onChange={e => { const v = Number(e.target.value); onStart(v); if (on) play(v); }} className="w-full accent-violet-500" />
-        </div>
+        <div className="flex-1 min-w-0 text-xs text-gray-300">المقطع: {fmt(start)} ← {fmt(eff)} · المدة {(eff - start).toFixed(1)} ث</div>
+      </div>
+      <div dir="ltr" className="relative h-2 rounded-full bg-gray-700 overflow-hidden">
+        <div className="absolute inset-y-0 bg-gradient-to-r from-violet-500 to-cyan-400" style={{ left: `${(start / total) * 100}%`, width: `${((eff - start) / total) * 100}%` }} />
+        {on && <div className="absolute inset-y-0 w-0.5 bg-white" style={{ left: `${(cur / total) * 100}%` }} />}
+      </div>
+      <div dir="ltr" className="flex items-center gap-2">
+        <span className="text-[11px] text-gray-400 w-10 shrink-0">البداية</span>
+        <button onClick={() => setS(start - 0.1)} className={nudge}>−</button>
+        <input type="range" min={0} max={Math.max(0, total - 1)} step={0.1} value={Math.min(start, Math.max(0, total - 1))} disabled={!dur} onChange={e => setS(Number(e.target.value))} className="flex-1 min-w-0 accent-violet-500" />
+        <button onClick={() => setS(start + 0.1)} className={nudge}>+</button>
+      </div>
+      <div dir="ltr" className="flex items-center gap-2">
+        <span className="text-[11px] text-gray-400 w-10 shrink-0">النهاية</span>
+        <button onClick={() => setE(eff - 0.1)} className={nudge}>−</button>
+        <input type="range" min={0} max={total} step={0.1} value={eff} disabled={!dur} onChange={e => setE(Number(e.target.value))} className="flex-1 min-w-0 accent-cyan-500" />
+        <button onClick={() => setE(eff + 0.1)} className={nudge}>+</button>
       </div>
     </div>
   );
@@ -7170,6 +7259,7 @@ function CreatePost({ currentUser, setPosts }: {
   const [extra, setExtra] = useState<File[]>([]);
   const [music, setMusic] = useState<File | null>(null);
   const [musicStart, setMusicStart] = useState(0);
+  const [musicEnd, setMusicEnd] = useState(0);
   useEffect(() => { if (music) setRemoteMusic(null); }, [music]);
   const musicRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -7273,13 +7363,13 @@ function CreatePost({ currentUser, setPosts }: {
       if (media) mediaUrl = results[0];
       const extraMedia: { type: 'image' | 'video' | 'file'; url: string; name: string; size: number }[] =
         files.slice(offset).map((f, k) => ({ type: detectMediaKind(f), url: results[offset + k], name: f.name.slice(0, 200), size: f.size }));
-      let musicItem: { type: 'file'; url: string; name: string; size: number; start?: number } | null = null;
+      let musicItem: { type: 'file'; url: string; name: string; size: number; start?: number; end?: number } | null = null;
       if (music) {
         const mp = kanPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
         if (mErr) throw mErr;
         uploaded.push(mp);
-        musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size, start: musicStart };
+        musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size, start: musicStart, end: musicEnd > musicStart ? musicEnd : undefined };
       } else if (remoteMusic) {
         musicItem = { type: 'file', url: remoteMusic.url, name: `kan-music|${remoteMusic.name}`, size: 0 };
       }
@@ -7316,7 +7406,7 @@ function CreatePost({ currentUser, setPosts }: {
         title: kind === 'video' ? title.trim().slice(0, 120) : undefined,
         coverUrl: coverUrl ?? undefined,
         extraMedia: extraMedia.length > 0 ? extraMedia : undefined,
-        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10), start: musicItem.start } : undefined,
+        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10), start: musicItem.start, end: musicItem.end } : undefined,
         cursor: new Date().toISOString(),
         timestamp: Date.now(), likes: [], comments: [], bookmarks: [],
       };
@@ -7367,10 +7457,11 @@ function CreatePost({ currentUser, setPosts }: {
         </div>
         {media && (
           <div className="mb-4 relative">
+            {media.type !== 'file' && <span className="absolute top-2 start-2 z-10 px-2 py-0.5 rounded-full bg-black/60 text-white text-[11px] pointer-events-none">معاينة · {kind === 'reel' ? 'ريل 9:16' : kind === 'video' ? 'فيديو 16:9' : 'منشور'} · {(media.file.size / 1048576).toFixed(1)} MB</span>}
             {media.type === 'image' ? (
-              <img src={media.url} alt="" className="w-full rounded-xl max-h-64 object-cover" />
+              <img src={media.url} alt="" className={`w-full rounded-xl object-cover ${kind === 'reel' ? 'aspect-[9/16] max-h-[26rem]' : kind === 'video' ? 'aspect-video' : 'max-h-72'}`} />
             ) : media.type === 'video' ? (
-              <video src={media.url} controls playsInline className="w-full rounded-xl max-h-64" />
+              <video src={media.url} controls playsInline className={`w-full rounded-xl bg-black ${kind === 'reel' ? 'aspect-[9/16] max-h-[26rem]' : kind === 'video' ? 'aspect-video' : 'max-h-72'}`} />
             ) : (
               <div className="flex items-center gap-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl">
                 <FileText size={32} className="shrink-0 text-cyan-400" />
@@ -7424,7 +7515,7 @@ function CreatePost({ currentUser, setPosts }: {
             <button onClick={() => setMusic(null)} className="p-1.5 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
           </div>
         )}
-        {music && <MusicTrimmer file={music} start={musicStart} onStart={setMusicStart} />}
+        {music && <MusicTrimmer file={music} start={musicStart} end={musicEnd} onStart={setMusicStart} onEnd={setMusicEnd} />}
         {!music && remoteMusic && (
           <div className="mb-4 flex items-center gap-3 p-2.5 rounded-xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25">
             <span className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white shrink-0"><Music size={16} /></span>
@@ -7458,7 +7549,7 @@ function CreatePost({ currentUser, setPosts }: {
                 <Paperclip size={20} />
               </button>
             )}
-            <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (!f.type.startsWith('audio/') && !/\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(f.name)) { setError('اختر ملف صوت'); return; } if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); setMusicStart(0); }} />
+            <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (!f.type.startsWith('audio/') && !/\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(f.name)) { setError('اختر ملف صوت'); return; } if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); setMusicStart(0); setMusicEnd(0); }} />
             <button onClick={() => setEditOpen(o => !o)} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${editOpen || music || remoteMusic ? 'text-fuchsia-300' : 'text-fuchsia-400'}`} aria-label="تعديلات">
               <Sparkles size={20} />
             </button>
@@ -8819,6 +8910,64 @@ function StickerMaker({ file, onClose, onSaved }: { file: File; onClose: () => v
   );
 }
 
+type ChatFab = { show: boolean; n: number };
+// Chat scrolling: stay on the latest message only while you are at the bottom. If you scrolled up, new messages
+// do not pull you down; a button with the unread count appears and takes you back to the last message.
+function useChatStick(scrollRef: { current: HTMLDivElement | null }, items: { senderId: string }[], meId: string, resetKey: string | undefined) {
+  const atBottom = useRef(true);
+  const prevLen = useRef(0);
+  const prevKey = useRef<string | undefined>('\u0000init');
+  const stickUntil = useRef(Date.now() + 2500);
+  const [fab, setFab] = useState<ChatFab>({ show: false, n: 0 });
+  const toEnd = () => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; };
+  const scrollToBottom = () => toEnd();
+  const keepAtBottom = () => {
+    stickUntil.current = Date.now() + 2500;
+    toEnd();
+    window.requestAnimationFrame(toEnd);
+    window.setTimeout(toEnd, 150);
+    window.setTimeout(toEnd, 600);
+  };
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (dist < 80) { atBottom.current = true; setFab(f => (f.show || f.n ? { show: false, n: 0 } : f)); }
+    else if (Date.now() > stickUntil.current) { atBottom.current = false; setFab(f => (f.show === dist > 200 ? f : { ...f, show: dist > 200 })); }
+  };
+  const onUserScroll = () => { stickUntil.current = 0; };
+  const jumpDown = () => {
+    const el = scrollRef.current;
+    atBottom.current = true;
+    stickUntil.current = Date.now() + 900;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    setFab({ show: false, n: 0 });
+  };
+  useEffect(() => {
+    const len = items.length;
+    if (prevKey.current !== resetKey) { prevKey.current = resetKey; prevLen.current = len; atBottom.current = true; setFab({ show: false, n: 0 }); keepAtBottom(); return; }
+    const added = len - prevLen.current;
+    prevLen.current = len;
+    if (added <= 0) return;
+    const fresh = items.slice(-added);
+    if (atBottom.current || fresh.some(m => m.senderId === meId)) { atBottom.current = true; setFab({ show: false, n: 0 }); keepAtBottom(); }
+    else setFab(f => ({ show: true, n: f.n + fresh.filter(m => m.senderId !== meId).length }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey, items.length]);
+  return { atBottom, stickUntil, fab, scrollToBottom, keepAtBottom, onScroll, onUserScroll, jumpDown };
+}
+function ScrollDownFab({ fab, onClick }: { fab: ChatFab; onClick: () => void }) {
+  if (!fab.show) return null;
+  return (
+    <div className="sticky bottom-2 h-0 flex justify-end pointer-events-none z-10">
+      <button type="button" onClick={e => { e.stopPropagation(); onClick(); }} aria-label="الذهاب لآخر رسالة" className="pointer-events-auto relative -translate-y-full w-10 h-10 rounded-full bg-gray-800/95 border border-gray-600 text-white shadow-lg flex items-center justify-center kan-pop">
+        <ChevronDown size={22} />
+        {fab.n > 0 && <span className="absolute -top-2 -end-1 min-w-5 h-5 px-1 rounded-full bg-cyan-500 text-white text-[11px] font-bold flex items-center justify-center">{fab.n > 99 ? '99+' : fab.n}</span>}
+      </button>
+    </div>
+  );
+}
+
 function ChatView({ currentUser, chatUser, conversation, setConversations, onBack, allConvIds = [] }: {
   currentUser: User; chatUser: User; allConvIds?: string[];
   conversation: Conversation | undefined;
@@ -8931,28 +9080,14 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       void supabase.from('messages').update({ read_at: new Date().toISOString() }).in('id', ids).neq('sender_id', currentUser.id).is('read_at', null).then(({ error }) => { if (error) console.error(error); });
     },
   );
-  const stickUntil = useRef(Date.now() + 2500);
-  const scrollToBottom = () => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  };
-  // Always land on the latest message: when the chat opens, and whenever one arrives or is sent
-  // (even if you had scrolled up). Pictures that finish loading keep it pinned for a moment.
-  const keepAtBottom = () => {
-    stickUntil.current = Date.now() + 2500;
-    scrollToBottom();
-    window.requestAnimationFrame(scrollToBottom);
-    window.setTimeout(scrollToBottom, 150);
-    window.setTimeout(scrollToBottom, 600);
-  };
+  const { atBottom, stickUntil, fab, scrollToBottom, keepAtBottom, onScroll, onUserScroll, jumpDown } = useChatStick(scrollRef, messages, currentUser.id, convId);
   useEffect(() => {
-    keepAtBottom();
-  }, [convId, messages.length]);
-  useEffect(() => {
-    keepAtBottom();
+    if (atBottom.current) keepAtBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vp.height]);
   useEffect(() => {
-    if (peerTyping) scrollToBottom();
+    if (peerTyping && atBottom.current) scrollToBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peerTyping]);
 
   // Returns the conversation id, creating the conversation on the first message.
@@ -9272,7 +9407,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3">
+      <div ref={scrollRef} onScroll={onScroll} onWheel={onUserScroll} onTouchMove={onUserScroll} className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3">
         {messages.length === 0 && (
           <div className="text-center py-12">
             <div className="text-4xl mb-3">👋</div>
@@ -9501,6 +9636,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
             </div>
           </div>
         )}
+        <ScrollDownFab fab={fab} onClick={jumpDown} />
         <div ref={messagesEndRef} />
       </div>
 
