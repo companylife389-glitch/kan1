@@ -1,7 +1,7 @@
 {
-  "name": "KAN",
-  "short_name": "KAN",
-  "description": "KAN - شبكة تواصل اجتماعي",
+  "name": "KIX",
+  "short_name": "KIX",
+  "description": "KIX - شبكة تواصل اجتماعي",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

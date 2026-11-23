@@ -1,4 +1,4 @@
-// KAN service worker: shows chat notifications when the app is closed or in the background.
+// KIX service worker: shows chat notifications when the app is closed or in the background.
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
@@ -25,7 +25,7 @@ self.addEventListener('push', (event) => {
           if (res.ok) icon = data.icon;
         } catch (e) { /* keep the app icon */ }
       }
-      await self.registration.showNotification(data.title || 'KAN', {
+      await self.registration.showNotification(data.title || 'KIX', {
         body: data.body || '',
         tag: data.tag || 'kan-message',
         renotify: true,

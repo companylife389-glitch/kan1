@@ -1,19 +1,14 @@
 <!doctype html>
 <html lang="ar" dir="rtl" class="dark">
   <head>
-    <meta name="google-site-verification" content="0ove_dHFNksai6jRCPdu0dT4Q7EoSkqnj0iD2sbPi3s" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0b1a" />
-    <script>try{var t=localStorage.getItem('kan-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
     <link rel="icon" type="image/png" href="%BASE_URL%icon-192.png" />
     <link rel="apple-touch-icon" href="%BASE_URL%icon-192.png" />
-    <meta name="description" content="KAN - شبكة تواصل اجتماعي: منشورات، تعليقات، متابعة ومراسلة." />
-    <title>KAN - شبكة التواصل الاجتماعي</title>
+    <meta name="description" content="KIX - شبكة تواصل اجتماعي: منشورات، تعليقات، متابعة ومراسلة." />
+    <title>KIX - شبكة التواصل الاجتماعي</title>
     <style>
       html,
       body {
@@ -24,18 +19,10 @@
         background-color: #0b0b1a;
         color: #ffffff;
       }
-      html[data-theme='light'], html[data-theme='light'] body { background-color: #f3f3f7; color: #0f0f1a; }
-      html[data-theme='dark'], html[data-theme='dark'] body { background-color: #000000; }
     </style>
   </head>
   <body>
-    <div id="root">
-      <!-- Shown by the browser until the app code has loaded; React replaces it. -->
-      <div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(40rem 26rem at 50% 38%,rgba(124,58,237,.30),transparent 62%),#0b0b1a">
-        <img src="%BASE_URL%icon-192.png" alt="" width="96" height="96" style="border-radius:28px;box-shadow:0 20px 60px rgba(124,58,237,.4)" />
-        <div style="margin-top:28px;padding-left:.3em;font:800 48px/1 'Segoe UI',Tahoma,sans-serif;letter-spacing:.3em;background:linear-gradient(90deg,#a78bfa,#22d3ee);-webkit-background-clip:text;background-clip:text;color:transparent">KAN</div>
-      </div>
-    </div>
+    <div id="root"></div>
     <script type="module" src="/main.tsx"></script>
   </body>
 </html>

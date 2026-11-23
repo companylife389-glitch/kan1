@@ -38,7 +38,7 @@ const EN: Record<string, string> = {
   'مشاركة': 'Share', 'تحميل': 'Download', 'حذف': 'Delete', 'تعديل': 'Edit', 'رد': 'Reply', 'تفاعل': 'React', 'حفظ': 'Save', 'إلغاء': 'Cancel',
   'لا توجد محادثات بعد': 'No chats yet', 'ابحث عن أشخاص وابدأ المحادثة!': 'Find people and start chatting!', 'ابدأ المحادثة': 'Start chatting',
   'الإشعارات الفورية': 'Push notifications', 'لا توجد إشعارات بعد': 'No notifications yet', 'تحديد الكل كمقروء': 'Mark all as read', 'جديد': 'New', 'سابقاً': 'Earlier',
-  'أعجب بمنشورك': 'liked your post', 'بدأ بمتابعتك': 'started following you', 'يكتب الآن...': 'typing...', 'ملصقات': 'Stickers', 'إرفاق': 'Attach', 'اسأل KAN': 'Ask KAN',
+  'أعجب بمنشورك': 'liked your post', 'بدأ بمتابعتك': 'started following you', 'يكتب الآن...': 'typing...', 'ملصقات': 'Stickers', 'إرفاق': 'Attach', 'اسأل KIX': 'Ask KIX',
   'الإعجابات': 'Likes', 'التعليقات': 'Comments', 'المتابِعون': 'Followers', 'يتابع': 'Following', 'أضف تعليقاً...': 'Add a comment...', 'إعجاب': 'Like', 'محفوظ': 'Saved', 'تشغيل الصوت': 'Unmute', 'كتم الصوت': 'Mute', 'إيقاف مؤقت': 'Pause', 'تشغيل': 'Play', 'حفظ الملصق': 'Save sticker', 'تم الحفظ ✓': 'Saved ✓', 'تعذّر حفظ الملصق': "Couldn't save the sticker", 'هذه المحادثة فقط': 'This chat only', 'كل المحادثات': 'All chats', 'تطبيق الخلفية على': 'Apply background to', 'خلفية المحادثة': 'Chat background', 'رفع صورة': 'Upload image', 'افتراضي': 'Default', 'نيلي': 'Indigo', 'أخضر': 'Green', 'بنفسجي': 'Purple', 'قلب كريستال': 'Crystal heart', 'عملة ذهبية': 'Gold coin', 'ألماسة': 'Diamond'
 };
 const DIR = LANG === 'en' ? 'ltr' : 'rtl';
@@ -55,10 +55,10 @@ Object.assign(EN, {
   "إيقاف الصوت": "Mute", "إيموجي": "Emoji", "ابحث عن شخص...": "Search for a person...", "ابحث في الفيديوهات...": "Search videos...", "ابدأ المحادثة في المجموعة 👋": "Start the conversation in the group 👋",
   "ابدأ بالبحث عن أشخاص": "Start by searching for people", "اختر الفيديو أولاً": "Choose the video first", "اختر صورة": "Choose a photo", "اختر صورة أو فيديو": "Choose a photo or video",
   "اختر صورة فقط": "Choose a photo only", "اختر فيديو لنشره كريل": "Choose a video to post as a reel", "اختر ما يصلك وما لا يصلك": "Choose what reaches you", "اختر ملف صوت": "Choose an audio file", "اختر ملف فيديو": "Choose a video file",
-  "اسأل KAN أي سؤال أو اطلب منه يقرأ الشات...": "Ask KAN anything or have it read the chat...", "اسأل KAN غير متاح الآن، حاول بعد شوية.": "Ask KAN is unavailable right now, try again later.", "استنى دقيقة وحاول تاني.": "Wait a minute and try again.",
+  "اسأل KIX أي سؤال أو اطلب منه يقرأ الشات...": "Ask KIX anything or have it read the chat...", "اسأل KIX غير متاح الآن، حاول بعد شوية.": "Ask KIX is unavailable right now, try again later.", "استنى دقيقة وحاول تاني.": "Wait a minute and try again.",
   "اسم المجموعة": "Group name", "اسم المستخدم أو كلمة المرور غير صحيحة": "Wrong username or password", "اسم المستخدم مستخدم بالفعل": "Username is already taken",
   "اسم المستخدم من 3 إلى 30 حرفاً (حروف وأرقام و _ و . فقط)": "Username must be 3 to 30 characters (letters, numbers, _ and . only)", "اصنع أول ملصق من صورة أو فيديو قصير": "Make your first sticker from a photo or short video",
-  "اضغط رجوع مرة أخرى للخروج": "Press back again to exit", "افتح KAN من شاشتك الرئيسية مثل أي تطبيق": "Open KAN from your home screen like any app", "اقترح رد مناسب على آخر رسالة": "Suggest a reply to the last message",
+  "اضغط رجوع مرة أخرى للخروج": "Press back again to exit", "افتح KIX من شاشتك الرئيسية مثل أي تطبيق": "Open KIX from your home screen like any app", "اقترح رد مناسب على آخر رسالة": "Suggest a reply to the last message",
   "اكتب رسالة للمجموعة...": "Write a message to the group...", "اكتب شيئاً أو أضف صورة أو فيديو أو ملف": "Write something or add a photo, video or file", "اكتب شيئاً عن نفسك...": "Write something about yourself...",
   "اكتب عنواناً للفيديو": "Write a title for the video", "اكتب وصفاً للريل...": "Write a caption for the reel...", "الآن": "now", "الإشعارات تعمل على هذا الجهاز ✅": "Notifications are working on this device ✅",
   "الإشعارات محظورة لهذا الموقع. افتح إعدادات الموقع في المتصفح واسمح بالإشعارات.": "Notifications are blocked for this site. Open the site settings in your browser and allow notifications.",
@@ -83,7 +83,7 @@ Object.assign(EN, {
   "تعذّر نشر القصة، حاول مرة أخرى": "Couldn't post the story, try again", "تعذّرت الإزالة": "Couldn't remove", "تعذّرت الإضافة": "Couldn't add", "تعذّرت المشاركة في القصة": "Couldn't share to the story", "تعذّرت المغادرة": "Couldn't leave",
   "تعليق": "Comment", "تعليق على منشورك أو رد على تعليقك": "A comment on your post or a reply to your comment", "تغيير الخلفية": "Change background", "تغيير صورة المجموعة": "Change group photo", "تم": "Done",
   "تم إرسال ردك ✓": "Reply sent ✓", "تم إنشاء الحساب، سجّل الدخول الآن.": "Account created, log in now.", "تم الإرسال": "Sent", "تم النسخ": "Copied", "تم نسخ الرابط": "Link copied", "تمت المشاركة في قصتك ✓": "Shared to your story ✓", "تمت المشاهدة": "Seen",
-  "تم رفض الإذن. فعّل الإشعارات لهذا الموقع من إعدادات المتصفح ثم حاول مرة أخرى.": "Permission denied. Enable notifications for this site in your browser settings and try again.", "تيليجرام": "Telegram", "ثبّت KAN على جهازك": "Install KAN on your device",
+  "تم رفض الإذن. فعّل الإشعارات لهذا الموقع من إعدادات المتصفح ثم حاول مرة أخرى.": "Permission denied. Enable notifications for this site in your browser settings and try again.", "تيليجرام": "Telegram", "ثبّت KIX على جهازك": "Install KIX on your device",
   "جارٍ إنشاء الملصق...": "Creating sticker...", "جارٍ الإنشاء...": "Creating...", "جارٍ الالتقاط...": "Capturing...", "جميع الحقول مطلوبة": "All fields are required", "جهازك أو متصفحك لا يدعم إشعارات الهاتف": "Your device or browser doesn't support phone notifications",
   "حجم الصورة يجب أن لا يتجاوز 8 ميجابايت": "The photo must not exceed 8 MB", "حجم الغلاف يجب أن لا يتجاوز 5 ميجابايت": "The cover must not exceed 5 MB", "حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت": "The music must not exceed 20 MB",
   "حدث خطأ في الاتصال، حاول مرة أخرى": "Connection error, try again", "حدث خطأ، حاول مرة أخرى": "Something went wrong, try again", "حذف الرد": "Delete reply", "حذف القصة": "Delete story", "حذف الملصق": "Delete sticker",
@@ -101,7 +101,7 @@ Object.assign(EN, {
   "مثال: القاهرة، مصر": "Example: Cairo, Egypt", "مجموعة": "Group", "محاولات كثيرة، حاول لاحقاً": "Too many attempts, try later", "مستخدم": "User", "مسح": "Clear", "مسح كل الإشعارات": "Clear all notifications", "مشاركة التعليق": "Share comment", "مشرف": "Admin",
   "معلومات المجموعة": "Group info", "مغادرة المجموعة": "Leave group", "ملء الشاشة": "Full screen", "ملصق جديد": "New sticker", "ملف": "File", "من شاهدها": "Who saw it", "موسيقى": "Music", "نسخ": "Copy", "نسخ الرابط": "Copy link",
   "نغمة عند وصول رسالة أو إرسالها": "A tone when a message arrives or is sent", "هذا البريد مسجّل بالفعل": "This email is already registered", "هذا المتصفح لا يدعم الإشعارات.": "This browser doesn't support notifications.", "هذا المنشور غير متاح، ربما تم حذفه": "This post isn't available, it may have been deleted",
-  "هكذا ستظهر لك الرسائل خارج التطبيق 👋": "This is how messages will look outside the app 👋", "واتساب": "WhatsApp", "وصف الفيديو (اختياري)...": "Video description (optional)...", "وصلت للحد اليومي لـ «اسأل KAN». جرّب بكرة.": "You've hit the daily limit for “Ask KAN”. Try tomorrow.",
+  "هكذا ستظهر لك الرسائل خارج التطبيق 👋": "This is how messages will look outside the app 👋", "واتساب": "WhatsApp", "ارفع إصبعك للإلغاء": "Release to cancel", "‹ اسحب للإلغاء": "‹ Slide to cancel", "وصف الفيديو (اختياري)...": "Video description (optional)...", "وصلت للحد اليومي لـ «اسأل KIX». جرّب بكرة.": "You've hit the daily limit for “Ask KIX”. Try tomorrow.",
   "يتابعك": "Follows you", "يرجى اختيار صورة فقط": "Please choose a photo only", "يرجى تأكيد بريدك الإلكتروني أولاً": "Please confirm your email first",
   "↪️ منشور مني": "↪️ A post from me", "🎤 رسالة صوتية": "🎤 Voice message", "🎥 فيديو": "🎥 Video", "🎬 ريل": "🎬 Reel", "🏷️ ملصق": "🏷️ Sticker", "💡 اقترح رد": "💡 Suggest a reply", "📎 ملف": "📎 File", "📝 لخّص الشات": "📝 Summarize chat", "📷 صورة": "📷 Photo", "📷 وسائط": "📷 Media", "🔍 المطلوب مني؟": "🔍 What's expected of me?",
   "أضف تعليقاً...": "Add a comment...", "متابعة": "Follow", "متابَع": "Following", "الصوت": "Sound", "كتم الصوت": "Mute", "تشغيل الصوت": "Unmute", "إيقاف مؤقت": "Pause", "تشغيل": "Play",
@@ -109,7 +109,7 @@ Object.assign(EN, {
 const EN_RULES: [RegExp, (m: RegExpExecArray) => string][] = [
   [/^منذ (\d+) د$/, m => `${m[1]}m ago`], [/^منذ (\d+) س$/, m => `${m[1]}h ago`], [/^منذ (\d+) ي$/, m => `${m[1]}d ago`], [/^منذ (\d+) يوم$/, m => `${m[1]}d ago`],
   [/^(\d+) عضو$/, m => `${m[1]} members`], [/^جارٍ النشر\.\.\. (\d+)%$/, m => `Publishing... ${m[1]}%`], [/^الصورة (\d+)$/, m => `Photo ${m[1]}`], [/^تحميل الكل \((\d+)\)$/, m => `Download all (${m[1]})`],
-  [/^(.*) على KAN$/, m => `${m[1]} on KAN`], [/^عرض صورة (.+)$/, m => `View ${m[1]}'s photo`], [/^الرد على (.+)$/, m => `Reply to ${m[1]}`], [/^رد على (.+)\.\.\.$/, m => `Reply to ${m[1]}...`],
+  [/^(.*) على KIX$/, m => `${m[1]} on KIX`], [/^عرض صورة (.+)$/, m => `View ${m[1]}'s photo`], [/^الرد على (.+)$/, m => `Reply to ${m[1]}`], [/^رد على (.+)\.\.\.$/, m => `Reply to ${m[1]}...`],
   [/^تم تجاهل (\d+) ملف.*$/, m => `${m[1]} file(s) skipped because they exceed the allowed size`],
 ];
 const kanTr = (raw: string): string => {
@@ -871,7 +871,7 @@ function fmtClock(t: number): string {
 
 const PLAYER_SPEEDS = [1, 1.25, 1.5, 2, 0.5];
 
-// KAN video player: big play button, double-tap to skip 10s, scrub bar with buffering, speed, volume, fullscreen.
+// KIX video player: big play button, double-tap to skip 10s, scrub bar with buffering, speed, volume, fullscreen.
 function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
   src: string;
   poster?: string;
@@ -1129,8 +1129,8 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
 // ============ Uploads with a live percentage ============
 // Files above B2_MIN_MB go straight from the browser to Backblaze B2 (signed by the b2-sign edge function),
 // in parallel 32 MB parts for big files. Their storage path starts with "b2/". Smaller files stay on Supabase Storage.
-const B2_MIN_MB = 8;
-const B2_PART_MB = 16;
+const B2_MIN_MB = 4;
+const B2_PART_MB = 8;
 const B2_PARALLEL = 16;
 
 // Background publishing: uploads keep running while you move around; the progress shows inside the publish box.
@@ -1258,6 +1258,11 @@ async function uploadToB2(
       const loaded = new Array<number>(count).fill(0);
       const etags: { n: number; etag: string }[] = [];
       let next = 0;
+      let allUrls: string[] | null = null;
+      try {
+        const r = await b2Call<{ urls: string[] }>({ action: 'mp_parts', bucket, path, uploadId, parts: Array.from({ length: count }, (_, k) => k + 1) });
+        if (Array.isArray(r.urls) && r.urls.length === count) allUrls = r.urls;
+      } catch { /* fall back to one signature per part */ }
       const worker = async () => {
         while (next < count) {
           const i = next++;
@@ -1266,9 +1271,9 @@ async function uploadToB2(
           let lastErr: unknown = null;
           for (let attempt = 0; attempt < 4; attempt++) {
             try {
-              const { urls } = await b2Call<{ urls: string[] }>({ action: 'mp_parts', bucket, path, uploadId, parts: [n] });
+              const partUrl = allUrls?.[i] ?? (await b2Call<{ urls: string[] }>({ action: 'mp_parts', bucket, path, uploadId, parts: [n] })).urls[0];
               loaded[i] = 0;
-              const etag = await putBlob(urls[0], chunk, {}, b => { loaded[i] = b; report(loaded.reduce((x, y) => x + y, 0)); });
+              const etag = await putBlob(partUrl, chunk, {}, b => { loaded[i] = b; report(loaded.reduce((x, y) => x + y, 0)); });
               loaded[i] = chunk.size;
               etags.push({ n, etag });
               lastErr = null;
@@ -1644,7 +1649,7 @@ function ImageViewer({ src, name, gallery, onClose }: { src: string; name?: stri
   );
 }
 
-// ============ KAN AI ============
+// ============ KIX AI ============
 type AIMode = 'summary' | 'reply' | 'analyze';
 const AI_QUICK: { label: string; query: string; mode: AIMode }[] = [
   { label: '📝 لخّص الشات', query: 'لخّص المحادثة باختصار', mode: 'summary' },
@@ -1656,9 +1661,9 @@ interface AISource { title: string; url: string }
 function aiErrorMessage(code: string): string {
   switch (code) {
     case 'rate_limited': return 'استنى دقيقة وحاول تاني.';
-    case 'daily_limit': return 'وصلت للحد اليومي لـ «اسأل KAN». جرّب بكرة.';
+    case 'daily_limit': return 'وصلت للحد اليومي لـ «اسأل KIX». جرّب بكرة.';
     case 'unauthorized': return 'سجّل الدخول من جديد وحاول تاني.';
-    default: return 'اسأل KAN غير متاح الآن، حاول بعد شوية.';
+    default: return 'اسأل KIX غير متاح الآن، حاول بعد شوية.';
   }
 }
 
@@ -1738,7 +1743,7 @@ function KanAIModal({ messages, me, other, nameOf, onClose, onUseReply }: {
         <div className="flex items-center justify-between p-4 border-b border-white/10 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-t-2xl">
           <div className="flex items-center gap-3">
             <img src={LOGO_URL} alt="" className="w-10 h-10 rounded-full bg-white/10" />
-            <h2 className="font-bold flex items-center gap-1.5"><Sparkles size={16} className="text-violet-300" /><span className="kan-gradient-text">اسأل KAN</span></h2>
+            <h2 className="font-bold flex items-center gap-1.5"><Sparkles size={16} className="text-violet-300" /><span className="kan-gradient-text">اسأل KIX</span></h2>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full text-white" aria-label="إغلاق"><X size={20} /></button>
         </div>
@@ -1750,7 +1755,7 @@ function KanAIModal({ messages, me, other, nameOf, onClose, onUseReply }: {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && void ask(query)}
-              placeholder="اسأل KAN أي سؤال أو اطلب منه يقرأ الشات..."
+              placeholder="اسأل KIX أي سؤال أو اطلب منه يقرأ الشات..."
               className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 min-w-0"
               autoFocus
             />
@@ -1843,7 +1848,7 @@ async function postToFile(post: Post): Promise<File | null> {
 }
 
 function postShareText(post: Post, author: User): string {
-  return [`${author.displayName} (@${author.username}) على KAN`, post.title, post.text].filter(Boolean).join('\n').trim();
+  return [`${author.displayName} (@${author.username}) على KIX`, post.title, post.text].filter(Boolean).join('\n').trim();
 }
 
 function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
@@ -1868,7 +1873,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
   }, [onClose]);
 
   const link = postLink(post.id, comment?.id);
-  const text = (comment ? `${comment.authorName}: ${comment.text}\n— ${author.displayName} (@${author.username}) على KAN` : postShareText(post, author)) + `\n${link}`;
+  const text = (comment ? `${comment.authorName}: ${comment.text}\n— ${author.displayName} (@${author.username}) على KIX` : postShareText(post, author)) + `\n${link}`;
   const recent = recentChatActivity();
   const people = users
     .filter(u => u.id !== currentUser.id && (u.displayName + ' ' + u.username).toLowerCase().includes(q.trim().toLowerCase()))
@@ -1879,7 +1884,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
   const nativeShare = async () => {
     try {
       if (typeof navigator.share === 'function') {
-        await navigator.share({ title: `${author.displayName} على KAN`, text: text.replace(`\n${link}`, '').slice(0, 300), url: link });
+        await navigator.share({ title: `${author.displayName} على KIX`, text: text.replace(`\n${link}`, '').slice(0, 300), url: link });
         onClose();
       } else {
         await navigator.clipboard.writeText(link);
@@ -2701,8 +2706,8 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
           })}
         </div>
 
-        {!recording && (
-          <div className="px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
+        {(
+          <div className={`px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10 ${recording ? 'hidden' : ''}`}>
             <input ref={fileRef} type="file" multiple onChange={handleFile} className="hidden" />
             {error && <p className="text-xs text-red-400 pb-1.5 px-1">{error}</p>}
             {replyingTo && (
@@ -2735,9 +2740,9 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => { setAiOpen(true); setToolsOpen(false); }}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gradient-to-r from-violet-600/30 to-cyan-500/20 border border-violet-400/30 text-white text-xs active:scale-95"
-                    aria-label="اسأل KAN"
+                    aria-label="اسأل KIX"
                   >
-                    <Sparkles size={16} className="text-violet-300" /> اسأل KAN
+                    <Sparkles size={16} className="text-violet-300" /> اسأل KIX
                   </button>
                 </motion.div>
               )}
@@ -2769,7 +2774,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                   <Send size={18} className="text-white" />
                 </motion.button>
               ) : (
-                <motion.button whileTap={{ scale: 0.9 }} onClick={() => setRecording(true)} aria-label="تسجيل صوتي" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30">
+                <motion.button whileTap={{ scale: 0.9 }} onPointerDown={e => { micHold.x = e.clientX; micHold.y = e.clientY; micHold.t = Date.now(); micHold.held = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ } setRecording(true); }} onContextMenu={e => e.preventDefault()} style={{ touchAction: 'none' }} aria-label="تسجيل صوتي" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30">
                   <Mic size={18} className="text-white" />
                 </motion.button>
               )}
@@ -3035,7 +3040,7 @@ function NotificationsTab({ currentUser, users, notifications, setNotifications,
                 </button>
                 {testNote && <p className="text-xs text-cyan-300 mt-2 text-center">{testNote}</p>}
                 <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
-                  ليظهر الإشعار فوق الشاشة بصوت وأنت داخل تطبيق آخر: افتح إعدادات الهاتف ← التطبيقات ← KAN (أو المتصفح) ← الإشعارات، ثم فعّل الإشعارات المنبثقة والصوت والاهتزاز.
+                  ليظهر الإشعار فوق الشاشة بصوت وأنت داخل تطبيق آخر: افتح إعدادات الهاتف ← التطبيقات ← KIX (أو المتصفح) ← الإشعارات، ثم فعّل الإشعارات المنبثقة والصوت والاهتزاز.
                 </p>
               </div>
             </div>
@@ -3132,9 +3137,9 @@ function SplashScreen() {
             transition={{ duration: 2.2, repeat: Infinity, delay: i * 0.8, ease: 'easeOut' }}
           />
         ))}
-        <img src={LOGO_URL} alt="KAN" className="relative w-24 h-24 rounded-[28px] shadow-2xl shadow-violet-500/40" />
+        <img src={LOGO_URL} alt="KIX" className="relative w-24 h-24 rounded-[28px] shadow-2xl shadow-violet-500/40" />
       </motion.div>
-      <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.5 }} className="relative mt-7 text-5xl font-extrabold tracking-[0.3em] pl-[0.3em] kan-gradient-text">KAN</motion.h1>
+      <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.5 }} className="relative mt-7 text-5xl font-extrabold tracking-[0.3em] pl-[0.3em] kan-gradient-text">KIX</motion.h1>
       <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55, duration: 0.5 }} className="relative mt-2 text-sm text-gray-400">شبكة التواصل الاجتماعي</motion.p>
       <div dir="ltr" className="absolute bottom-[max(2.5rem,env(safe-area-inset-bottom))] w-40 h-1 rounded-full bg-white/10 overflow-hidden">
         <motion.div className="h-full w-1/2 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400" initial={{ x: '-100%' }} animate={{ x: '220%' }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }} />
@@ -3768,7 +3773,7 @@ function EmojiPicker({ onPick, onClose, docked = false, onSticker, startOnSticke
 }
 
 // ============ Double-tap love: the burst follows the "like style" chosen in Settings ============
-// Double-tap like: one heart in the KAN colours (violet to cyan) that pops where you tapped and fades.
+// Double-tap like: one heart in the KIX colours (violet to cyan) that pops where you tapped and fades.
 const lastPointer = { x: -1, y: -1 };
 if (typeof window !== 'undefined') window.addEventListener('pointerdown', e => { lastPointer.x = e.clientX; lastPointer.y = e.clientY; }, true);
 function CoinBurst({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
@@ -3973,7 +3978,7 @@ function StatusScreen({ text, actions }: { text: string; actions?: { label: stri
   return (
     <div dir={DIR} className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4 p-4 text-center text-gray-300">
       <img src={LOGO_URL} alt="" className="w-16 h-16 rounded-2xl" />
-      <h1 className="text-4xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">KAN</h1>
+      <h1 className="text-4xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">KIX</h1>
       <p>{text}</p>
       {actions?.map(a => (
         <button key={a.label} onClick={a.onClick} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-xl text-white">
@@ -4592,7 +4597,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <img src={LOGO_URL} alt="" className="w-8 h-8 rounded-lg" />
             <h1 className="text-xl font-bold kan-gradient-text">
-              KAN
+              KIX
             </h1>
           </div>
           <div ref={menuRef} className="relative flex items-center">
@@ -4916,7 +4921,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
         <div className="text-center mb-8">
           <img src={LOGO_URL} alt="" className="w-20 h-20 mx-auto mb-3 rounded-2xl shadow-lg shadow-violet-500/20" />
           <h1 className="text-5xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent mb-2">
-            KAN
+            KIX
           </h1>
           <p className="text-gray-400">{t('شبكة التواصل الاجتماعي')}</p>
         </div>
@@ -5542,7 +5547,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
     }
   };
 
-  // Double tap anywhere on the post content: like it and show the KAN coin.
+  // Double tap anywhere on the post content: like it and show the KIX coin.
   const handleContentTap = (onSingle?: () => void) => {
     const now = Date.now();
     window.clearTimeout(tapTimer.current);
@@ -6102,7 +6107,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       {boost && <div className="absolute top-[max(4rem,calc(env(safe-area-inset-top)+3.25rem))] inset-x-0 flex justify-center pointer-events-none z-30"><span className="px-3 py-1 rounded-full bg-black/60 backdrop-blur text-white text-sm font-bold">2x</span></div>}
       {paused && !failed && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none">
-          <span className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-600/70 to-cyan-500/70 backdrop-blur-md ring-2 ring-white/30 shadow-2xl shadow-violet-500/30 flex items-center justify-center text-white">
+          <span className="w-16 h-16 rounded-full bg-white/25 backdrop-blur-md ring-1 ring-white/40 shadow-2xl flex items-center justify-center text-white">
             <Pause size={26} fill="white" strokeWidth={0} />
           </span>
           <button onClick={e => { e.stopPropagation(); onToggleMute(); }} onPointerDown={stop}
@@ -6139,13 +6144,13 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       <div className="absolute start-4 end-16 bottom-[calc(env(safe-area-inset-bottom)+2rem)] text-start z-20" onClick={stop} onPointerDown={stop}>
         <div className="flex items-center gap-2 mb-1.5">
           <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2 min-w-0">
-            <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="sm" />
-            <span className="text-white font-bold text-sm truncate max-w-[10rem]">{author.displayName}</span>
+            <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="md" />
+            <span className="text-white font-extrabold text-base truncate max-w-[11rem] drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">{author.displayName}</span>
           </button>
           {author.id !== currentUser.id && (
             <button
               onClick={() => toggleFollow(author.id)}
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition-all ${isFollowing ? 'bg-white/15 text-white border border-white/25' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}
+              className={`shrink-0 px-5 py-2 rounded-full text-sm font-extrabold active:scale-95 transition-all ${isFollowing ? 'bg-white/15 text-white border border-white/25' : 'bg-white/25 border border-white/40 text-white'}`}
             >
               {isFollowing ? t('متابَع') : t('متابعة')}
             </button>
@@ -6163,7 +6168,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
           onPointerMove={e => { if (scrub) seekTo(e.clientX); }}
           onPointerUp={() => setScrub(false)} onPointerCancel={() => setScrub(false)}>
           <div className={`w-full rounded-full bg-white/30 overflow-hidden ${scrub ? 'h-2' : paused ? 'h-1.5' : 'h-1'} transition-all`}>
-            <div className="h-full bg-gradient-to-r from-violet-400 to-cyan-300" style={{ width: `${prog * 100}%` }} />
+            <div className="h-full bg-white" style={{ width: `${prog * 100}%` }} />
           </div>
           {(paused || scrub) && <div className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-white shadow ${scrub ? 'w-4 h-4' : 'w-3 h-3'}`} style={{ left: `${prog * 100}%` }} />}
         </div>
@@ -6419,7 +6424,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
       </div>
       <div className="absolute inset-x-0 top-0 z-20 flex items-center px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-8 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
         <button onClick={onBack} className="pointer-events-auto p-2 rounded-full bg-black/40 text-white active:scale-90 transition-transform" aria-label="رجوع"><ChevronRight size={22} /></button>
-        <span className="mx-3 text-lg font-extrabold tracking-[0.25em] kan-gradient-text">KAN</span>
+        <span className="mx-3 text-lg font-extrabold tracking-[0.25em] kan-gradient-text">KIX</span>
         <span className="text-xs text-white/80 font-medium">ريلز</span>
       </div>
       {commentPost && (
@@ -7432,7 +7437,7 @@ function InstallCard() {
         <img src={LOGO_URL} alt="" className="w-12 h-12 rounded-xl" />
         <div className="flex-1 min-w-0">
           <h3 className="font-bold text-white">تثبيت التطبيق</h3>
-          <p className="text-xs text-gray-500">افتح KAN من شاشتك الرئيسية مثل أي تطبيق</p>
+          <p className="text-xs text-gray-500">افتح KIX من شاشتك الرئيسية مثل أي تطبيق</p>
         </div>
         {installed ? (
           <span className="text-xs text-emerald-400 flex items-center gap-1"><Check size={14} /> مثبّت</span>
@@ -7466,7 +7471,7 @@ function InstallBanner() {
   return (
     <div className="mx-4 mt-3 p-3 bg-violet-600/15 border border-violet-500/30 rounded-xl flex items-center gap-3">
       <img src={LOGO_URL} alt="" className="w-9 h-9 rounded-lg" />
-      <div className="flex-1 text-sm text-white">ثبّت KAN على جهازك</div>
+      <div className="flex-1 text-sm text-white">ثبّت KIX على جهازك</div>
       <button onClick={() => { void promptInstall(); }} className="px-3 py-1 bg-violet-600 hover:bg-violet-500 rounded-full text-xs text-white">تثبيت</button>
       <button
         onClick={() => { setDismissed(true); try { localStorage.setItem('kan_install_dismissed', '1'); } catch { /* ignore */ } }}
@@ -7519,7 +7524,7 @@ function NotificationSettings() {
   const sendTest = async () => {
     try {
       const reg = await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL as string);
-      await reg?.showNotification('KAN', { body: 'الإشعارات تعمل على هذا الجهاز ✅', icon: `${import.meta.env.BASE_URL as string}icon-192.png` });
+      await reg?.showNotification('KIX', { body: 'الإشعارات تعمل على هذا الجهاز ✅', icon: `${import.meta.env.BASE_URL as string}icon-192.png` });
     } catch (e) {
       console.error(e);
       setMessage('تعذّر عرض الإشعار التجريبي.');
@@ -7589,7 +7594,7 @@ function LangPicker() {
 
 function RingStylePicker() {
   const [cur, setCur] = useState<RingStyle>(getRingStyle);
-  const opts: { id: RingStyle; label: string }[] = [{ id: 'kan', label: 'KAN' }, { id: 'insta', label: 'ألوان دافئة' }, { id: 'green', label: 'أخضر' }, { id: 'off', label: 'إيقاف' }];
+  const opts: { id: RingStyle; label: string }[] = [{ id: 'kan', label: 'KIX' }, { id: 'insta', label: 'ألوان دافئة' }, { id: 'green', label: 'أخضر' }, { id: 'off', label: 'إيقاف' }];
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
       <div className="text-sm font-semibold text-white mb-1">حلقة القصة حول الصورة</div>
@@ -7666,7 +7671,7 @@ function SettingsTab({ currentUser, setUsers }: {
         <p className="text-xs text-gray-400 mb-3">اختر الثيم الذي يريحك</p>
         <div className="grid grid-cols-3 gap-2.5">
           {([
-            { key: 'kan', label: 'KAN Theme', bg: '#0b0b1a', card: '#1b1b36', accent: 'linear-gradient(135deg,#7c3aed,#06b6d4)', line: '#35355a' },
+            { key: 'kan', label: 'KIX Theme', bg: '#0b0b1a', card: '#1b1b36', accent: 'linear-gradient(135deg,#7c3aed,#06b6d4)', line: '#35355a' },
             { key: 'light', label: 'فاتح', bg: '#f3f3f7', card: '#ffffff', accent: '#6366f1', line: '#d8d8e2' },
             { key: 'dark', label: 'داكن', bg: '#000000', card: '#121212', accent: '#5b5ef4', line: '#2a2a2e' },
           ] as const).map(t => (
@@ -7903,7 +7908,8 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
   );
 }
 
-// ============ Voice Recorder ============
+// ============ Voice Recorder (WhatsApp style: hold to record, slide up to lock, slide sideways to cancel) ============
+const micHold = { x: 0, y: 0, t: 0, held: false };
 function VoiceRecorder({ onSend, onCancel }: {
   onSend: (url: string, duration: number) => void;
   onCancel: () => void;
@@ -7917,6 +7923,10 @@ function VoiceRecorder({ onSend, onCancel }: {
   // Mirrors `duration` so the (stale) onstop closure reads the real value.
   const durationRef = useRef(0);
   const unmountedRef = useRef(false);
+  const [locked, setLocked] = useState(!micHold.held);
+  const [hint, setHint] = useState<'none' | 'cancel'>('none');
+  const lockedRef = useRef(!micHold.held);
+  const finishRef = useRef<'send' | 'cancel' | null>(null);
 
   const startRecording = async () => {
     try {
@@ -7946,6 +7956,7 @@ function VoiceRecorder({ onSend, onCancel }: {
 
       mediaRecorder.start();
       setRecording(true);
+      if (finishRef.current) { const a = finishRef.current; finishRef.current = null; if (a === 'send') stopRecording(); else cancelRecording(); }
       setDuration(0);
       durationRef.current = 0;
       timerRef.current = setInterval(() => {
@@ -7959,7 +7970,7 @@ function VoiceRecorder({ onSend, onCancel }: {
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && recording) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
       setRecording(false);
       if (timerRef.current) clearInterval(timerRef.current);
@@ -7967,7 +7978,7 @@ function VoiceRecorder({ onSend, onCancel }: {
   };
 
   const cancelRecording = () => {
-    if (mediaRecorderRef.current && recording) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.onstop = () => {
         streamRef.current?.getTracks().forEach(t => t.stop());
       };
@@ -7980,13 +7991,51 @@ function VoiceRecorder({ onSend, onCancel }: {
   useEffect(() => {
     unmountedRef.current = false;
     startRecording();
+    const act = (a: 'send' | 'cancel') => {
+      const mr = mediaRecorderRef.current;
+      if (!mr || mr.state !== 'recording') { finishRef.current = a; return; }
+      if (a === 'send') stopRecording(); else cancelRecording();
+    };
+    const lock = () => { lockedRef.current = true; setLocked(true); };
+    const move = (e: PointerEvent) => {
+      if (!micHold.held || lockedRef.current) return;
+      const dx = e.clientX - micHold.x, dy = e.clientY - micHold.y;
+      if (dy < -70) { lock(); return; }
+      setHint(Math.abs(dx) > 90 ? 'cancel' : 'none');
+    };
+    const up = (e: PointerEvent) => {
+      if (!micHold.held) return;
+      micHold.held = false;
+      if (lockedRef.current) return;
+      const dx = e.clientX - micHold.x;
+      if (Math.abs(dx) > 90) act('cancel');
+      else if (Date.now() - micHold.t < 450) lock();
+      else act('send');
+    };
+    if (micHold.held) {
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+    }
     return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      micHold.held = false;
       unmountedRef.current = true;
       if (timerRef.current) clearInterval(timerRef.current);
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
   }, []);
 
+  if (!locked) return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/30 rounded-xl select-none">
+      <div className="absolute -top-20 end-3 w-11 h-16 rounded-full bg-gray-800 border border-gray-700 flex flex-col items-center justify-center text-base shadow-lg"><span>🔒</span><span className="text-gray-400 text-xs animate-bounce">↑</span></div>
+      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+      <span className="text-red-400 font-mono text-sm">{formatDuration(duration)}</span>
+      <span className={`flex-1 text-center text-sm ${hint === 'cancel' ? 'text-red-400 font-bold' : 'text-gray-400'}`}>{hint === 'cancel' ? 'ارفع إصبعك للإلغاء' : '‹ اسحب للإلغاء'}</span>
+    </motion.div>
+  );
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -8740,7 +8789,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     if (rxErr) apply(mine?.emoji ?? null);
   };
 
-  // One tap opens the actions, a double tap loves the message with the KAN coin.
+  // One tap opens the actions, a double tap loves the message with the KIX coin.
   const handleBubbleTap = (msg: Message) => {
     const now = Date.now();
     if (lastTap.current.id === msg.id && now - lastTap.current.t < 350) {
@@ -9161,8 +9210,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       )}
 
       {/* Input: one slim row [+] [message] [send], so the send button is always on screen */}
-      {!recording && (
-        <div className="px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
+      {(
+        <div className={`px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10 ${recording ? 'hidden' : ''}`}>
           <input ref={fileRef} type="file" multiple onChange={handleFile} className="hidden" />
           <AnimatePresence>
             {toolsOpen && (
@@ -9182,9 +9231,9 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => { setAiOpen(true); setToolsOpen(false); }}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gradient-to-r from-violet-600/30 to-cyan-500/20 border border-violet-400/30 text-white text-xs active:scale-95"
-                  aria-label="اسأل KAN"
+                  aria-label="اسأل KIX"
                 >
-                  <Sparkles size={16} className="text-violet-300" /> اسأل KAN
+                  <Sparkles size={16} className="text-violet-300" /> اسأل KIX
                 </button>
               </motion.div>
             )}
@@ -9222,7 +9271,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                 <Send size={18} className="text-white" />
               </motion.button>
             ) : (
-              <motion.button whileTap={{ scale: 0.9 }} onClick={() => setRecording(true)} aria-label="تسجيل صوتي" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30">
+              <motion.button whileTap={{ scale: 0.9 }} onPointerDown={e => { micHold.x = e.clientX; micHold.y = e.clientY; micHold.t = Date.now(); micHold.held = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ } setRecording(true); }} onContextMenu={e => e.preventDefault()} style={{ touchAction: 'none' }} aria-label="تسجيل صوتي" className="shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full shadow-lg shadow-violet-500/30">
                 <Mic size={18} className="text-white" />
               </motion.button>
             )}

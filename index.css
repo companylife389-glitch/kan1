@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* KAN palette: neutrals tinted toward the icon's violet, accents are the icon's violet -> cyan. */
+/* KIX palette: neutrals tinted toward the icon's violet, accents are the icon's violet -> cyan. */
 @theme {
   --color-gray-50: #f5f5fb;
   --color-gray-100: #ebebf6;
@@ -137,7 +137,7 @@ button, a {
 
 
 /* ============ Themes ============
-   KAN Theme is the default (the palette above). Light and Dark re-map the same variables, so every screen follows. */
+   KIX Theme is the default (the palette above). Light and Dark re-map the same variables, so every screen follows. */
 html[data-theme='dark'] {
   --color-gray-50: #f2f2f7;  --color-gray-100: #e5e5ea; --color-gray-200: #d1d1d6; --color-gray-300: #c7c7cc;
   --color-gray-400: #aeaeb2; --color-gray-500: #8e8e93; --color-gray-600: #48484a; --color-gray-700: #2c2c2e;

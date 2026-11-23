@@ -1,7 +1,7 @@
 {
-  "name": "kan-social-network",
+  "name": "kix-social-network",
   "version": "1.0.0",
-  "description": "KAN - واجهة شبكة تواصل اجتماعي (React + Vite + Tailwind)، تخزين محلي في المتصفح",
+  "description": "KIX - واجهة شبكة تواصل اجتماعي (React + Vite + Tailwind)، تخزين محلي في المتصفح",
   "private": true,
   "type": "module",
   "scripts": {
