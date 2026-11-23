@@ -1077,7 +1077,6 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false, onEnded }:
         poster={poster}
         playsInline
         autoPlay={autoPlay}
-        onEnded={onEnded}
         muted={muted}
         loop={loop}
         preload="metadata"
@@ -1088,7 +1087,7 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false, onEnded }:
         onProgress={e => { const b = e.currentTarget.buffered; if (b.length) setBuffered(b.end(b.length - 1)); }}
         onPlay={() => { setPlaying(true); setStarted(true); }}
         onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); onEnded?.(); }}
         onWaiting={() => setWaiting(true)}
         onPlaying={() => setWaiting(false)}
         onCanPlay={() => setWaiting(false)}
@@ -3680,7 +3679,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
     let upFile: File = file;
     let baked = false;
     if (!isVideo && flt > 0) { const b = await bakeFilter(file, STORY_FILTERS[flt].f); if (b) { upFile = b; baked = true; } }
-    if (!isVideo) upFile = await shrinkImage(upFile);
+    if (!isVideo) upFile = await shrinkImageFile(upFile);
     const path = kanPath(`${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[upFile.type] ?? safeExt(upFile.name)}`, upFile.size);
     try {
       const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, upFile, upFile.type || 'application/octet-stream', '31536000', setPct);
@@ -3763,7 +3762,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   );
 }
 
-async function shrinkImage(f: File): Promise<File> {
+async function shrinkImageFile(f: File): Promise<File> {
   try {
     if (!f.type.startsWith('image/') || f.type === 'image/gif' || f.size < 300000) return f;
     const bmp = await createImageBitmap(f);
