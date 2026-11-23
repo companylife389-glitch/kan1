@@ -872,11 +872,12 @@ function fmtClock(t: number): string {
 const PLAYER_SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.5, 0.75];
 
 // KIX video player: big play button, double-tap to skip 10s, scrub bar with buffering, speed, volume, fullscreen.
-function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
+function VideoPlayer({ src, poster, className = '', autoPlay = false, onEnded }: {
   src: string;
   poster?: string;
   className?: string;
   autoPlay?: boolean;
+  onEnded?: () => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1076,6 +1077,7 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
         poster={poster}
         playsInline
         autoPlay={autoPlay}
+        onEnded={onEnded}
         muted={muted}
         loop={loop}
         preload="metadata"
@@ -1179,7 +1181,7 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false }: {
 // Files above B2_MIN_MB go straight from the browser to Backblaze B2 (signed by the b2-sign edge function),
 // in parallel 32 MB parts for big files. Their storage path starts with "b2/". Smaller files stay on Supabase Storage.
 const B2_MIN_MB = 4;
-const B2_PART_MB = 8;
+const B2_PART_MB = 6;
 const B2_PARALLEL = 16;
 
 // Background publishing: uploads keep running while you move around; the progress shows inside the publish box.
@@ -1296,7 +1298,7 @@ async function uploadToB2(
   const report = (loaded: number) => onProgress?.(Math.min(99, Math.round((loaded / Math.max(1, file.size)) * 100)));
   let uploadId = '';
   try {
-    if (file.size <= 32 * 1024 * 1024) {
+    if (file.size <= 10 * 1024 * 1024) {
       const r = await b2Call<{ url: string }>({ action: 'put', bucket, path });
       await putBlob(r.url, file, { 'Content-Type': contentType, 'Cache-Control': cc }, report);
     } else {
@@ -3263,6 +3265,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
   const [openAt, setOpenAt] = useState<number | null>(null);
   const [composer, setComposer] = useState<File | null>(null);
   const [addMenu, setAddMenu] = useState(false);
+  const camRef = useRef<HTMLInputElement>(null);
   const [textComposer, setTextComposer] = useState(false);
   const [hint, setHint] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -3317,6 +3320,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
         <h3 className="text-sm font-semibold text-gray-200">{t('القصص')}</h3>
       </div>
       <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={pick} />
+      <input ref={camRef} type="file" accept="image/*,video/*" capture="environment" className="hidden" onChange={pick} />
       <div className="flex gap-3.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
         <button onClick={() => (mine ? setOpenAt(0) : setAddMenu(true))} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
           <div className="relative">
@@ -3353,9 +3357,17 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
       </AnimatePresence>
       {addMenu && createPortal(
         <div dir={DIR} className="fixed inset-0 z-[150] bg-black/60 flex items-end justify-center" onClick={() => setAddMenu(false)}>
-          <div className="kan-theme-text w-full max-w-md bg-gray-900 rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-2" onClick={e => e.stopPropagation()}>
-            <button onClick={() => { setAddMenu(false); fileRef.current?.click(); }} className="w-full py-3 rounded-xl bg-gray-800 text-white font-semibold">📷 صورة أو فيديو</button>
-            <button onClick={() => { setAddMenu(false); setTextComposer(true); }} className="w-full py-3 rounded-xl bg-gray-800 text-white font-semibold">Aa نص</button>
+          <div className="kan-theme-text kan-pop w-full max-w-md bg-gray-900 rounded-t-3xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-white/10" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mb-4" />
+            <h4 className="text-center text-base font-bold text-white mb-4">قصة جديدة</h4>
+            <div className="grid grid-cols-3 gap-3">
+              {([['📸', 'الكاميرا', 'from-violet-600 to-fuchsia-500', () => camRef.current?.click()], ['🖼️', 'المعرض', 'from-cyan-500 to-violet-600', () => fileRef.current?.click()], ['Aa', 'نص', 'from-amber-500 to-rose-500', () => setTextComposer(true)]] as const).map(([ic, lb, g, fn]) => (
+                <button key={lb} onClick={() => { setAddMenu(false); fn(); }} className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-white/5 ring-1 ring-white/10 active:scale-95">
+                  <span className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${g} flex items-center justify-center text-2xl font-extrabold text-white shadow-lg`}>{ic}</span>
+                  <span className="text-sm font-semibold text-white">{lb}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>,
         document.body,
@@ -3380,7 +3392,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
 
 // ============ Story extras: text + stickers, poll, question box, close friends, highlights ============
 const STORY_BGS = ['linear-gradient(135deg,#6d28d9,#c026d3,#06b6d4)', 'linear-gradient(135deg,#f97316,#ec4899)', 'linear-gradient(135deg,#0ea5e9,#6366f1)', 'linear-gradient(135deg,#10b981,#0e7490)', 'linear-gradient(135deg,#ef4444,#7c2d12)', 'linear-gradient(135deg,#111827,#4b5563)'];
-const STORY_FILTERS: { n: string; f: string }[] = [{ n: 'عادي', f: 'none' }, { n: 'دافئ', f: 'sepia(0.35) saturate(1.4) contrast(1.05)' }, { n: 'بارد', f: 'hue-rotate(185deg) saturate(1.1) brightness(1.05)' }, { n: 'أبيض وأسود', f: 'grayscale(1) contrast(1.1)' }, { n: 'ساطع', f: 'brightness(1.2) saturate(1.3)' }, { n: 'كلاسيك', f: 'sepia(0.7) contrast(0.95) brightness(1.05)' }, { n: 'دراما', f: 'contrast(1.4) saturate(0.9) brightness(0.92)' }, { n: 'سينمائي', f: 'contrast(1.25) sepia(0.2) hue-rotate(-12deg) saturate(1.2) brightness(0.95)' }, { n: 'نيون', f: 'saturate(2.1) contrast(1.2) hue-rotate(320deg) brightness(1.05)' }, { n: 'غروب', f: 'sepia(0.5) saturate(1.9) hue-rotate(-18deg) brightness(1.08)' }, { n: 'ذهبي', f: 'sepia(0.6) saturate(2) hue-rotate(-8deg) brightness(1.1) contrast(1.05)' }, { n: 'شتوي', f: 'hue-rotate(200deg) saturate(0.8) brightness(1.12) contrast(1.05)' }, { n: 'بوب', f: 'saturate(2.3) contrast(1.15) brightness(1.03)' }, { n: 'ليلي', f: 'brightness(0.82) contrast(1.3) hue-rotate(210deg) saturate(1.3)' }, { n: 'حلم', f: 'brightness(1.12) contrast(0.88) saturate(1.35) sepia(0.12)' }, { n: 'فيلم', f: 'contrast(1.15) sepia(0.15) saturate(0.85) brightness(0.97)' }, { n: 'مضيء', f: 'brightness(1.18) contrast(0.95) saturate(1.1)' }, { n: 'عميق', f: 'contrast(1.35) saturate(1.25) brightness(0.9)' }, { n: 'ربيع', f: 'hue-rotate(-10deg) saturate(1.5) brightness(1.08)' }, { n: 'ريترو', f: 'sepia(0.45) contrast(1.1) saturate(0.8) hue-rotate(-15deg)' }, { n: 'جليد', f: 'hue-rotate(170deg) saturate(0.7) brightness(1.15) contrast(1.1)' }, { n: 'قوي', f: 'contrast(1.5) saturate(1.5)' }];
+const STORY_FILTERS: { n: string; f: string }[] = [{ n: 'عادي', f: 'none' }, { n: 'دافئ', f: 'sepia(0.35) saturate(1.4) contrast(1.05)' }, { n: 'بارد', f: 'hue-rotate(185deg) saturate(1.1) brightness(1.05)' }, { n: 'أبيض وأسود', f: 'grayscale(1) contrast(1.1)' }, { n: 'ساطع', f: 'brightness(1.2) saturate(1.3)' }, { n: 'كلاسيك', f: 'sepia(0.7) contrast(0.95) brightness(1.05)' }, { n: 'دراما', f: 'contrast(1.4) saturate(0.9) brightness(0.92)' }, { n: 'سينمائي', f: 'contrast(1.25) sepia(0.2) hue-rotate(-12deg) saturate(1.2) brightness(0.95)' }, { n: 'نيون', f: 'saturate(2.1) contrast(1.2) hue-rotate(320deg) brightness(1.05)' }, { n: 'غروب', f: 'sepia(0.5) saturate(1.9) hue-rotate(-18deg) brightness(1.08)' }, { n: 'ذهبي', f: 'sepia(0.6) saturate(2) hue-rotate(-8deg) brightness(1.1) contrast(1.05)' }, { n: 'شتوي', f: 'hue-rotate(200deg) saturate(0.8) brightness(1.12) contrast(1.05)' }, { n: 'بوب', f: 'saturate(2.3) contrast(1.15) brightness(1.03)' }, { n: 'ليلي', f: 'brightness(0.82) contrast(1.3) hue-rotate(210deg) saturate(1.3)' }, { n: 'حلم', f: 'brightness(1.12) contrast(0.88) saturate(1.35) sepia(0.12)' }, { n: 'فيلم', f: 'contrast(1.15) sepia(0.15) saturate(0.85) brightness(0.97)' }, { n: 'مضيء', f: 'brightness(1.18) contrast(0.95) saturate(1.1)' }, { n: 'عميق', f: 'contrast(1.35) saturate(1.25) brightness(0.9)' }, { n: 'ربيع', f: 'hue-rotate(-10deg) saturate(1.5) brightness(1.08)' }, { n: 'ريترو', f: 'sepia(0.45) contrast(1.1) saturate(0.8) hue-rotate(-15deg)' }, { n: 'جليد', f: 'hue-rotate(170deg) saturate(0.7) brightness(1.15) contrast(1.1)' }, { n: 'قوي', f: 'contrast(1.5) saturate(1.5)' }, { n: 'فينتج', f: 'sepia(0.3) contrast(1.1) saturate(1.3) hue-rotate(-8deg) brightness(1.05)' }, { n: 'بورتريه', f: 'brightness(1.08) contrast(1.05) saturate(1.15) sepia(0.08)' }, { n: 'تباين', f: 'contrast(1.6) brightness(0.95)' }, { n: 'باستيل', f: 'saturate(0.7) brightness(1.2) contrast(0.9)' }, { n: 'سايبر', f: 'hue-rotate(260deg) saturate(1.8) contrast(1.15)' }, { n: 'فجر', f: 'sepia(0.25) hue-rotate(-30deg) saturate(1.6) brightness(1.1)' }, { n: 'غابة', f: 'hue-rotate(60deg) saturate(1.3) contrast(1.05) brightness(0.98)' }, { n: 'محيط', f: 'hue-rotate(150deg) saturate(1.4) brightness(1.05)' }, { n: 'توهج', f: 'brightness(1.25) contrast(0.9) saturate(1.4)' }, { n: 'ظلام', f: 'brightness(0.7) contrast(1.4) saturate(0.8)' }, { n: 'نقي', f: 'contrast(1.08) saturate(1.1) brightness(1.04)' }, { n: 'رمادي ناعم', f: 'grayscale(0.7) brightness(1.08) contrast(0.95)' }, { n: 'كرز', f: 'hue-rotate(-25deg) saturate(1.7) contrast(1.1)' }, { n: 'ليمون', f: 'hue-rotate(35deg) saturate(1.6) brightness(1.1)' }, { n: 'بنفسج', f: 'hue-rotate(250deg) saturate(1.4) brightness(1.02)' }, { n: 'كودك', f: 'sepia(0.35) saturate(1.5) contrast(1.15) brightness(1.02) hue-rotate(-6deg)' }, { n: 'نوار', f: 'grayscale(1) contrast(1.6) brightness(0.9)' }, { n: 'صيف', f: 'saturate(1.6) brightness(1.12) sepia(0.15)' }, { n: 'خريف', f: 'sepia(0.5) hue-rotate(-20deg) saturate(1.5) contrast(1.05)' }];
 const bakeFilter = async (f: File, css: string): Promise<File | null> => {
   try {
     const bmp = await createImageBitmap(f);
@@ -3395,7 +3407,7 @@ const bakeFilter = async (f: File, css: string): Promise<File | null> => {
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
 };
-type StoryExtra = { bg?: number; filter?: number; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string }; ask?: string };
+type StoryExtra = { bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string }; ask?: string };
 
 function StoryOverlays({ extra, onMove }: { extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk', x: number, y: number) => void }) {
   const root = useRef<HTMLDivElement>(null);
@@ -3626,7 +3638,11 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [pct, setPct] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [tool, setTool] = useState<'' | 'text' | 'sticker' | 'poll' | 'ask' | 'aud' | 'sched' | 'filter'>('filter');
+  const [tool, setTool] = useState<'' | 'text' | 'sticker' | 'poll' | 'ask' | 'aud' | 'sched' | 'filter' | 'music'>('filter');
+  const [music, setMusic] = useState<File | null>(null);
+  const [mStart, setMStart] = useState(0);
+  const [mEnd, setMEnd] = useState(0);
+  const musicPick = useRef<HTMLInputElement>(null);
   const [txt, setTxt] = useState('');
   const [txtY, setTxtY] = useState(50);
   const [txtX, setTxtX] = useState(50);
@@ -3664,12 +3680,20 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
     let upFile: File = file;
     let baked = false;
     if (!isVideo && flt > 0) { const b = await bakeFilter(file, STORY_FILTERS[flt].f); if (b) { upFile = b; baked = true; } }
+    if (!isVideo) upFile = await shrinkImage(upFile);
     const path = kanPath(`${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[upFile.type] ?? safeExt(upFile.name)}`, upFile.size);
     try {
       const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, upFile, upFile.type || 'application/octet-stream', '31536000', setPct);
       if (upErr) throw upErr;
       const url = kanPublicUrl(POST_MEDIA_BUCKET, path);
-      const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = baked ? { ...extra, filter: undefined } : extra; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
+      let mObj: StoryExtra['m'];
+      if (music) {
+        const mp = kanPath(`${currentUser.id}/story-music-${crypto.randomUUID()}.${safeExt(music.name)}`, music.size);
+        const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
+        if (mErr) throw mErr;
+        mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30 };
+      }
+      const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
       if (insErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); throw insErr; }
       notifyStoriesChanged();
       onDone();
@@ -3707,15 +3731,22 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
             <button onClick={() => setTxtB(b => !b)} className={`shrink-0 px-3 h-8 rounded-full text-xs ${txtB ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>خلفية</button>
           </div>
         </div>}
-        {tool === 'sticker' && <div className="flex gap-2 overflow-x-auto no-scrollbar mb-2">{['😍', '🔥', '😂', '🎉', '❤️', '😎', '🙏', '💯', '⭐', '👏'].map(e => <button key={e} onClick={() => setStk(s => (s.includes(e) ? s.filter(x => x !== e) : s.length < 3 ? [...s, e] : s))} className={`text-3xl shrink-0 w-12 h-12 rounded-full ${stk.includes(e) ? 'bg-white/30' : 'bg-white/10'}`}>{e}</button>)}</div>}
+        {tool === 'sticker' && <div className="flex gap-2 overflow-x-auto no-scrollbar mb-2">{['😍', '🔥', '😂', '🎉', '❤️', '😎', '🙏', '💯', '⭐', '👏', '🥰', '😭', '🤩', '😘', '🤝', '💪', '🌹', '☀️', '🌙', '✨', '🎶', '🥳', '😅', '🤔'].map(e => <button key={e} onClick={() => setStk(s => (s.includes(e) ? s.filter(x => x !== e) : s.length < 3 ? [...s, e] : s))} className={`text-3xl shrink-0 w-12 h-12 rounded-full ${stk.includes(e) ? 'bg-white/30' : 'bg-white/10'}`}>{e}</button>)}</div>}
         {tool === 'filter' && <div className="flex gap-2.5 overflow-x-auto no-scrollbar mb-2">{STORY_FILTERS.map((f, i) => <button key={f.n} onClick={() => pickFlt(i)} className="shrink-0 flex flex-col items-center gap-1 w-16"><span className={`block w-16 h-16 rounded-xl overflow-hidden ${flt === i ? 'ring-2 ring-white' : 'opacity-80'}`}>{isVideo ? <video src={`${previewUrl}#t=0.1`} preload="metadata" muted playsInline style={{ filter: f.f }} className="w-full h-full object-cover pointer-events-none" /> : <img src={previewUrl} alt="" style={{ filter: f.f }} className="w-full h-full object-cover" />}</span><span className={`text-[11px] ${flt === i ? 'text-white font-bold' : 'text-white/70'}`}>{f.n}</span></button>)}</div>}
+        {tool === 'music' && <div className="mb-2">{music
+          ? <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2"><div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{music.name}</span><button onClick={() => { setMusic(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div><div className="mt-2"><MusicTrimmer file={music} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div></div>
+          : <button onClick={() => musicPick.current?.click()} className="w-full py-3 rounded-2xl bg-white/10 text-white text-sm font-semibold flex items-center justify-center gap-2"><Music size={16} /> اختر موسيقى من جهازك</button>}
+          <input ref={musicPick} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setMusic(f); setMStart(0); setMEnd(0); } }} /></div>}
         {tool === 'poll' && <div className="space-y-2 mb-2"><input value={pq} onChange={e => setPq(e.target.value)} placeholder="سؤال الاستطلاع" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><div className="flex gap-2"><input value={pa} onChange={e => setPa(e.target.value)} placeholder="الخيار الأول" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><input value={pb} onChange={e => setPb(e.target.value)} placeholder="الخيار الثاني" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div></div>}
         {tool === 'ask' && <div className="mb-2"><input value={ask} onChange={e => setAsk(e.target.value)} placeholder="اطرح سؤالاً على متابعيك" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>}
         {tool === 'aud' && <div className="flex gap-2 mb-2">{([['all', 'الجميع'], ['close', 'أصدقاء مقربين']] as const).map(([k, l]) => <button key={k} onClick={() => setAud(k)} className={`flex-1 py-2 rounded-full text-sm ${aud === k ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white'}`}>{l}</button>)}<button onClick={() => setCfOpen(true)} className="px-3 rounded-full bg-white/10 text-white text-sm">تعديل القائمة</button></div>}
         {tool === 'sched' && <div className="flex gap-2 mb-2"><input type="datetime-local" value={sched} onChange={e => setSched(e.target.value)} style={{ colorScheme: 'dark' }} className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" />{sched && <button onClick={() => setSched('')} className="px-3 rounded-full bg-white/10 text-white text-sm">إلغاء</button>}</div>}
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          {([['text', 'Aa نص', !!txt.trim()], ['sticker', '😀 ملصق', stk.length > 0], ['poll', '📊 استطلاع', !!extra.poll], ['ask', '❓ سؤال', !!extra.ask], ['aud', aud === 'close' ? '👥 مقربين ✓' : '👥 الجمهور', aud === 'close'], ['filter', flt > 0 ? '🎨 فلتر ✓' : '🎨 فلتر', flt > 0], ['sched', sched ? '🕒 مجدولة ✓' : '🕒 جدولة', !!sched]] as const).map(([k, l, on]) => (
-            <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm ${tool === k ? 'bg-white text-black' : on ? 'bg-emerald-500/80 text-white' : 'bg-white/10 text-white'}`}>{l}</button>
+          {([['text', 'Aa نص', !!txt.trim()], ['music', '🎵 موسيقى', !!music], ['sticker', '😀 ملصق', stk.length > 0], ['filter', flt > 0 ? '🎨 فلتر ✓' : '🎨 فلتر', flt > 0], ['poll', '📊 استطلاع', !!extra.poll], ['ask', '❓ سؤال', !!extra.ask], ['aud', aud === 'close' ? '👥 مقربين ✓' : '👥 الجمهور', aud === 'close'], ['sched', sched ? '🕒 مجدولة ✓' : '🕒 جدولة', !!sched]] as const).map(([k, l, on]) => (
+            <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} className="shrink-0 w-[62px] flex flex-col items-center gap-1 active:scale-95">
+              <span className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl font-bold ${tool === k ? 'bg-white text-black' : on ? 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white' : 'bg-white/10 text-white ring-1 ring-white/10'}`}>{l.split(' ')[0]}</span>
+              <span className="text-[11px] text-white/80 truncate max-w-full">{l.split(' ').slice(1).join(' ')}</span>
+            </button>
           ))}
         </div>
       </div>
@@ -3729,6 +3760,29 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
       {err && <div className="absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500/90 text-white text-xs">{err}</div>}
     </div>,
     document.body,
+  );
+}
+
+async function shrinkImage(f: File): Promise<File> {
+  try {
+    if (!f.type.startsWith('image/') || f.type === 'image/gif' || f.size < 300000) return f;
+    const bmp = await createImageBitmap(f);
+    const k = Math.min(1, 1440 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
+    const blob: Blob | null = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.86));
+    return blob && blob.size < f.size ? new File([blob], f.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }) : f;
+  } catch { return f; }
+}
+
+function StoryMusic({ m }: { m: { url: string; name: string; start: number; end: number } }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  useEffect(() => { const a = ref.current; if (!a) return; a.currentTime = m.start; void a.play().catch(() => undefined); return () => a.pause(); }, [m.url, m.start]);
+  return (
+    <>
+      <audio ref={ref} src={rawUrl(m.url)} preload="auto" onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= m.end) { a.currentTime = m.start; void a.play().catch(() => undefined); } }} />
+      <div className="absolute top-16 inset-x-0 mx-auto w-fit max-w-[80%] px-3 py-1 rounded-full bg-black/50 text-white text-xs flex items-center gap-1.5 z-10 pointer-events-none kan-always-white"><Music size={12} /><span className="truncate" dir="auto">{m.name}</span></div>
+    </>
   );
 }
 
@@ -3796,6 +3850,12 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
     else setProgress(0);
   };
 
+  useEffect(() => {
+    const nx = groups[gi]?.items[si + 1] ?? groups[gi + 1]?.items[0];
+    if (!nx || !nx.url) return;
+    if (nx.type === 'image') { const im = new Image(); im.src = nx.url; }
+    else { const pv = document.createElement('video'); pv.preload = 'metadata'; pv.src = nx.url; }
+  }, [gi, si]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     setProgress(0);
     setDuration(5000);
@@ -3962,7 +4022,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
             </div>
           )
           : story.type === 'image'
-          ? <img src={story.url} alt="" draggable={false} style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f }} className="absolute inset-0 w-full h-full object-contain" />
+          ? <><img src={story.url} alt="" draggable={false} style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f }} className="absolute inset-0 w-full h-full object-contain" />{story.extra?.m && <StoryMusic key={story.id} m={story.extra.m} />}</>
           : (
             <video
               key={story.id}
@@ -3998,8 +4058,8 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
         <div className="absolute inset-x-0 top-0 px-3 pt-[max(0.6rem,env(safe-area-inset-top))]">
           <div className="flex gap-1">
             {group.items.map((it, i) => (
-              <div key={it.id} className="h-[3px] flex-1 rounded-full bg-white/30 overflow-hidden">
-                <div className="h-full bg-white" style={{ width: `${i < si ? 100 : i === si ? Math.min(100, progress * 100) : 0}%` }} />
+              <div key={it.id} className="h-[4px] flex-1 rounded-full bg-white/25 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-white to-cyan-200 shadow-[0_0_6px_rgba(255,255,255,0.7)]" style={{ width: `${i < si ? 100 : i === si ? Math.min(100, progress * 100) : 0}%` }} />
               </div>
             ))}
           </div>
@@ -5560,7 +5620,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="px-4 py-4 space-y-4" style={{ transform: pull > 0 ? `translateY(${pull * 0.55}px)` : undefined, transition: dragging ? 'none' : 'transform 0.25s ease' }}>
+    <div className="px-4 py-4 space-y-4 max-lg:px-0 max-lg:py-0 max-lg:space-y-0" style={{ transform: pull > 0 ? `translateY(${pull * 0.55}px)` : undefined, transition: dragging ? 'none' : 'transform 0.25s ease' }}>
       {createPortal(
         <>
           <div className="pointer-events-none fixed left-0 right-0 z-40 flex justify-center" style={{ top: 64 }}>
@@ -5969,7 +6029,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }} className="post-card bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden [contain:layout_paint] [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }} className="post-card bg-gray-900 border border-gray-800 rounded-2xl max-lg:bg-transparent max-lg:border-x-0 max-lg:border-t-0 max-lg:rounded-none overflow-hidden [contain:layout_paint] [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
       <div className="p-4 flex items-center gap-3">
         <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
           <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="md" />
@@ -5997,20 +6057,20 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         )}
 
         {post.media && post.extraMedia && post.extraMedia.length > 0 && (
-          <div className="px-4 pb-3">
+          <div className="px-4 pb-3 max-lg:px-0">
             <PostCarousel items={[post.media, ...post.extraMedia]} poster={post.coverUrl} onTap={open => handleContentTap(open)} />
             <DownloadAllButton post={post} />
           </div>
         )}
         {post.media && !(post.extraMedia && post.extraMedia.length > 0) && (
-          <div className="px-4 pb-3">
+          <div className={`pb-3 ${post.media.type === 'image' || post.media.type === 'video' ? 'px-4 max-lg:px-0' : 'px-4'}`}>
             {post.media.type === 'image' ? (
               <div className="relative">
                 <img
                   src={post.media.url}
                   alt=""
                   onClick={e => { e.stopPropagation(); handleContentTap(() => setViewer({ src: post.media!.url, name: post.media!.name })); }}
-                  className="w-full rounded-xl max-h-96 object-cover cursor-zoom-in"
+                  className="w-full h-auto rounded-xl max-lg:rounded-none lg:max-h-96 lg:object-cover cursor-zoom-in"
                 />
                 <button
                   onClick={e => { e.stopPropagation(); void downloadFile(post.media!.url, post.media!.name || 'image.jpg'); }}
@@ -6321,7 +6381,6 @@ function PostMenu({ post, author, currentUser, setPosts, saved, onToggleSave, da
               </>
             ) : (
               <>
-                {hasAudio && <MenuRow icon={<Music size={20} />} label="استخدام كمقطع صوتي" onClick={pick(() => startReelWithAudio(post, author.displayName))} />}
                 <MenuRow icon={<BookmarkIcon size={20} className={saved ? 'fill-yellow-400 text-yellow-400' : ''} />} label={saved ? 'إلغاء الحفظ' : 'حفظ'} onClick={pick(onToggleSave)} />
                 <MenuRow icon={<Flag size={20} />} label="إبلاغ" danger onClick={pick(() => setSheet('report'))} />
               </>
@@ -6352,7 +6411,7 @@ function togglePostLike(post: Post, me: string, setPosts: React.Dispatch<React.S
   })();
 }
 
-function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleMute, setPosts, onOpenProfile, onOpenComments, onShowLikes }: {
+function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleMute, setPosts, onOpenProfile, onOpenComments, onShowLikes, autoNext, onNext }: {
   post: Post;
   author: User;
   users: User[];
@@ -6364,6 +6423,8 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
   onOpenProfile: (id: string) => void;
   onOpenComments: () => void;
   onShowLikes: () => void;
+  autoNext?: boolean;
+  onNext?: () => void;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -6498,7 +6559,8 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
         className={`absolute inset-0 w-full h-full ${landscape ? 'object-contain' : 'object-cover md:object-contain'}`}
         onLoadedMetadata={e => { if (activeRef.current) void e.currentTarget.play().catch(() => undefined); setLandscape(e.currentTarget.videoWidth > e.currentTarget.videoHeight); setDur(e.currentTarget.duration || 0); }}
         onTimeUpdate={e => { const v = e.currentTarget; if (!scrub && v.duration) setProg(v.currentTime / v.duration); }}
-        loop
+        loop={!autoNext}
+        onEnded={() => { if (autoNext) onNext?.(); }}
         muted={muted}
         playsInline
         preload="metadata"
@@ -6755,6 +6817,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   onLoadPage: (opts: FetchPostsOptions) => Promise<Post[]>;
 }) {
   const [muted, setMuted] = useState(true);
+  const [autoNext, setAutoNext] = useState(() => { try { return localStorage.getItem('kan_reel_auto') === '1'; } catch { return false; } });
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const reels = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
@@ -6829,6 +6892,8 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
                 onOpenProfile={onOpenProfile}
                 onOpenComments={() => setCommentsFor(post.id)}
                 onShowLikes={() => setListModal({ title: 'الإعجابات', ids: post.likes })}
+                autoNext={autoNext}
+                onNext={() => { const n = reels[reels.findIndex(r => r.id === post.id) + 1]; if (n) document.getElementById(`reel-${n.id}`)?.scrollIntoView({ behavior: 'smooth' }); }}
               />
             </div>
           );
@@ -6838,6 +6903,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
         <button onClick={onBack} className="pointer-events-auto p-2 rounded-full bg-black/40 text-white active:scale-90 transition-transform" aria-label="رجوع"><ChevronRight size={22} /></button>
         <span className="mx-3 text-lg font-extrabold tracking-[0.25em] kan-gradient-text">KIX</span>
         <span className="text-xs text-white/80 font-medium">ريلز</span>
+        <button onClick={() => setAutoNext(a => { const n = !a; try { localStorage.setItem('kan_reel_auto', n ? '1' : '0'); } catch { /* ignore */ } return n; })} className="pointer-events-auto ms-auto px-3 py-1.5 rounded-full bg-black/40 text-white text-xs font-semibold active:scale-95">{autoNext ? '⏭ تلقائي' : '🔁 تكرار'}</button>
       </div>
       {commentPost && (
         <ReelComments post={commentPost} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} onClose={() => setCommentsFor(null)} />
@@ -6859,30 +6925,35 @@ function VideoThumb({ post }: { post: Post }) {
   );
 }
 
-function VideoCard({ post, author, onOpen }: { post: Post; author: User; onOpen: () => void }) {
+function VideoCard({ post, author, onOpen, saved, onSave, onChannel, subs }: { post: Post; author: User; onOpen: () => void; saved: boolean; onSave: () => void; onChannel: () => void; subs: number }) {
+  const resume = (() => { try { return Number(localStorage.getItem(`kan-pos:${(post.media?.url ?? '').split('?')[0].slice(-120)}`)) || 0; } catch { return 0; } })();
   return (
-    <button onClick={onOpen} className="text-right group block w-full">
+    <div onClick={onOpen} role="button" className="text-right group block w-full cursor-pointer">
       <div className="relative aspect-video rounded-xl overflow-hidden bg-gray-900">
         <VideoThumb post={post} />
+        {resume > 0 && <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/75 text-[11px] text-white">▶ {fmtClock(resume)}</span>}
         <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/25 transition-colors">
           <div className="w-12 h-12 rounded-full bg-black/55 flex items-center justify-center">
             <Play size={22} className="text-white" />
           </div>
         </div>
+        <button onClick={e => { e.stopPropagation(); onSave(); }} aria-label="مشاهدة لاحقاً" className={`absolute top-2 left-2 w-8 h-8 rounded-full flex items-center justify-center text-white ${saved ? 'bg-violet-600' : 'bg-black/55'}`}>
+          <BookmarkIcon size={15} className={saved ? 'fill-white' : ''} />
+        </button>
       </div>
       <div className="flex gap-2.5 mt-2">
-        <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="sm" />
+        <button onClick={e => { e.stopPropagation(); onChannel(); }} aria-label="القناة"><Avatar userId={author.id} src={author.avatar} name={author.displayName} size="sm" /></button>
         <div className="min-w-0 flex-1">
           <div className="text-white font-semibold text-sm leading-snug line-clamp-2">{post.title || post.text || 'فيديو'}</div>
-          <div className="text-xs text-gray-400 mt-0.5">{author.displayName}</div>
+          <button onClick={e => { e.stopPropagation(); onChannel(); }} className="text-xs text-gray-400 mt-0.5 hover:text-white truncate max-w-full block">{author.displayName} · {subs} مشترك</button>
           <div className="text-xs text-gray-500">{post.likes.length} إعجاب · {formatTime(post.timestamp)}</div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
-function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onOpenProfile, onOpenRelated, onBack }: {
+function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onOpenProfile, onOpenRelated, onBack, wl, onToggleWl, subsOf, onChannel }: {
   post: Post;
   users: User[];
   currentUser: User;
@@ -6892,8 +6963,13 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
   onOpenProfile: (id: string) => void;
   onOpenRelated: (id: string) => void;
   onBack: () => void;
+  wl: string[];
+  onToggleWl: (id: string) => void;
+  subsOf: (id: string) => number;
+  onChannel: (id: string) => void;
 }) {
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [autoNext, setAutoNext] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const author = users.find(u => u.id === post.userId);
@@ -6913,18 +6989,18 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
           <ChevronRight size={18} /> {t('رجوع')}
         </button>
         <div className="aspect-video w-full bg-black sm:rounded-xl overflow-hidden">
-          <VideoPlayer key={post.id} src={post.media!.url} poster={post.coverUrl} autoPlay className="w-full h-full object-contain" />
+          <VideoPlayer key={post.id} src={post.media!.url} poster={post.coverUrl} autoPlay onEnded={autoNext && related[0] ? () => onOpenRelated(related[0].id) : undefined} className="w-full h-full object-contain" />
         </div>
         <div className="px-4 sm:px-0 mt-3">
           <h1 className="text-lg font-bold text-white leading-snug">{post.title || 'فيديو'}</h1>
           <div className="text-xs text-gray-500 mt-1">{formatTime(post.timestamp)}</div>
           {author && (
             <div className="flex items-center gap-3 mt-3">
-              <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-2.5 min-w-0">
+              <button onClick={() => onChannel(author.id)} className="flex items-center gap-2.5 min-w-0">
                 <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="md" />
                 <div className="text-right min-w-0">
                   <div className="text-white font-semibold text-sm truncate">{author.displayName}</div>
-                  <div className="text-xs text-gray-500">{author.followers.length} متابِع</div>
+                  <div className="text-xs text-gray-500">{author.followers.length} مشترك</div>
                 </div>
               </button>
               {author.id !== currentUser.id && (
@@ -6932,7 +7008,7 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
                   onClick={() => toggleFollow(author.id)}
                   className={`mr-auto px-4 py-1.5 rounded-full text-sm font-medium ${isFollowing ? 'bg-gray-800 text-gray-300' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}
                 >
-                  {isFollowing ? t('متابَع') : t('متابعة')}
+                  {isFollowing ? 'مشترك ✓' : 'اشتراك'}
                 </button>
               )}
             </div>
@@ -6955,6 +7031,12 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
             <button onClick={() => { void downloadFile(post.media!.url, post.media!.name || 'video.mp4'); }} className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-full text-sm text-gray-300 flex items-center gap-2">
               <Download size={16} /> تحميل
             </button>
+            <button onClick={() => onToggleWl(post.id)} className={`px-4 py-2 border rounded-full text-sm flex items-center gap-2 ${wl.includes(post.id) ? 'bg-violet-600 border-violet-500 text-white' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
+              <BookmarkIcon size={16} className={wl.includes(post.id) ? 'fill-white' : ''} /> {wl.includes(post.id) ? 'محفوظ' : 'مشاهدة لاحقاً'}
+            </button>
+            <button onClick={() => setAutoNext(x => !x)} className={`px-4 py-2 border rounded-full text-sm ${autoNext ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
+              ⏭ تشغيل تلقائي
+            </button>
           </div>
           {post.text && (
             <div className="mt-3 bg-gray-900 border border-gray-800 rounded-xl p-3 text-sm text-gray-200 whitespace-pre-wrap">{post.text}</div>
@@ -6967,7 +7049,7 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
           <h2 className="text-white font-bold text-sm">المزيد من الفيديوهات</h2>
           {related.map(v => {
             const a = users.find(u => u.id === v.userId);
-            return a ? <VideoCard key={v.id} post={v} author={a} onOpen={() => onOpenRelated(v.id)} /> : null;
+            return a ? <VideoCard key={v.id} post={v} author={a} onOpen={() => onOpenRelated(v.id)} saved={wl.includes(v.id)} onSave={() => onToggleWl(v.id)} onChannel={() => onChannel(a.id)} subs={subsOf(a.id)} /> : null;
           })}
         </aside>
       )}
@@ -7003,6 +7085,14 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const sentinel = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const videos = posts.filter(p => p.isVideo && p.media?.type === 'video').sort((a, b) => b.timestamp - a.timestamp);
+  const [vf, setVf] = useState<'all' | 'subs' | 'saved'>('all');
+  const [sort, setSort] = useState<'new' | 'top'>('new');
+  const [channel, setChannel] = useState<string | null>(null);
+  const wlKey = `kan_wl_${currentUser.id}`;
+  const [wl, setWl] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(wlKey) || '[]'); } catch { return []; } });
+  const toggleWl = (id: string) => setWl(l => { const n = l.includes(id) ? l.filter(x => x !== id) : [id, ...l]; try { localStorage.setItem(wlKey, JSON.stringify(n)); } catch { /* ignore */ } return n; });
+  const toggleFollow = makeToggleFollow(currentUser, setUsers);
+  const subsOf = (id: string) => users.filter(u => u.following.includes(id)).length;
 
   const loadMore = async () => {
     if (loadingRef.current || !hasMore) return;
@@ -7052,7 +7142,13 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   }, [query]);
 
   const fresh = (list: Post[]) => list.map(r => posts.find(p => p.id === r.id) ?? r);
-  const shown = fresh(results ?? videos);
+  const qn = query.trim().toLowerCase();
+  const chMatches = qn ? users.filter(u => u.displayName.toLowerCase().includes(qn) && videos.some(x => x.userId === u.id)) : [];
+  const merged = results ? [...results, ...videos.filter(x => chMatches.some(u => u.id === x.userId) && !results.some(r => r.id === x.id))] : videos;
+  const base = vf === 'saved' && !results ? posts.filter(p => wl.includes(p.id) && p.isVideo && p.media?.type === 'video') : fresh(merged);
+  const shown = base.filter(x => (channel ? x.userId === channel : vf === 'subs' ? currentUser.following.includes(x.userId) : true)).sort(sort === 'top' ? (x, y) => y.likes.length - x.likes.length : (x, y) => y.timestamp - x.timestamp);
+  const chStrip = qn ? chMatches : users.filter(u => currentUser.following.includes(u.id) && videos.some(x => x.userId === u.id));
+  const channelUser = channel ? users.find(u => u.id === channel) : undefined;
   const watching = watchId ? posts.find(p => p.id === watchId) : undefined;
 
   if (watching && watching.media) {
@@ -7063,7 +7159,11 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
         currentUser={currentUser}
         setUsers={setUsers}
         setPosts={setPosts}
-        related={videos.filter(v => v.id !== watching.id).slice(0, 10)}
+        related={[...videos.filter(x => x.id !== watching.id && x.userId === watching.userId), ...videos.filter(x => x.id !== watching.id && x.userId !== watching.userId)].slice(0, 12)}
+        wl={wl}
+        onToggleWl={toggleWl}
+        subsOf={subsOf}
+        onChannel={id => { setWatchId(null); setQuery(''); setVf('all'); setChannel(id); }}
         onOpenProfile={onOpenProfile}
         onOpenRelated={id => setWatchId(id)}
         onBack={() => setWatchId(null)}
@@ -7088,10 +7188,44 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
         )}
       </div>
 
+      {channelUser ? (
+        <div className="mb-5 flex items-center gap-3 p-3 rounded-2xl bg-gray-900 border border-gray-800">
+          <Avatar userId={channelUser.id} src={channelUser.avatar} name={channelUser.displayName} size="md" />
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-white truncate">{channelUser.displayName}</div>
+            <div className="text-xs text-gray-400">{subsOf(channelUser.id)} مشترك · {videos.filter(v => v.userId === channelUser.id).length} فيديو</div>
+          </div>
+          {channelUser.id !== currentUser.id && <button onClick={() => toggleFollow(channelUser.id)} className={`px-4 py-1.5 rounded-full text-sm font-semibold ${currentUser.following.includes(channelUser.id) ? 'bg-white/10 text-white' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}>{currentUser.following.includes(channelUser.id) ? 'مشترك ✓' : 'اشتراك'}</button>}
+          <button onClick={() => setChannel(null)} className="p-1.5 text-gray-400" aria-label="إغلاق القناة"><X size={18} /></button>
+        </div>
+      ) : (
+        <div className="flex gap-2 mb-5 overflow-x-auto no-scrollbar">
+          {([['all', 'الكل'], ['subs', 'اشتراكاتي'], ['saved', `⏱ لاحقاً${wl.length ? ` (${wl.length})` : ''}`]] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setVf(k)} className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold ${vf === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>
+          ))}
+        </div>
+      )}
+
+      {!channelUser && chStrip.length > 0 && (
+        <div className="flex gap-3 overflow-x-auto no-scrollbar mb-4">
+          {chStrip.map(u => (
+            <button key={u.id} onClick={() => { setChannel(u.id); setQuery(''); }} className="shrink-0 w-16 flex flex-col items-center gap-1">
+              <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="md" />
+              <span className="text-[11px] text-gray-300 truncate w-full text-center">{u.displayName}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2 mb-4 text-xs">
+        {([['new', 'الأحدث'], ['top', 'الأكثر إعجاباً']] as const).map(([k, l]) => (
+          <button key={k} onClick={() => setSort(k)} className={`px-3 py-1 rounded-full ${sort === k ? 'bg-violet-600 text-white' : 'bg-white/10 text-gray-300'}`}>{l}</button>
+        ))}
+      </div>
+
       {shown.length === 0 && !loading && !searching && (
         <div className="text-center py-14">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl kan-fab flex items-center justify-center"><PlayCircle size={30} className="text-white" /></div>
-          <p className="text-white font-semibold mb-1">{query ? 'لا توجد نتائج' : 'لا توجد فيديوهات بعد'}</p>
+          <p className="text-white font-semibold mb-1">{query ? 'لا توجد نتائج' : vf === 'saved' ? 'لا توجد فيديوهات محفوظة' : vf === 'subs' ? 'اشترك في قنوات لتظهر هنا' : 'لا توجد فيديوهات بعد'}</p>
           {!query && <button onClick={onCreate} className="mt-4 px-6 py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white font-medium">انشر فيديو</button>}
         </div>
       )}
@@ -7099,7 +7233,7 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
       <div className="grid grid-cols-1 min-[560px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-6">
         {shown.map(v => {
           const author = users.find(u => u.id === v.userId);
-          return author ? <VideoCard key={v.id} post={v} author={author} onOpen={() => setWatchId(v.id)} /> : null;
+          return author ? <VideoCard key={v.id} post={v} author={author} onOpen={() => setWatchId(v.id)} saved={wl.includes(v.id)} onSave={() => toggleWl(v.id)} onChannel={() => setChannel(author.id)} subs={subsOf(author.id)} /> : null;
         })}
       </div>
       <div ref={sentinel} className="h-10 flex items-center justify-center text-xs text-gray-500 mt-4">
@@ -7210,6 +7344,16 @@ function MusicTrimmer({ file, start, end, onStart, onEnd }: { file: File; start:
   const setS = (v: number) => { const s = round(Math.max(0, Math.min(v, total - 1))); onStart(s); if (eff <= s + 1) onEnd(round(Math.min(total, s + 30))); if (on) play(s); };
   const setE = (v: number) => { const e = round(Math.min(total, Math.max(v, start + 1))); onEnd(e); if (on) play(Math.max(start, e - 2)); };
   const nudge = 'w-7 h-7 shrink-0 rounded-full bg-white/10 text-white text-sm leading-none';
+  const dragWin = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dur) return;
+    const box = e.currentTarget; const len = Math.max(1, eff - start);
+    box.setPointerCapture(e.pointerId);
+    const mv = (x: number) => { const r = box.getBoundingClientRect(); const c = ((x - r.left) / r.width) * total; const s = round(Math.max(0, Math.min(c - len / 2, total - len))); onStart(s); onEnd(round(s + len)); if (on) play(s); };
+    mv(e.clientX);
+    const move = (ev: PointerEvent) => mv(ev.clientX);
+    const up = () => { box.removeEventListener('pointermove', move); box.removeEventListener('pointerup', up); box.removeEventListener('pointercancel', up); };
+    box.addEventListener('pointermove', move); box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
+  };
   return (
     <div className="mb-4 -mt-2 p-3 rounded-xl bg-gray-800/60 border border-gray-700 space-y-2">
       <audio ref={ref} src={url} preload="metadata" onLoadedMetadata={e => setDur(e.currentTarget.duration || 0)} onPlay={() => setOn(true)} onPause={() => setOn(false)}
@@ -7220,7 +7364,7 @@ function MusicTrimmer({ file, start, end, onStart, onEnd }: { file: File; start:
         </button>
         <div className="flex-1 min-w-0 text-xs text-gray-300">المقطع: {fmt(start)} ← {fmt(eff)} · المدة {(eff - start).toFixed(1)} ث</div>
       </div>
-      <div dir="ltr" className="relative h-2 rounded-full bg-gray-700 overflow-hidden">
+      <div dir="ltr" onPointerDown={dragWin} style={{ touchAction: 'none' }} className="relative h-9 rounded-xl bg-gray-700 overflow-hidden cursor-grab active:cursor-grabbing" aria-label="اسحب لتحديد المقطع">
         <div className="absolute inset-y-0 bg-gradient-to-r from-violet-500 to-cyan-400" style={{ left: `${(start / total) * 100}%`, width: `${((eff - start) / total) * 100}%` }} />
         {on && <div className="absolute inset-y-0 w-0.5 bg-white" style={{ left: `${(cur / total) * 100}%` }} />}
       </div>
@@ -7251,9 +7395,9 @@ function CreatePost({ currentUser, setPosts }: {
   const [cover, setCover] = useState<{ blob: Blob; url: string; custom: boolean } | null>(null);
   const [coverBusy, setCoverBusy] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [kind, setKind] = useState<'post' | 'reel' | 'video'>(pendingAudio ? 'reel' : 'post');
-  const [remoteMusic, setRemoteMusic] = useState<{ url: string; name: string } | null>(() => pendingAudio);
-  const [editOpen, setEditOpen] = useState(!!pendingAudio);
+  const [kind, setKind] = useState<'post' | 'reel' | 'video'>('post');
+  const [remoteMusic, setRemoteMusic] = useState<{ url: string; name: string } | null>(() => null);
+  const [editOpen, setEditOpen] = useState(false);
   useEffect(() => { pendingAudio = null; }, []);
   const [error, setError] = useState('');
   const [extra, setExtra] = useState<File[]>([]);
@@ -7508,30 +7652,6 @@ function CreatePost({ currentUser, setPosts }: {
             </div>
           </div>
         )}
-        {music && (
-          <div className="mb-4 flex items-center gap-3 p-2.5 rounded-xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25">
-            <span className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white shrink-0"><Music size={16} /></span>
-            <div className="min-w-0 flex-1"><div className="text-sm text-white truncate" dir="auto">{music.name}</div><div className="text-[11px] text-gray-400">موسيقى المنشور · {formatBytes(music.size)}</div></div>
-            <button onClick={() => setMusic(null)} className="p-1.5 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
-          </div>
-        )}
-        {music && <MusicTrimmer file={music} start={musicStart} end={musicEnd} onStart={setMusicStart} onEnd={setMusicEnd} />}
-        {!music && remoteMusic && (
-          <div className="mb-4 flex items-center gap-3 p-2.5 rounded-xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25">
-            <span className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white shrink-0"><Music size={16} /></span>
-            <div className="min-w-0 flex-1"><div className="text-sm text-white truncate" dir="auto">{remoteMusic.name}</div><div className="text-[11px] text-gray-400">صوت من ريل آخر</div></div>
-            <button onClick={() => setRemoteMusic(null)} className="p-1.5 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
-          </div>
-        )}
-        {editOpen && (
-          <div className="mb-3 rounded-xl bg-gray-800/50 border border-gray-700 p-3">
-            <div className="text-sm text-gray-300 mb-2">تعديلات</div>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => musicRef.current?.click()} className="px-3 py-2 rounded-full bg-gray-900 text-xs text-fuchsia-300 flex items-center gap-1.5"><Music size={14} /> موسيقى من الجهاز</button>
-              <span className="px-3 py-2 rounded-full bg-gray-900/60 text-xs text-gray-500">منصات الموسيقى · قريباً</span>
-            </div>
-          </div>
-        )}
         {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
         <div className="flex items-center justify-between border-t border-gray-800 pt-3">
           <div className="flex items-center gap-2">
@@ -7549,10 +7669,7 @@ function CreatePost({ currentUser, setPosts }: {
                 <Paperclip size={20} />
               </button>
             )}
-            <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (!f.type.startsWith('audio/') && !/\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(f.name)) { setError('اختر ملف صوت'); return; } if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); setMusicStart(0); setMusicEnd(0); }} />
-            <button onClick={() => setEditOpen(o => !o)} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${editOpen || music || remoteMusic ? 'text-fuchsia-300' : 'text-fuchsia-400'}`} aria-label="تعديلات">
-              <Sparkles size={20} />
-            </button>
+            
             <div className="relative">
               <button onClick={() => setEmojiOpen(o => !o)} className="p-2 text-yellow-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="إيموجي">
                 <Smile size={20} />

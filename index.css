@@ -238,3 +238,15 @@ html[dir='ltr'] .text-right { text-align: left; }
   [class*='backdrop-blur'] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 }
 .fixed { backface-visibility: hidden; }
+
+
+/* Phones and tablets: a post is full-width like Facebook (no card box, photo edge to edge) with a thick gap between posts. */
+@media (max-width: 1023px) {
+  html .post-card, html[data-theme] .post-card {
+    background: var(--color-gray-900);
+    border: 0;
+    border-bottom: 8px solid var(--color-gray-950);
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
