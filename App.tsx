@@ -1209,6 +1209,7 @@ const pathOfUrl = (u: string): string | null => {
   try { return decodeURIComponent(m[1]); } catch { return null; }
 };
 
+const musicPath = (path: string, size: number) => (size > 49 * 1024 * 1024 ? `b2/${path}` : path);
 const kanPath = (path: string, size: number) => (size > B2_MIN_MB * 1024 * 1024 ? `b2/${path}` : path);
 const isB2 = (p: string) => p.startsWith('b2/');
 
@@ -1276,8 +1277,8 @@ async function signPostsMedia(posts: Post[]): Promise<Post[]> {
   }));
 }
 async function signStories(list: StoryItem[]): Promise<StoryItem[]> {
-  const m = await signMediaUrls(list.map(s => s.url));
-  return list.map(s => ({ ...s, url: m.get(s.url) ?? s.url }));
+  const m = await signMediaUrls(list.flatMap(s => [s.url, s.extra?.m?.url]));
+  return list.map(s => ({ ...s, url: m.get(s.url) ?? s.url, extra: s.extra?.m ? { ...s.extra, m: { ...s.extra.m, url: m.get(s.extra.m.url) ?? s.extra.m.url } } : s.extra }));
 }
 
 function putBlob(url: string, blob: Blob, headers: Record<string, string>, onBytes: (n: number) => void): Promise<string> {
@@ -1440,15 +1441,17 @@ let recentChatActivity: () => Map<string, number> = () => new Map();
 let pendingAudio: { url: string; name: string } | null = null;
 let createFromAudio: () => void = () => undefined;
 let openReelHandler: (postId: string) => void = () => undefined;
-function openReel(postId: string) { openReelHandler(postId); }
+function openReel(postId: string) { stopPostMusic(); openReelHandler(postId); }
 // Only one piece of post music plays at a time.
 let playingAudio: HTMLAudioElement | null = null;
+function stopPostMusic() { if (playingAudio) { playingAudio.pause(); playingAudio = null; } }
+if (typeof document !== 'undefined') document.addEventListener('play', e => { if (e.target instanceof HTMLVideoElement) stopPostMusic(); }, true);
 let openPostHandler: (postId: string, commentId?: string) => void = () => undefined;
-function openPost(postId: string, commentId?: string) { openPostHandler(postId, commentId); }
+function openPost(postId: string, commentId?: string) { stopPostMusic(); openPostHandler(postId, commentId); }
 
 // Any screen can open a profile; the App draws it on top of the screen stack.
 let openProfileHandler: (userId: string) => void = () => undefined;
-function openUserProfile(userId: string) { openProfileHandler(userId); }
+function openUserProfile(userId: string) { stopPostMusic(); openProfileHandler(userId); }
 
 // Links that open inside the app (GitHub Pages friendly: the part after # is never sent to the server).
 function appBaseUrl() { return `${window.location.origin}${window.location.pathname}`; }
@@ -3767,7 +3770,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
       const url = kanPublicUrl(POST_MEDIA_BUCKET, path);
       let mObj: StoryExtra['m'];
       if (music) {
-        const mp = kanPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
+        const mp = musicPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
         if (mErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); setErr(`تعذّر رفع الموسيقى: ${(mErr as { message?: string }).message ?? ''}`); setBusy(false); return; }
         mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30 };
@@ -3785,7 +3788,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   return createPortal(
     <div dir={DIR} className="fixed inset-0 z-[140] bg-black flex flex-col">
       <div className="flex items-center justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
-        <button onClick={onClose} disabled={busy} className="p-2 rounded-full bg-white/10 text-white" aria-label="إغلاق"><X size={20} /></button>
+        <button onClick={onClose} disabled={busy} className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl ring-1 ring-white/25 shadow-lg shadow-violet-900/30 text-white active:scale-90 transition-transform" aria-label="إغلاق"><X size={20} /></button>
         <span className="text-white font-semibold text-sm">قصة جديدة</span>
         <span className="w-9" />
       </div>
@@ -3796,11 +3799,11 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
             : <img src={previewUrl} alt="" style={{ filter: STORY_FILTERS[flt].f }} className="w-full h-full object-contain" />}
           <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 to-transparent pointer-events-none z-[5]" />
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent pointer-events-none z-[5]" />
-          <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-black/45 ring-1 ring-white/15 text-white/90 text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />معاينة · 9:16</span>
+          <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
           <div className="absolute top-12 end-3 z-20 flex flex-col gap-2.5">
             {([['text', 'Aa', !!txt.trim()], ['sticker', '😀', stk.length > 0], ['music', '🎵', !!music], ['filter', '🎨', flt > 0], ['poll', '📊', !!extra.poll], ['ask', '❓', !!extra.ask]] as const).map(([k, ic, on]) => (
-              <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} className={`relative w-11 h-11 rounded-2xl flex items-center justify-center text-lg font-extrabold text-white active:scale-90 shadow-lg ${tool === k ? 'bg-gradient-to-br from-violet-600 to-cyan-500 ring-2 ring-white/70' : 'bg-black/45 ring-1 ring-white/25'}`}>{ic}{on && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-black" />}</button>
+              <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} className={`relative w-11 h-11 rounded-2xl flex items-center justify-center text-lg font-extrabold text-white active:scale-90 shadow-lg ${tool === k ? 'bg-gradient-to-br from-violet-600 to-cyan-500 ring-2 ring-white/70' : 'bg-white/10 backdrop-blur-xl ring-1 ring-white/25'}`}>{ic}{on && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-black" />}</button>
             ))}
           </div>
           <StoryOverlays extra={extra} onMove={(k, x, y) => { if (k === 'text') { setTxtX(x); setTxtY(y); } else if (k === 'poll') setPollPos({ x, y }); else setStkPos({ x, y }); }} />
@@ -3838,7 +3841,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
       </div>
       <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2 border-t border-white/10">
         <input value={caption} onChange={e => setCaption(e.target.value.slice(0, 300))} placeholder="أضف تعليقاً..." className="flex-1 px-4 py-2.5 bg-white/10 ring-1 ring-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none focus:ring-violet-400/60" />
-        <button onClick={() => void publish()} disabled={busy} className="px-5 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-70 active:scale-95 transition-transform">
+        <button onClick={() => void publish()} disabled={busy} className="px-6 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 shadow-lg shadow-cyan-500/30 ring-1 ring-white/25 text-white text-sm font-bold flex items-center gap-2 disabled:opacity-70 active:scale-95 transition-transform">
           {busy ? <><RefreshCw size={15} className="animate-spin" /> {pct}%</> : <><Send size={15} /> {sched ? 'جدولة' : 'نشر'}</>}
         </button>
       </div>
@@ -3866,7 +3869,7 @@ function StoryMusic({ m }: { m: { url: string; name: string; start: number; end:
   useEffect(() => { const a = ref.current; if (!a) return; a.currentTime = m.start; void a.play().catch(() => undefined); return () => a.pause(); }, [m.url, m.start]);
   return (
     <>
-      <audio ref={ref} src={rawUrl(m.url)} preload="auto" onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= m.end) { a.currentTime = m.start; void a.play().catch(() => undefined); } }} />
+      <audio ref={ref} src={m.url} preload="auto" onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= m.end) { a.currentTime = m.start; void a.play().catch(() => undefined); } }} />
       <div className="absolute top-16 inset-x-0 mx-auto w-fit max-w-[80%] px-3 py-1 rounded-full bg-black/50 text-white text-xs flex items-center gap-1.5 z-10 pointer-events-none kan-always-white"><Music size={12} /><span className="truncate" dir="auto">{m.name}</span></div>
     </>
   );
@@ -3877,7 +3880,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
   onSeen: (id: string) => void; onChanged: () => void; onClose: () => void; onAdd?: () => void;
 }) {
   useBackLayer(true, onClose);
-  useEffect(() => () => { window.dispatchEvent(new Event('kan-stories-changed')); }, []);
+  useEffect(() => { stopPostMusic(); return () => { window.dispatchEvent(new Event('kan-stories-changed')); }; }, []);
   const [gi, setGi] = useState(startGroup);
   const [si, setSi] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -4133,11 +4136,11 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
         )}
         {/* Visible navigation: RTL, so the right arrow goes back and the left arrow goes forward. */}
         {(gi > 0 || si > 0) && (
-          <button {...ignore} onClick={e => { e.stopPropagation(); prev(); }} aria-label="السابق" className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center active:scale-90 transition-transform">
+          <button {...ignore} onClick={e => { e.stopPropagation(); prev(); }} aria-label="السابق" className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-gradient-to-br from-violet-600/45 to-cyan-500/45 backdrop-blur-xl ring-1 ring-white/30 shadow-lg shadow-violet-900/40 text-white flex items-center justify-center active:scale-90 transition-transform">
             <ChevronRight size={22} />
           </button>
         )}
-        <button {...ignore} onClick={e => { e.stopPropagation(); next(); }} aria-label="التالي" className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center active:scale-90 transition-transform">
+        <button {...ignore} onClick={e => { e.stopPropagation(); next(); }} aria-label="التالي" className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-gradient-to-br from-violet-600/45 to-cyan-500/45 backdrop-blur-xl ring-1 ring-white/30 shadow-lg shadow-violet-900/40 text-white flex items-center justify-center active:scale-90 transition-transform">
           <ChevronLeft size={22} />
         </button>
         <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
@@ -4157,10 +4160,10 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
                 <div className="text-white/70 text-[11px]">{formatTime(story.createdAt)}</div>
               </div>
             </button>
-            {isMine && onAdd && <button onClick={onAdd} className="p-2 rounded-full bg-black/30 text-white" aria-label="إضافة قصة"><Plus size={20} /></button>}
-            {isMine && <button onClick={() => void remove()} className="p-2 rounded-full bg-black/30 text-white" aria-label="حذف القصة"><Trash2 size={18} /></button>}
-            {isMine && <button onClick={() => void togglePin()} className="p-2 rounded-full bg-black/30 text-white text-base leading-none" aria-label="هايلايت">{isPinned ? '⭐' : '☆'}</button>}
-            <button onClick={onClose} className="p-2 rounded-full bg-black/30 text-white" aria-label="إغلاق"><X size={20} /></button>
+            {isMine && onAdd && <button onClick={onAdd} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl ring-1 ring-white/25 shadow-lg shadow-violet-900/30 text-white active:scale-90 transition-transform" aria-label="إضافة قصة"><Plus size={20} /></button>}
+            {isMine && <button onClick={() => void remove()} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl ring-1 ring-white/25 shadow-lg shadow-violet-900/30 text-white active:scale-90 transition-transform" aria-label="حذف القصة"><Trash2 size={18} /></button>}
+            {isMine && <button onClick={() => void togglePin()} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl ring-1 ring-white/25 shadow-lg shadow-violet-900/30 text-white active:scale-90 transition-transform text-base leading-none" aria-label="هايلايت">{isPinned ? '⭐' : '☆'}</button>}
+            <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl ring-1 ring-white/25 shadow-lg shadow-violet-900/30 text-white active:scale-90 transition-transform" aria-label="إغلاق"><X size={20} /></button>
           </div>
         </div>
         <div className="absolute inset-x-0 bottom-0 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 px-4 bg-gradient-to-t from-black/70 to-transparent">
@@ -6414,7 +6417,7 @@ function EditPostSheet({ post, setPosts, onClose }: { post: Post; setPosts: Reac
       const oldRow = rows.find(x => (x.name ?? '').startsWith('kan-music|'));
       let musicItem: PubExtra | null = null;
       if (newMusic) {
-        const mp = kanPath(`${post.userId}/${crypto.randomUUID()}-music.${safeExt(newMusic.name)}`, newMusic.size);
+        const mp = musicPath(`${post.userId}/${crypto.randomUUID()}-music.${safeExt(newMusic.name)}`, newMusic.size);
         const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, newMusic, newMusic.type || 'audio/mpeg', '31536000');
         if (upErr) throw upErr;
         uploadedPath = mp;
@@ -7426,7 +7429,7 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
   const addMusic = async (job: PubJob, f: File) => {
     setBusy(job.id);
     try {
-      const mp = kanPath(`${userId}/${crypto.randomUUID()}-music.${safeExt(f.name)}`, f.size);
+      const mp = musicPath(`${userId}/${crypto.randomUUID()}-music.${safeExt(f.name)}`, f.size);
       const { error } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, f, f.type || 'audio/mpeg', '31536000');
       if (error) throw error;
       const item: PubExtra = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${f.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: f.size };
@@ -7659,7 +7662,7 @@ function CreatePost({ currentUser, setPosts }: {
         files.slice(offset).map((f, k) => ({ type: detectMediaKind(f), url: results[offset + k], name: f.name.slice(0, 200), size: f.size }));
       let musicItem: { type: 'file'; url: string; name: string; size: number; start?: number; end?: number } | null = null;
       if (music) {
-        const mp = kanPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
+        const mp = musicPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
         if (mErr) throw mErr;
         uploaded.push(mp);
