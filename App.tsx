@@ -653,7 +653,11 @@ async function loadConversations(me: string): Promise<Conversation[]> {
   const backgrounds = new Map<string, ChatBackground>();
   for (const b of bgRows) {
     const value = b.type === 'image' ? urls.get(imagePath(b.value)) : b.value;
-    if (value) backgrounds.set(b.conversation_id, { type: b.type, value, key: b.type === 'image' ? imagePath(b.value) : undefined });
+    if (value) {
+      const key = b.type === 'image' ? imagePath(b.value) : undefined;
+      backgrounds.set(b.conversation_id, { type: b.type, value, key });
+      if (key) void cachedBgUrl(key, value);
+    }
   }
   const byConversation = new Map<string, Message[]>();
   for (const r of rows) {
@@ -1717,52 +1721,75 @@ function aiErrorMessage(code: string): string {
   }
 }
 
-function KanAIModal({ messages, me, other, nameOf, onClose, onUseReply }: {
+function KanAIModal({ messages, me, other, nameOf, chatKey, onClose, onUseReply }: {
   messages: Message[];
   me: User;
   other: User;
   nameOf?: (id: string) => string;
+  chatKey: string;
   onClose: () => void;
   onUseReply: (text: string) => void;
 }) {
   useBackLayer(true, onClose);
+  type Turn = { role: 'user' | 'ai'; text: string; imgs?: number; sources?: AISource[] };
+  // Each chat has its own KIX thread. It lives on this device until the person clears it.
+  const storeKey = `kan_ai_${me.id}_${chatKey}`;
+  const [turns, setTurns] = useState<Turn[]>(() => { try { const r = JSON.parse(localStorage.getItem(storeKey) ?? '[]'); return Array.isArray(r) ? (r as Turn[]) : []; } catch { return []; } });
   const [query, setQuery] = useState('');
-  const [response, setResponse] = useState('');
+  const [imgs, setImgs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [sources, setSources] = useState<AISource[]>([]);
-  // Earlier questions and answers of this session, so follow-ups ("and tomorrow?") make sense.
-  const historyRef = useRef<{ q: string; a: string }[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => { try { localStorage.setItem(storeKey, JSON.stringify(turns.slice(-100))); } catch { /* ignore */ } }, [turns, storeKey]);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [turns, loading]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const addImages = async (files: FileList | null) => {
+    if (!files) return;
+    const out: string[] = [];
+    for (const f of Array.from(files).slice(0, Math.max(0, 4 - imgs.length))) {
+      if (!f.type.startsWith('image/')) continue;
+      const d = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('read')); r.readAsDataURL(f); });
+      try { out.push(await shrinkImage(d, 1280)); } catch { out.push(d); }
+    }
+    setImgs(p => [...p, ...out].slice(0, 4));
+  };
+
   const ask = async (text: string, mode?: AIMode) => {
     const q = text.trim();
-    if (!q || loading) return;
-    setQuery(q);
-    setLoading(true);
-    setError('');
-    setResponse('');
-    setSources([]);
-    setCopied(false);
+    if ((!q && imgs.length === 0) || loading) return;
+    const sendImgs = imgs;
+    const hist: { q: string; a: string }[] = [];
+    for (let i = 0; i < turns.length - 1; i++) if (turns[i].role === 'user' && turns[i + 1].role === 'ai') hist.push({ q: turns[i].text, a: turns[i + 1].text });
+    setTurns(t => [...t, { role: 'user', text: q || '📷', imgs: sendImgs.length || undefined }]);
+    setQuery(''); setImgs([]); setLoading(true); setError('');
     // The last 30 messages, oldest first. The server decides whether the question is about the chat.
     const context = messages.slice(-30)
       .map(m => ({ sender: nameOf ? nameOf(m.senderId) : m.senderId === me.id ? me.displayName : other.displayName, text: describeMessage(m) }))
       .filter(m => m.text);
+    const now = new Date();
     try {
       const { data, error: fnError } = await supabase.functions.invoke('kan-ai', {
         body: {
-          query: q,
+          query: q || 'حلّل الصورة وقولّي إيه فيها',
           mode,
           context,
-          history: historyRef.current.slice(-4),
+          history: hist.slice(-8),
+          images: sendImgs,
           me: me.displayName,
           other: other.displayName,
+          now: now.toISOString(),
+          today: now.toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Africa/Cairo' }),
+          timezone: 'Africa/Cairo',
+          platform: 'KIX',
+          creator: 'Khaled Sharaf',
+          instructions: 'You are KIX, the assistant of the KIX platform, created by Khaled Sharaf. Be exact with numbers, dates and facts. Use live web search for anything that can change (news, prices, scores, dates) and never guess; say so if you are not sure. If images are attached, look at them carefully and do what the user asks. Answer in the language of the question.',
         },
       });
       if (fnError) {
@@ -1775,9 +1802,8 @@ function KanAIModal({ messages, me, other, nameOf, onClose, onUseReply }: {
       } else {
         const d = data as { response?: string; sources?: AISource[] } | null;
         const answer = (d?.response ?? '').trim() || '—';
-        setResponse(answer);
-        setSources(Array.isArray(d?.sources) ? d!.sources!.filter(x => /^https?:\/\//.test(x.url)).slice(0, 4) : []);
-        historyRef.current = [...historyRef.current, { q, a: answer }].slice(-4);
+        const sources = Array.isArray(d?.sources) ? d!.sources!.filter(x => /^https?:\/\//.test(x.url)).slice(0, 4) : undefined;
+        setTurns(t => [...t, { role: 'ai', text: answer, sources }]);
       }
     } catch {
       setError(aiErrorMessage(''));
@@ -1787,79 +1813,80 @@ function KanAIModal({ messages, me, other, nameOf, onClose, onUseReply }: {
   };
 
   return createPortal(
-    <div dir={DIR} className="fixed inset-0 z-[120] flex items-start justify-center pt-10 sm:pt-24 px-3">
+    <div dir={DIR} className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center sm:p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[85dvh] overflow-y-auto bg-gray-900 border border-white/10 rounded-2xl shadow-2xl shadow-violet-500/10">
-        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-t-2xl">
+      <div className="relative w-full sm:max-w-3xl h-[92dvh] sm:h-[88dvh] flex flex-col bg-gray-900 border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl shadow-violet-500/10 overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-gradient-to-r from-violet-600 to-cyan-500 shrink-0">
           <div className="flex items-center gap-3">
             <img src={LOGO_URL} alt="" className="w-10 h-10 rounded-full bg-white/10" />
             <h2 className="font-bold flex items-center gap-1.5"><Sparkles size={16} className="text-violet-300" /><span className="kan-gradient-text">اسأل KIX</span></h2>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full text-white" aria-label="إغلاق"><X size={20} /></button>
-        </div>
-
-        <div className="p-4">
-          <div className="flex items-center gap-3 bg-gray-800 rounded-full px-5 py-3 border border-gray-700 focus-within:border-violet-500">
-            <Search size={18} className="text-gray-500 shrink-0" />
-            <input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && void ask(query)}
-              placeholder="اسأل KIX أي سؤال أو اطلب منه يقرأ الشات..."
-              className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 min-w-0"
-              autoFocus
-            />
-            {loading
-              ? <div className="w-5 h-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin shrink-0" />
-              : <button onClick={() => void ask(query)} className="p-1.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white shrink-0" aria-label="إرسال"><Send size={14} /></button>}
+          <div className="flex items-center gap-1">
+            {turns.length > 0 && <button onClick={() => { if (window.confirm('مسح محادثة KIX الخاصة بالشات ده؟')) { setTurns([]); setError(''); } }} className="p-2 hover:bg-white/20 rounded-full text-white" aria-label="مسح المحادثة"><Trash2 size={18} /></button>}
+            <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full text-white" aria-label="إغلاق"><X size={20} /></button>
           </div>
         </div>
 
-        {error && <div className="px-4 pb-4"><div className="rounded-xl p-3 bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</div></div>}
-
-        {response && (
-          <div className="px-4 pb-4">
-            <div className="bg-gray-800/70 rounded-xl p-4 border border-white/10">
-              <p className="text-gray-100 whitespace-pre-wrap leading-relaxed">{response}</p>
-              {sources.length > 0 && (
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+          {turns.length === 0 && !loading && (
+            <div className="text-center text-gray-400 text-sm pt-6 space-y-4">
+              <p>اسألني أي حاجة، أو ابعتلي صورة أو أكتر وقولّي عايز إيه منها.</p>
+              <div className="flex gap-2 flex-wrap justify-center">
+                {AI_QUICK.map(a => (
+                  <button key={a.label} onClick={() => void ask(a.query, a.mode)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-white/5 rounded-full text-sm text-gray-200">{a.label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {turns.map((t, i) => t.role === 'user' ? (
+            <div key={i} className="ms-auto max-w-[85%] rounded-2xl rounded-se-sm px-4 py-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm whitespace-pre-wrap" dir="auto">
+              {t.imgs ? <div className="text-xs opacity-80 mb-1">📷 {t.imgs} صورة</div> : null}{t.text}
+            </div>
+          ) : (
+            <div key={i} className="me-auto max-w-[92%] rounded-2xl rounded-ss-sm bg-gray-800/80 border border-white/10 p-4">
+              <p className="text-gray-100 whitespace-pre-wrap leading-relaxed" dir="auto">{t.text}</p>
+              {t.sources && t.sources.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-white/10 flex flex-wrap gap-1.5">
-                  {sources.map(src => (
-                    <a key={src.url} href={src.url} target="_blank" rel="noopener noreferrer"
-                      className="max-w-full truncate px-2.5 py-1 rounded-full bg-gray-700/70 hover:bg-gray-600 text-[11px] text-cyan-300">
-                      🔗 {src.title}
-                    </a>
+                  {t.sources.map(src => (
+                    <a key={src.url} href={src.url} target="_blank" rel="noopener noreferrer" className="max-w-full truncate px-2.5 py-1 rounded-full bg-gray-700/70 hover:bg-gray-600 text-[11px] text-cyan-300">🔗 {src.title}</a>
                   ))}
                 </div>
               )}
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/10">
-                <button
-                  onClick={() => { void navigator.clipboard?.writeText(response); setCopied(true); }}
-                  className="px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-xs text-gray-100 flex items-center gap-1.5"
-                >
-                  <Copy size={13} /> {copied ? 'تم النسخ' : 'نسخ'}
-                </button>
-                <button
-                  onClick={() => onUseReply(response)}
-                  className="px-3 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-xs text-white flex items-center gap-1.5"
-                >
-                  <Send size={13} /> استخدمه كرسالة
-                </button>
+                <button onClick={() => void navigator.clipboard?.writeText(t.text)} className="px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-xs text-gray-100 flex items-center gap-1.5"><Copy size={13} /> نسخ</button>
+                <button onClick={() => onUseReply(t.text)} className="px-3 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-xs text-white flex items-center gap-1.5"><Send size={13} /> استخدمه كرسالة</button>
               </div>
             </div>
-          </div>
-        )}
-
-        <div className="px-4 pb-4 flex gap-2 flex-wrap">
-          {AI_QUICK.map(a => (
-            <button
-              key={a.label}
-              onClick={() => void ask(a.query, a.mode)}
-              disabled={loading}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-white/5 rounded-full text-sm text-gray-200 disabled:opacity-60"
-            >
-              {a.label}
-            </button>
           ))}
+          {loading && <div className="me-auto rounded-2xl bg-gray-800/80 border border-white/10 px-4 py-3 flex items-center gap-2 text-gray-400 text-sm"><div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />بيفكّر...</div>}
+          {error && <div className="rounded-xl p-3 bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</div>}
+          <div ref={endRef} />
+        </div>
+
+        <div className="p-3 border-t border-white/10 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {imgs.length > 0 && (
+            <div className="flex gap-2 mb-2 overflow-x-auto">
+              {imgs.map((u, i) => (
+                <div key={i} className="relative shrink-0">
+                  <img src={u} alt="" className="w-16 h-16 rounded-xl object-cover" />
+                  <button onClick={() => setImgs(p => p.filter((_, k) => k !== i))} className="absolute -top-1.5 -end-1.5 w-5 h-5 rounded-full bg-black/80 text-white flex items-center justify-center" aria-label="إزالة"><X size={12} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2 bg-gray-800 rounded-full ps-2 pe-3 py-2 border border-gray-700 focus-within:border-violet-500">
+            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={e => { void addImages(e.target.files); e.target.value = ''; }} />
+            <button onClick={() => fileRef.current?.click()} disabled={imgs.length >= 4} className="p-2 rounded-full text-gray-300 hover:bg-white/10 disabled:opacity-40 shrink-0" aria-label="إرفاق صورة"><ImageIcon size={18} /></button>
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && void ask(query)}
+              placeholder="اسأل KIX أي سؤال أو ابعتله صور..."
+              className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 min-w-0"
+              autoFocus
+            />
+            <button onClick={() => void ask(query)} disabled={loading || (!query.trim() && imgs.length === 0)} className="p-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white shrink-0 disabled:opacity-50" aria-label="إرسال"><Send size={14} /></button>
+          </div>
         </div>
       </div>
     </div>,
@@ -2846,6 +2873,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             me={currentUser}
             other={{ ...currentUser, id: group.id, displayName: group.name, avatar: group.avatar }}
             nameOf={id => person(id)?.displayName ?? 'مستخدم'}
+            chatKey={`g_${group.id}`}
             onClose={() => setAiOpen(false)}
             onUseReply={t => { setText(t); setAiOpen(false); window.setTimeout(() => inputRef.current?.focus(), 50); }}
           />
@@ -3264,7 +3292,6 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
   const [openAt, setOpenAt] = useState<number | null>(null);
   const [composer, setComposer] = useState<File | null>(null);
   const [addMenu, setAddMenu] = useState(false);
-  const camRef = useRef<HTMLInputElement>(null);
   const [textComposer, setTextComposer] = useState(false);
   const [hint, setHint] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -3319,7 +3346,6 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
         <h3 className="text-sm font-semibold text-gray-200">{t('القصص')}</h3>
       </div>
       <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={pick} />
-      <input ref={camRef} type="file" accept="image/*,video/*" capture="environment" className="hidden" onChange={pick} />
       <div className="flex gap-3.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
         <button onClick={() => (mine ? setOpenAt(0) : setAddMenu(true))} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
           <div className="relative">
@@ -3360,7 +3386,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
             <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mb-4" />
             <h4 className="text-center text-base font-bold text-white mb-4">قصة جديدة</h4>
             <div className="grid grid-cols-3 gap-3">
-              {([['📸', 'الكاميرا', 'from-violet-600 to-fuchsia-500', () => camRef.current?.click()], ['🖼️', 'المعرض', 'from-cyan-500 to-violet-600', () => fileRef.current?.click()], ['Aa', 'نص', 'from-amber-500 to-rose-500', () => setTextComposer(true)]] as const).map(([ic, lb, g, fn]) => (
+              {([['🖼️', 'المعرض', 'from-cyan-500 to-violet-600', () => fileRef.current?.click()], ['Aa', 'نص', 'from-amber-500 to-rose-500', () => setTextComposer(true)]] as const).map(([ic, lb, g, fn]) => (
                 <button key={lb} onClick={() => { setAddMenu(false); fn(); }} className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-white/5 ring-1 ring-white/10 active:scale-95">
                   <span className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${g} flex items-center justify-center text-2xl font-extrabold text-white shadow-lg`}>{ic}</span>
                   <span className="text-sm font-semibold text-white">{lb}</span>
@@ -3371,7 +3397,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
         </div>,
         document.body,
       )}
-      {textComposer && <TextStoryComposer currentUser={currentUser} onClose={() => setTextComposer(false)} onDone={() => { setTextComposer(false); void load(); }} />}
+      {textComposer && <TextStoryComposer onClose={() => setTextComposer(false)} onNext={f => { setTextComposer(false); setComposer(f); }} />}
       {composer && <StoryComposer file={composer} currentUser={currentUser} onClose={() => setComposer(null)} onDone={() => { setComposer(null); void load(); }} />}
       {openAt !== null && viewerGroups[openAt] && (
         <StoryViewer
@@ -3598,7 +3624,32 @@ function ProfileStoryAvatar({ user, currentUser, users }: { user: User; currentU
   return <div className="relative shrink-0"><ProfileStoryAvatarBase user={user} currentUser={currentUser} users={users} /><HighlightBadge user={user} currentUser={currentUser} users={users} /></div>;
 }
 
-function TextStoryComposer({ currentUser, onClose, onDone }: { currentUser: User; onClose: () => void; onDone: () => void }) {
+async function renderTextStory(text: string, bg: number): Promise<File> {
+  const W = 1080, H = 1920;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('canvas unavailable');
+  const cols = STORY_BGS[bg].match(/#[0-9a-fA-F]{6}/g) ?? ['#6d28d9', '#06b6d4'];
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  cols.forEach((col, i) => g.addColorStop(cols.length > 1 ? i / (cols.length - 1) : 0, col));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.direction = /[\u0600-\u06FF]/.test(text) ? 'rtl' : 'ltr';
+  ctx.font = '800 84px system-ui, "Segoe UI", Tahoma, sans-serif';
+  const maxW = W - 160; const lines: string[] = [];
+  for (const para of text.split('\n')) {
+    let cur = '';
+    for (const w of para.split(/\s+/).filter(Boolean)) { const t = cur ? `${cur} ${w}` : w; if (cur && ctx.measureText(t).width > maxW) { lines.push(cur); cur = w; } else cur = t; }
+    lines.push(cur);
+  }
+  const lh = 120; const y0 = H / 2 - ((lines.length - 1) * lh) / 2;
+  lines.forEach((ln, i) => ctx.fillText(ln, W / 2, y0 + i * lh));
+  const blob = await new Promise<Blob | null>(r => c.toBlob(r, 'image/jpeg', 0.92));
+  if (!blob) throw new Error('canvas export failed');
+  return new File([blob], 'text-story.jpg', { type: 'image/jpeg' });
+}
+
+function TextStoryComposer({ onClose, onNext }: { onClose: () => void; onNext: (f: File) => void }) {
   useBackLayer(true, onClose);
   const [text, setText] = useState('');
   const [bg, setBg] = useState(0);
@@ -3607,17 +3658,14 @@ function TextStoryComposer({ currentUser, onClose, onDone }: { currentUser: User
   const publish = async () => {
     if (busy || !text.trim()) return;
     setBusy(true);
-    const { error } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: '', media_type: 'image', caption: text.trim().slice(0, 300), extra: { bg }, audience: 'all' });
-    if (error) { console.error(error); setErr('تعذّر نشر القصة، حاول مرة أخرى'); setBusy(false); return; }
-    notifyStoriesChanged();
-    onDone();
+    try { onNext(await renderTextStory(text.trim(), bg)); } catch (e) { console.error(e); setErr('تعذّر تجهيز النص، حاول مرة أخرى'); setBusy(false); }
   };
   return createPortal(
     <div dir={DIR} className="kan-always-white fixed inset-0 z-[140] flex flex-col" style={{ background: STORY_BGS[bg] }}>
       <div className="flex items-center justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
         <button onClick={onClose} disabled={busy} className="p-2 rounded-full bg-black/25 text-white" aria-label="إغلاق"><X size={20} /></button>
         <button onClick={() => setBg(b => (b + 1) % STORY_BGS.length)} className="px-4 py-2 rounded-full bg-black/25 text-white text-sm font-semibold">🎨 الخلفية</button>
-        <button onClick={() => void publish()} disabled={busy || !text.trim()} className="px-5 py-2 rounded-full bg-white text-black text-sm font-bold disabled:opacity-50 active:scale-95 transition-transform">{busy ? '...' : 'نشر'}</button>
+        <button onClick={() => void publish()} disabled={busy || !text.trim()} className="px-5 py-2 rounded-full bg-white text-black text-sm font-bold disabled:opacity-50 active:scale-95 transition-transform">{busy ? '...' : 'التالي'}</button>
       </div>
       <div className="flex-1 min-h-0 flex items-center justify-center p-8">
         <textarea autoFocus value={text} onChange={e => setText(e.target.value.slice(0, 300))} placeholder="اكتب شيئاً..." dir="auto" className="w-full h-full max-h-[60vh] resize-none bg-transparent text-white text-3xl font-extrabold leading-snug text-center placeholder-white/60 focus:outline-none" style={{ boxShadow: 'none' }} />
@@ -3687,9 +3735,9 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
       const url = kanPublicUrl(POST_MEDIA_BUCKET, path);
       let mObj: StoryExtra['m'];
       if (music) {
-        const mp = kanPath(`${currentUser.id}/story-music-${crypto.randomUUID()}.${safeExt(music.name)}`, music.size);
+        const mp = kanPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
-        if (mErr) throw mErr;
+        if (mErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); setErr(`تعذّر رفع الموسيقى: ${(mErr as { message?: string }).message ?? ''}`); setBusy(false); return; }
         mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30 };
       }
       const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
@@ -3698,7 +3746,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
       onDone();
     } catch (e) {
       console.error(e);
-      setErr('تعذّر نشر القصة، حاول مرة أخرى');
+      setErr(`تعذّر نشر القصة: ${(e as { message?: string })?.message ?? 'حاول مرة أخرى'}`);
       setBusy(false);
     }
   };
@@ -5153,6 +5201,7 @@ export default function App() {
             <motion.div key="search" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <SearchTab
                 users={users}
+                posts={posts}
                 currentUser={currentUser}
                 setUsers={setUsers}
                 onOpenProfile={openProfile}
@@ -5164,7 +5213,7 @@ export default function App() {
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'reels' && (
-            <motion.div key="reels" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
+            <motion.div key="reels" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: 'easeOut' }}>
               <ReelsTab startId={reelStart} onBack={() => { setReelStart(null); goTab('feed'); }} posts={posts} setPosts={setPosts} users={users} setUsers={setUsers} currentUser={currentUser} onOpenProfile={openProfile} onCreate={() => goTab('create')} onLoadPage={loadPostsPage} />
             </motion.div>
           )}
@@ -5541,7 +5590,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
 }) {
   const [mode, setMode] = useState<'all' | 'following' | 'files'>('all');
   const sentinel = useRef<HTMLDivElement>(null);
-  const sorted = posts.filter(p => p.timestamp >= frontier).sort((a, b) => b.timestamp - a.timestamp);
+  const sorted = rankByInterests(posts.filter(p => p.timestamp >= frontier).sort((a, b) => b.timestamp - a.timestamp), currentUser.id);
   const displayPosts = mode === 'all'
     ? sorted
     : mode === 'files'
@@ -6816,10 +6865,11 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   onLoadPage: (opts: FetchPostsOptions) => Promise<Post[]>;
 }) {
   const [muted, setMuted] = useState(true);
-  const [autoNext, setAutoNext] = useState(() => { try { return localStorage.getItem('kan_reel_auto') === '1'; } catch { return false; } });
+  const autoNext = true;
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
-  const reels = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
+  const reelsByTime = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
+  const reels = rankByInterests(reelsByTime, currentUser.id);
   const commentPost = commentsFor ? posts.find(p => p.id === commentsFor) : undefined;
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
@@ -6827,7 +6877,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
     if (loadingRef.current || !hasMore) return;
     loadingRef.current = true;
     try {
-      const oldest = reels[reels.length - 1];
+      const oldest = reelsByTime[reelsByTime.length - 1];
       const page = await onLoadPage({ kind: 'reels', before: oldest?.cursor, limit: 8 });
       if (page.length < 8) setHasMore(false);
     } catch (e) {
@@ -6902,7 +6952,6 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
         <button onClick={onBack} className="pointer-events-auto p-2 rounded-full bg-black/40 text-white active:scale-90 transition-transform" aria-label="رجوع"><ChevronRight size={22} /></button>
         <span className="mx-3 text-lg font-extrabold tracking-[0.25em] kan-gradient-text">KIX</span>
         <span className="text-xs text-white/80 font-medium">ريلز</span>
-        <button onClick={() => setAutoNext(a => { const n = !a; try { localStorage.setItem('kan_reel_auto', n ? '1' : '0'); } catch { /* ignore */ } return n; })} className="pointer-events-auto ms-auto px-3 py-1.5 rounded-full bg-black/40 text-white text-xs font-semibold active:scale-95">{autoNext ? '⏭ تلقائي' : '🔁 تكرار'}</button>
       </div>
       {commentPost && (
         <ReelComments post={commentPost} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} onClose={() => setCommentsFor(null)} />
@@ -7686,18 +7735,83 @@ function CreatePost({ currentUser, setPosts }: {
 }
 
 // ============ Search Tab ============
-function SearchTab({ users, currentUser, setUsers, onStartChat, onOpenProfile }: {
+// ============ Interests (what a person searches for is shown to them more) ============
+type InterestMap = Record<string, { w: number; t: number }>;
+const interestKey = (uid: string) => `kan_interests_${uid}`;
+const interestTokens = (text: string) => Array.from(new Set(text.toLowerCase().split(/[\s,.;:!?()"'#،؟]+/).filter(w => w.length >= 3))).slice(0, 6);
+function readInterests(uid: string): InterestMap {
+  try { const r = JSON.parse(localStorage.getItem(interestKey(uid)) ?? '{}'); return r && typeof r === 'object' ? (r as InterestMap) : {}; } catch { return {}; }
+}
+function bumpInterests(uid: string, text: string, amount = 2) {
+  const now = Date.now();
+  const cur = readInterests(uid);
+  for (const k of interestTokens(text)) {
+    const old = cur[k];
+    const decayed = old ? old.w * Math.pow(0.5, (now - old.t) / (3 * 864e5)) : 0;
+    cur[k] = { w: Math.min(decayed + amount, 20), t: now };
+  }
+  const top = Object.entries(cur).sort((a, b) => b[1].w - a[1].w).slice(0, 40);
+  try { localStorage.setItem(interestKey(uid), JSON.stringify(Object.fromEntries(top))); } catch { /* ignore */ }
+}
+// Takes posts newest-first and lifts the ones that match the person's interests; everything else keeps its order.
+function rankByInterests(list: Post[], uid: string): Post[] {
+  const hour = Math.floor(Date.now() / 36e5) * 36e5;
+  const entries = Object.entries(readInterests(uid))
+    .map(([k, v]) => [k, v.w * Math.pow(0.5, (hour - v.t) / (3 * 864e5))] as const)
+    .filter(([, w]) => w >= 0.3);
+  if (entries.length === 0) return list;
+  return list
+    .map((p, i) => {
+      const hay = `${p.text} ${p.title ?? ''} ${p.media?.name ?? ''}`.toLowerCase();
+      let b = 0;
+      for (const [k, w] of entries) if (hay.includes(k)) b += w;
+      return { p, s: -i + Math.min(b, 12) * 4 };
+    })
+    .sort((a, b) => b.s - a.s)
+    .map(x => x.p);
+}
+
+function SearchTab({ users, posts, currentUser, setUsers, onStartChat, onOpenProfile }: {
   users: User[];
+  posts: Post[];
   currentUser: User;
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   onStartChat: (userId: string) => void;
   onOpenProfile: (userId: string) => void;
 }) {
   const [query, setQuery] = useState('');
-  const filtered = users.filter(u =>
+  const [filter, setFilter] = useState<'all' | 'people' | 'posts' | 'reels' | 'videos'>('all');
+  const [found, setFound] = useState<Post[]>([]);
+  const [searching, setSearching] = useState(false);
+  const term = query.trim();
+  const lq = term.toLowerCase();
+  const filtered = lq.length === 0 ? [] : users.filter(u =>
     u.id !== currentUser.id &&
-    (u.username.toLowerCase().includes(query.toLowerCase()) || u.displayName.toLowerCase().includes(query.toLowerCase()))
+    (u.username.toLowerCase().includes(lq) || u.displayName.toLowerCase().includes(lq) || (u.bio ?? '').toLowerCase().includes(lq))
   );
+  // Posts, reels and videos: what is already loaded shows at once, then the server adds the rest.
+  useEffect(() => {
+    if (term.length < 2) { setFound([]); setSearching(false); return; }
+    const q = term.toLowerCase();
+    setFound(posts.filter(p => `${p.text} ${p.title ?? ''}`.toLowerCase().includes(q)).sort((a, b) => b.timestamp - a.timestamp));
+    let off = false;
+    setSearching(true);
+    const clean = term.replace(/[%_,()*\\]/g, ' ').trim();
+    const h = window.setTimeout(async () => {
+      const { data, error } = await supabase.from('posts').select(POST_SELECT).or(`text.ilike.%${clean}%,title.ilike.%${clean}%`).order('created_at', { ascending: false }).limit(40);
+      if (off) return;
+      if (!error && data) {
+        const rows = (data as unknown as PostRow[]).map(rowToPost);
+        setFound(rows);
+        if (rows.length > 0) bumpInterests(currentUser.id, term, 2);
+      }
+      setSearching(false);
+    }, 700);
+    return () => { off = true; window.clearTimeout(h); };
+  }, [term]); // eslint-disable-line react-hooks/exhaustive-deps
+  const isReelP = (p: Post) => p.media?.type === 'video' && !p.isVideo;
+  const postResults = filter === 'people' ? [] : found.filter(p => filter === 'reels' ? isReelP(p) : filter === 'videos' ? !!p.isVideo : filter === 'posts' ? (!isReelP(p) && !p.isVideo) : true).slice(0, 30);
+  const showPeople = filter === 'all' || filter === 'people';
 
   const toggleFollow = makeToggleFollow(currentUser, setUsers);
 
@@ -7705,16 +7819,21 @@ function SearchTab({ users, currentUser, setUsers, onStartChat, onOpenProfile }:
     <div className="px-4 py-4">
       <div className="relative mb-6">
         <Search size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500" />
-        <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('ابحث عن أشخاص...')} className="w-full pr-12 pl-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-violet-500" />
+        <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && term.length >= 2) bumpInterests(currentUser.id, term, 2); }} placeholder={t('ابحث عن أشخاص، منشورات، ريلز، فيديوهات، #هاشتاج...')} className="w-full pr-12 pl-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-violet-500" />
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-3 -mt-3">
+        {([['all', 'الكل'], ['people', 'أشخاص'], ['posts', 'منشورات'], ['reels', 'ريلز'], ['videos', 'فيديوهات']] as const).map(([k, lb]) => (
+          <button key={k} onClick={() => setFilter(k)} className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium ${filter === k ? 'bg-violet-600 text-white' : 'bg-gray-900 border border-gray-800 text-gray-300'}`}>{lb}</button>
+        ))}
       </div>
       <div className="space-y-3">
-        {filtered.length === 0 && (
+        {(!showPeople || filtered.length === 0) && postResults.length === 0 && (
           <div className="text-center py-8">
             <Users size={48} className="mx-auto text-gray-600 mb-3" />
-            <p className="text-gray-400">{query ? 'لا توجد نتائج' : 'ابدأ بالبحث عن أشخاص'}</p>
+            <p className="text-gray-400">{term ? (searching ? 'بندوّر...' : 'لا توجد نتائج') : 'ابحث عن أي حاجة: أشخاص، منشورات، ريلز، فيديوهات أو هاشتاج'}</p>
           </div>
         )}
-        {filtered.map(user => {
+        {showPeople && filtered.slice(0, filter === 'all' ? 5 : 30).map(user => {
           const isFollowing = currentUser.following.includes(user.id);
           return (
             <motion.div key={user.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl">
@@ -7737,6 +7856,10 @@ function SearchTab({ users, currentUser, setUsers, onStartChat, onOpenProfile }:
             </motion.div>
           );
         })}
+        {postResults.map(post => (
+          <PostCard key={post.id} post={post} setPosts={setFound} users={users} currentUser={currentUser} onOpenProfile={onOpenProfile} />
+        ))}
+        {searching && postResults.length > 0 && <p className="text-center text-xs text-gray-500 py-2">بندوّر أكتر...</p>}
       </div>
     </div>
   );
@@ -8686,14 +8809,17 @@ function VoicePlayer({ url, knownDuration = 0 }: { url: string; knownDuration?: 
 }
 
 // The chat wallpaper is kept on the device, so it shows at once instead of loading in front of you every time.
+const bgMem = new Map<string, string>();
 async function cachedBgUrl(key: string, url: string): Promise<string> {
+  const mem = bgMem.get(key);
+  if (mem) return mem;
   try {
     const c = await caches.open('kan-bg');
     const req = new Request(`https://kan.local/bg/${encodeURIComponent(key)}`);
     const hit = await c.match(req);
-    if (hit) return URL.createObjectURL(await hit.blob());
+    if (hit) { const u = URL.createObjectURL(await hit.blob()); bgMem.set(key, u); return u; }
     const r = await fetch(url);
-    if (r.ok) { await c.put(req, r.clone()); return URL.createObjectURL(await r.blob()); }
+    if (r.ok) { await c.put(req, r.clone()); const u = URL.createObjectURL(await r.blob()); bgMem.set(key, u); return u; }
   } catch { /* fall back to the link */ }
   return url;
 }
@@ -9121,15 +9247,11 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
   const messages = conversation?.messages || [];
   const bg = conversation?.background;
-  const [bgSrc, setBgSrc] = useState<string | null>(null);
+  const [bgSrc, setBgSrc] = useState<string | null>(() => (bg?.type === 'image' ? ((bg.key && bgMem.get(bg.key)) || bg.value) : null));
   useEffect(() => {
-    let off = false;
-    setBgSrc(null);
-    if (bg?.type === 'image') {
-      if (bg.key) void cachedBgUrl(bg.key, bg.value).then(u => { if (!off) setBgSrc(u); });
-      else setBgSrc(bg.value);
-    }
-    return () => { off = true; };
+    if (bg?.type !== 'image') { setBgSrc(null); return; }
+    setBgSrc((bg.key && bgMem.get(bg.key)) || bg.value);
+    if (bg.key) void cachedBgUrl(bg.key, bg.value);
   }, [bg?.type, bg?.key ?? bg?.value]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // "Typing..." indicator: a lightweight live signal between the two people (nothing is stored).
@@ -9882,6 +10004,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           messages={messages}
           me={currentUser}
           other={chatUser}
+          chatKey={conversation?.id ?? chatUser.id}
           onClose={() => setAiOpen(false)}
           onUseReply={t => { setText(t); setAiOpen(false); window.setTimeout(() => inputRef.current?.focus(), 50); }}
         />
