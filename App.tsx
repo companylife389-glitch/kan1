@@ -1789,7 +1789,7 @@ function KanAIModal({ messages, me, other, nameOf, chatKey, onClose, onUseReply 
           timezone: 'Africa/Cairo',
           platform: 'KIX',
           creator: 'Khaled Sharaf',
-          instructions: 'You are KIX, the assistant of the KIX platform, created by Khaled Sharaf. Be exact with numbers, dates and facts. Use live web search for anything that can change (news, prices, scores, dates) and never guess; say so if you are not sure. If images are attached, look at them carefully and do what the user asks. Answer in the language of the question.',
+          instructions: 'Speak naturally and freely in the user language, as long or as short as the question deserves, in your own style. When images are attached, inspect them carefully (objects, visible text, people, colors, place, numbers) and answer exactly what was asked. You are KIX, the assistant of the KIX platform, created by Khaled Sharaf. Be exact with numbers, dates and facts. Use live web search for anything that can change (news, prices, scores, dates) and never guess; say so if you are not sure. If images are attached, look at them carefully and do what the user asks. Answer in the language of the question.',
         },
       });
       if (fnError) {
@@ -2466,6 +2466,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const [error, setError] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -2659,6 +2660,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
         <div ref={scrollRef} onScroll={onScroll} onWheel={onUserScroll} onTouchMove={onUserScroll} className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" onClick={() => { setActiveMsgId(null); setReactingTo(null); }}>
           {group.messages.length === 0 && <p className="text-center text-gray-500 text-sm py-12">ابدأ المحادثة في المجموعة 👋</p>}
           {group.messages.map((m, i) => {
+            if (parseVote(m.text)) return null;
             if (m.isSystem) {
               return <div key={m.id} className="text-center"><span className="inline-block px-3 py-1 rounded-full bg-gray-800/80 text-[11px] text-gray-400">{person(m.senderId)?.displayName ?? 'مستخدم'} {m.text}</span></div>;
             }
@@ -2722,7 +2724,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                         <Download size={16} className="shrink-0" />
                       </button>
                     )}
-                    {m.text && <p className="whitespace-pre-wrap" dir="auto"><Linkified text={m.text} /></p>}
+                    {m.text && (parsePoll(m.text) ? <ChatPoll id={m.id} text={m.text} all={group.messages} meId={currentUser.id} onVote={i => void send({ text: VOTE_TAG + JSON.stringify({ p: m.id, i }) })} /> : <p className="whitespace-pre-wrap" dir="auto"><Linkified text={m.text} /></p>)}
                   </div>
                   <span className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
                     {formatTime(m.timestamp)}{m.editedAt ? ' · معدّلة' : ''}
@@ -2808,8 +2810,10 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
               </div>
             )}
             <AnimatePresence>
+              {pollOpen && <PollComposer onClose={() => setPollOpen(false)} onSend={(q, o) => { setPollOpen(false); void send({ text: POLL_TAG + JSON.stringify({ q, o }) }); }} />}
               {toolsOpen && (
                 <motion.div initial={{ opacity: 0, y: 10, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.94 }} transition={{ type: 'spring', damping: 22, stiffness: 420 }} className="absolute bottom-full right-2 mb-2 z-20 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur border border-white/10 shadow-xl origin-bottom-right">
+                  <button onClick={() => { setPollOpen(true); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs active:scale-95">📊 استطلاع</button>
                   <button onClick={() => { fileRef.current?.click(); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95"><Paperclip size={16} /> صورة / فيديو / ملف</button>
                   <button
                     onPointerDown={e => e.preventDefault()}
@@ -3386,7 +3390,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
             <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mb-4" />
             <h4 className="text-center text-base font-bold text-white mb-4">قصة جديدة</h4>
             <div className="grid grid-cols-3 gap-3">
-              {([['🖼️', 'المعرض', 'from-cyan-500 to-violet-600', () => fileRef.current?.click()], ['Aa', 'نص', 'from-amber-500 to-rose-500', () => setTextComposer(true)]] as const).map(([ic, lb, g, fn]) => (
+              {([['🖼️', 'المعرض', 'from-cyan-500 to-violet-600', () => fileRef.current?.click()], ['Aa', 'نص', 'from-amber-500 to-rose-500', () => { void renderTextStory(' ', 0).then(f => setComposer(new File([f], 'kix-text-story.jpg', { type: f.type }))).catch(() => setTextComposer(true)); }]] as const).map(([ic, lb, g, fn]) => (
                 <button key={lb} onClick={() => { setAddMenu(false); fn(); }} className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-white/5 ring-1 ring-white/10 active:scale-95">
                   <span className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${g} flex items-center justify-center text-2xl font-extrabold text-white shadow-lg`}>{ic}</span>
                   <span className="text-sm font-semibold text-white">{lb}</span>
@@ -3432,13 +3436,13 @@ const bakeFilter = async (f: File, css: string): Promise<File | null> => {
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
 };
-type StoryExtra = { bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string }; ask?: string };
+type StoryExtra = { bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string }; pp?: { x: number; y: number }; ask?: string };
 
-function StoryOverlays({ extra, onMove }: { extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk', x: number, y: number) => void }) {
+function StoryOverlays({ extra, onMove }: { extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk' | 'poll', x: number, y: number) => void }) {
   const root = useRef<HTMLDivElement>(null);
   if (!extra) return null;
   const clamp = (n: number) => Math.max(4, Math.min(96, n));
-  const drag = (k: 'text' | 'stk') => (onMove ? {
+  const drag = (k: 'text' | 'stk' | 'poll') => (onMove ? {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => { e.currentTarget.setPointerCapture(e.pointerId); e.stopPropagation(); },
     onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
       if (!e.currentTarget.hasPointerCapture(e.pointerId) || !root.current) return;
@@ -3456,6 +3460,17 @@ function StoryOverlays({ extra, onMove }: { extra?: StoryExtra | null; onMove?: 
       {(extra.stickers ?? []).length > 0 && (() => {
         const d = drag('stk');
         return <div onPointerDown={d.onPointerDown} onPointerMove={d.onPointerMove} className={`absolute flex justify-center gap-3 text-6xl drop-shadow-lg ${d.className}`} style={{ left: `${extra.sp?.x ?? 50}%`, top: `${extra.sp?.y ?? 28}%`, transform: 'translate(-50%,-50%)' }}>{extra.stickers!.map((e, i) => <span key={i}>{e}</span>)}</div>;
+      })()}
+      {onMove && extra.poll && (() => {
+        const d = drag('poll');
+        return (
+          <div onPointerDown={d.onPointerDown} onPointerMove={d.onPointerMove} className={`absolute w-[72%] rounded-2xl bg-black/55 p-3 text-white ${d.className}`} style={{ left: `${extra.pp?.x ?? 50}%`, top: `${extra.pp?.y ?? 50}%`, transform: 'translate(-50%,-50%)' }}>
+            <div className="text-center font-bold text-base mb-2" dir="auto">{extra.poll.q}</div>
+            <div className="grid grid-cols-2 gap-2">
+              {[extra.poll.a, extra.poll.b].map((o, i) => <div key={i} className="rounded-xl border border-white/30 bg-white/10 px-2 py-2.5 text-sm font-bold text-center">{o}</div>)}
+            </div>
+          </div>
+        );
       })()}
     </div>
   );
@@ -3685,7 +3700,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [pct, setPct] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [tool, setTool] = useState<'' | 'text' | 'sticker' | 'poll' | 'ask' | 'aud' | 'sched' | 'filter' | 'music'>('filter');
+  const [tool, setTool] = useState<'' | 'text' | 'sticker' | 'poll' | 'ask' | 'aud' | 'sched' | 'filter' | 'music'>(file.name === 'kix-text-story.jpg' ? 'text' : 'filter');
   const [music, setMusic] = useState<File | null>(null);
   const [mStart, setMStart] = useState(0);
   const [mEnd, setMEnd] = useState(0);
@@ -3697,6 +3712,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [txtS, setTxtS] = useState(30);
   const [txtB, setTxtB] = useState(false);
   const [stkPos, setStkPos] = useState({ x: 50, y: 28 });
+  const [pollPos, setPollPos] = useState({ x: 50, y: 50 });
   const [flt, setFlt] = useState(0);
   const [fltName, setFltName] = useState('');
   const swipeX = useRef(0);
@@ -3715,6 +3731,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
     filter: flt > 0 ? flt : undefined,
     stickers: stk.length ? stk : undefined,
     poll: pq.trim() && pa.trim() && pb.trim() ? { q: pq.trim().slice(0, 100), a: pa.trim().slice(0, 30), b: pb.trim().slice(0, 30) } : undefined,
+    pp: pq.trim() && pa.trim() && pb.trim() ? pollPos : undefined,
     ask: ask.trim() ? ask.trim().slice(0, 120) : undefined,
   };
   const hasExtra = Object.values(extra).some(Boolean);
@@ -3764,7 +3781,12 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
             : <img src={previewUrl} alt="" style={{ filter: STORY_FILTERS[flt].f }} className="w-full h-full object-contain" />}
           <span className="absolute top-2 inset-x-0 mx-auto w-fit px-2.5 py-0.5 rounded-full bg-black/50 text-white/80 text-[11px] pointer-events-none z-10">معاينة كما ستظهر · 9:16</span>
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
-          <StoryOverlays extra={extra} onMove={(k, x, y) => { if (k === 'text') { setTxtX(x); setTxtY(y); } else setStkPos({ x, y }); }} />
+          <div className="absolute top-9 end-2 z-20 flex flex-col gap-2.5">
+            {([['text', 'Aa'], ['sticker', '😀'], ['music', '🎵'], ['filter', '🎨'], ['poll', '📊'], ['ask', '❓']] as const).map(([k, ic]) => (
+              <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-extrabold text-white active:scale-90 ${tool === k ? 'bg-white/90 !text-black' : 'bg-black/45 ring-1 ring-white/20'}`}>{ic}</button>
+            ))}
+          </div>
+          <StoryOverlays extra={extra} onMove={(k, x, y) => { if (k === 'text') { setTxtX(x); setTxtY(y); } else if (k === 'poll') setPollPos({ x, y }); else setStkPos({ x, y }); }} />
         </div>
       </div>
       <div className="px-3 pb-1">
@@ -3788,7 +3810,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
         {tool === 'ask' && <div className="mb-2"><input value={ask} onChange={e => setAsk(e.target.value)} placeholder="اطرح سؤالاً على متابعيك" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>}
         {tool === 'aud' && <div className="flex gap-2 mb-2">{([['all', 'الجميع'], ['close', 'أصدقاء مقربين']] as const).map(([k, l]) => <button key={k} onClick={() => setAud(k)} className={`flex-1 py-2 rounded-full text-sm ${aud === k ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white'}`}>{l}</button>)}<button onClick={() => setCfOpen(true)} className="px-3 rounded-full bg-white/10 text-white text-sm">تعديل القائمة</button></div>}
         {tool === 'sched' && <div className="flex gap-2 mb-2"><input type="datetime-local" value={sched} onChange={e => setSched(e.target.value)} style={{ colorScheme: 'dark' }} className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" />{sched && <button onClick={() => setSched('')} className="px-3 rounded-full bg-white/10 text-white text-sm">إلغاء</button>}</div>}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+        <div className="hidden flex gap-2 overflow-x-auto no-scrollbar pb-1">
           {([['text', 'Aa نص', !!txt.trim()], ['music', '🎵 موسيقى', !!music], ['sticker', '😀 ملصق', stk.length > 0], ['filter', flt > 0 ? '🎨 فلتر ✓' : '🎨 فلتر', flt > 0], ['poll', '📊 استطلاع', !!extra.poll], ['ask', '❓ سؤال', !!extra.ask], ['aud', aud === 'close' ? '👥 مقربين ✓' : '👥 الجمهور', aud === 'close'], ['sched', sched ? '🕒 مجدولة ✓' : '🕒 جدولة', !!sched]] as const).map(([k, l, on]) => (
             <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} className="shrink-0 w-[62px] flex flex-col items-center gap-1 active:scale-95">
               <span className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl font-bold ${tool === k ? 'bg-white text-black' : on ? 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white' : 'bg-white/10 text-white ring-1 ring-white/10'}`}>{l.split(' ')[0]}</span>
@@ -4087,7 +4109,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
           )}
         <StoryOverlays extra={story.extra} />
         {(story.extra?.poll || story.extra?.ask) && (
-          <div {...ignore} className="absolute inset-x-14 top-[44%] z-10 space-y-3">
+          <div {...ignore} className="absolute w-[72%] z-10 space-y-3" style={{ left: `${story.extra?.pp?.x ?? 50}%`, top: `${story.extra?.pp?.y ?? 46}%`, transform: 'translate(-50%,-50%)' }}>
             {story.extra?.poll && <StoryPoll key={`p${story.id}`} story={story} meId={currentUser.id} isMine={isMine} />}
             {story.extra?.ask && <StoryAsk key={`a${story.id}`} story={story} meId={currentUser.id} isMine={isMine} onFocusChange={setPaused} />}
           </div>
@@ -4395,7 +4417,67 @@ function formatBytes(bytes?: number): string {
 }
 
 // Short text shown when a message is quoted in a reply.
+const POLL_TAG = '⟦poll⟧';
+const VOTE_TAG = '⟦vote⟧';
+function parsePoll(t?: string | null): { q: string; o: string[] } | null {
+  if (!t || !t.startsWith(POLL_TAG)) return null;
+  try { const d = JSON.parse(t.slice(POLL_TAG.length)); return typeof d.q === 'string' && Array.isArray(d.o) ? { q: d.q, o: d.o.map(String) } : null; } catch { return null; }
+}
+function parseVote(t?: string | null): { p: string; i: number } | null {
+  if (!t || !t.startsWith(VOTE_TAG)) return null;
+  try { const d = JSON.parse(t.slice(VOTE_TAG.length)); return typeof d.p === 'string' && typeof d.i === 'number' ? { p: d.p, i: d.i } : null; } catch { return null; }
+}
+
+function PollComposer({ onClose, onSend }: { onClose: () => void; onSend: (q: string, o: string[]) => void }) {
+  const [q, setQ] = useState('');
+  const [o, setO] = useState(['', '']);
+  const opts = o.map(x => x.trim()).filter(Boolean);
+  const ok = q.trim().length > 0 && opts.length >= 2;
+  return createPortal(
+    <div dir={DIR} className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div className="kan-theme-text kan-pop relative w-full max-w-md bg-gray-900 rounded-t-3xl sm:rounded-3xl p-5 border border-white/10" onClick={e => e.stopPropagation()}>
+        <h4 className="text-center font-bold text-white mb-3">📊 استطلاع رأي</h4>
+        <input value={q} onChange={e => setQ(e.target.value.slice(0, 120))} placeholder="اكتب السؤال" className="w-full px-4 py-2.5 mb-2 bg-white/10 rounded-xl text-[16px] text-white placeholder-gray-400 outline-none" dir="auto" />
+        {o.map((v, i) => (
+          <input key={i} value={v} onChange={e => setO(a => a.map((x, k) => (k === i ? e.target.value.slice(0, 40) : x)))} placeholder={`الخيار ${i + 1}`} className="w-full px-4 py-2.5 mb-2 bg-white/10 rounded-xl text-[16px] text-white placeholder-gray-400 outline-none" dir="auto" />
+        ))}
+        {o.length < 4 && <button onClick={() => setO(a => [...a, ''])} className="text-sm text-violet-300 font-semibold mb-3">+ إضافة خيار</button>}
+        <button disabled={!ok} onClick={() => onSend(q.trim(), opts)} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-500 text-white font-bold disabled:opacity-40">إرسال الاستطلاع</button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function ChatPoll({ id, text, all, meId, onVote }: { id: string; text: string; all: { senderId: string; text?: string | null }[]; meId: string; onVote: (i: number) => void }) {
+  const poll = parsePoll(text);
+  if (!poll) return null;
+  const by = new Map<string, number>();
+  for (const m of all) { const v = parseVote(m.text); if (v && v.p === id && v.i >= 0 && v.i < poll.o.length) by.set(m.senderId, v.i); }
+  const total = by.size;
+  const mine = by.get(meId);
+  const cnt = poll.o.map((_, i) => Array.from(by.values()).filter(x => x === i).length);
+  return (
+    <div className="min-w-[220px]">
+      <div className="font-bold mb-2" dir="auto">📊 {poll.q}</div>
+      <div className="space-y-1.5">
+        {poll.o.map((o, i) => (
+          <button key={i} onClick={() => onVote(i)} className={`relative w-full overflow-hidden rounded-xl border px-3 py-2 text-sm text-start ${mine === i ? 'border-white' : 'border-white/25'} bg-black/20`}>
+            <span className="absolute inset-y-0 start-0 bg-white/25 transition-all" style={{ width: `${total ? Math.round((cnt[i] / total) * 100) : 0}%` }} />
+            <span className="relative flex justify-between gap-2"><span dir="auto">{mine === i ? '✓ ' : ''}{o}</span><span>{total ? Math.round((cnt[i] / total) * 100) : 0}%</span></span>
+          </button>
+        ))}
+      </div>
+      <div className="text-[11px] opacity-70 mt-1.5">{total} صوت</div>
+    </div>
+  );
+}
+
 function describeMessage(m: Message): string {
+  const pl = parsePoll(m.text);
+  if (pl) return '📊 ' + pl.q;
+  if (parseVote(m.text)) return '🗳️ تصويت';
   if (m.text) return m.text;
   if (isStickerName(m.media?.name)) return '🏷️ ملصق';
   switch (m.media?.type) {
@@ -7771,6 +7853,40 @@ function rankByInterests(list: Post[], uid: string): Post[] {
     .map(x => x.p);
 }
 
+function SearchAI({ q, me, onPick }: { q: string; me: User; onPick: (w: string) => void }) {
+  const [ans, setAns] = useState('');
+  const [words, setWords] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => { setAns(''); setWords([]); setErr(''); }, [q]);
+  const call = async (query: string) => {
+    const now = new Date();
+    const { data, error } = await supabase.functions.invoke('kan-ai', { body: { query, context: [], history: [], images: [], me: me.displayName, other: '', now: now.toISOString(), today: now.toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Africa/Cairo' }), timezone: 'Africa/Cairo', platform: 'KIX', creator: 'Khaled Sharaf', instructions: 'Speak naturally and freely in the user language, in your own style.' } });
+    if (error) throw new Error('ai');
+    return String((data as { response?: string } | null)?.response ?? '').trim();
+  };
+  const run = async (kind: 'ask' | 'words') => {
+    if (busy) return;
+    setBusy(true); setErr('');
+    try {
+      if (kind === 'ask') setAns(await call(q));
+      else setWords((await call('اكتب 8 كلمات بحث مرتبطة بمعنى: ' + q + ' (عربي وإنجليزي) مفصولة بفاصلة فقط بدون أي شرح')).split(/[,،\n]/).map(x => x.trim()).filter(x => x && x.length < 30).slice(0, 8));
+    } catch { setErr('KIX مش متاح دلوقتي، جرّب بعد شوية'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="mb-4 rounded-2xl bg-gray-900 border border-violet-500/30 p-3">
+      <div className="flex gap-2">
+        <button onClick={() => void run('ask')} disabled={busy} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold disabled:opacity-60">🤖 اسأل KIX</button>
+        <button onClick={() => void run('words')} disabled={busy} className="flex-1 py-2 rounded-xl bg-white/10 text-white text-sm font-bold disabled:opacity-60">✨ بحث ذكي</button>
+      </div>
+      {busy && <div className="text-xs text-gray-400 mt-2 text-center">KIX بيفكر...</div>}
+      {err && <div className="text-xs text-red-400 mt-2 text-center">{err}</div>}
+      {ans && <p className="text-sm text-white mt-3 leading-6 whitespace-pre-wrap" dir="auto">{ans}</p>}
+      {words.length > 0 && <div className="flex flex-wrap gap-2 mt-3">{words.map(w => <button key={w} onClick={() => onPick(w)} className="px-3 py-1 rounded-full bg-violet-600/25 text-violet-200 text-xs font-semibold">{w}</button>)}</div>}
+    </div>
+  );
+}
+
 function SearchTab({ users, posts, currentUser, setUsers, onStartChat, onOpenProfile }: {
   users: User[];
   posts: Post[];
@@ -7826,6 +7942,7 @@ function SearchTab({ users, posts, currentUser, setUsers, onStartChat, onOpenPro
           <button key={k} onClick={() => setFilter(k)} className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium ${filter === k ? 'bg-violet-600 text-white' : 'bg-gray-900 border border-gray-800 text-gray-300'}`}>{lb}</button>
         ))}
       </div>
+      {term.length >= 2 && <SearchAI q={term} me={currentUser} onPick={w => setQuery(w)} />}
       <div className="space-y-3">
         {(!showPeople || filtered.length === 0) && postResults.length === 0 && (
           <div className="text-center py-8">
@@ -9236,6 +9353,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
   const [stickerStart, setStickerStart] = useState(false);
   const lastTap = useRef<{ id: string; t: number }>({ id: '', t: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
@@ -9653,6 +9771,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           </div>
         )}
         {messages.map((msg, idx) => {
+          if (parseVote(msg.text)) return null;
           if (albumMap.hidden.has(msg.id)) return null;
           const isMine = msg.senderId === currentUser.id;
           const showAvatar = idx === 0 || messages[idx - 1]?.senderId !== msg.senderId;
@@ -9772,7 +9891,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                       <Download size={16} className="shrink-0" />
                     </button>
                   )}
-                  {msg.text && <p className="text-sm leading-relaxed whitespace-pre-wrap break-words" dir="auto"><Linkified text={msg.text} /></p>}
+                  {msg.text && (parsePoll(msg.text) ? <ChatPoll id={msg.id} text={msg.text} all={messages} meId={currentUser.id} onVote={i => void send({ text: VOTE_TAG + JSON.stringify({ p: msg.id, i }) })} /> : <p className="text-sm leading-relaxed whitespace-pre-wrap break-words" dir="auto"><Linkified text={msg.text} /></p>)}
                   {msg.sharedPostId && (
                     <button
                       onClick={e => { e.stopPropagation(); openPost(msg.sharedPostId!, msg.sharedCommentId); }}
@@ -9933,12 +10052,14 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
         <div className={`px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10 ${recording ? 'hidden' : ''}`}>
           <input ref={fileRef} type="file" multiple onChange={handleFile} className="hidden" />
           <AnimatePresence>
+            {pollOpen && <PollComposer onClose={() => setPollOpen(false)} onSend={(q, o) => { setPollOpen(false); void send({ text: POLL_TAG + JSON.stringify({ q, o }) }); }} />}
             {toolsOpen && (
               <motion.div
                 initial={{ opacity: 0, y: 10, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.94 }}
                 transition={{ type: 'spring', damping: 22, stiffness: 420 }}
                 className="absolute bottom-full right-2 mb-2 z-20 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur border border-white/10 shadow-xl origin-bottom-right"
               >
+                <button onClick={() => { setPollOpen(true); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs active:scale-95">📊 استطلاع</button>
                 <button onClick={() => { fileRef.current?.click(); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95">
                   <Paperclip size={16} /> إرفاق
                 </button>
