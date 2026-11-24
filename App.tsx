@@ -1741,6 +1741,16 @@ function KanAIModal({ messages, me, other, nameOf, chatKey, onClose, onUseReply 
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  // Follow the on-screen keyboard so the quick actions and the input stay right above it.
+  const [vv, setVv] = useState<{ h: number; top: number } | null>(null);
+  useEffect(() => {
+    const v = window.visualViewport;
+    if (!v) return;
+    const f = () => setVv({ h: v.height, top: v.offsetTop });
+    f();
+    v.addEventListener('resize', f); v.addEventListener('scroll', f);
+    return () => { v.removeEventListener('resize', f); v.removeEventListener('scroll', f); };
+  }, []);
 
   useEffect(() => { try { localStorage.setItem(storeKey, JSON.stringify(turns.slice(-100))); } catch { /* ignore */ } }, [turns, storeKey]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [turns, loading]);
@@ -1756,7 +1766,7 @@ function KanAIModal({ messages, me, other, nameOf, chatKey, onClose, onUseReply 
     for (const f of Array.from(files).slice(0, Math.max(0, 4 - imgs.length))) {
       if (!f.type.startsWith('image/')) continue;
       const d = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('read')); r.readAsDataURL(f); });
-      try { out.push(await shrinkImage(d, 1280)); } catch { out.push(d); }
+      try { out.push(await shrinkImage(d, 1024)); } catch { out.push(d); }
     }
     setImgs(p => [...p, ...out].slice(0, 4));
   };
@@ -1813,9 +1823,9 @@ function KanAIModal({ messages, me, other, nameOf, chatKey, onClose, onUseReply 
   };
 
   return createPortal(
-    <div dir={DIR} className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center sm:p-4">
+    <div dir={DIR} className="fixed inset-x-0 top-0 bottom-0 z-[120] flex items-end sm:items-center justify-center sm:p-4" style={vv ? { top: vv.top, bottom: 'auto', height: vv.h } : undefined}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full sm:max-w-3xl h-[92dvh] sm:h-[88dvh] flex flex-col bg-gray-900 border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl shadow-violet-500/10 overflow-hidden">
+      <div className="relative w-full sm:max-w-3xl h-[92%] sm:h-[88%] flex flex-col bg-gray-900 border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl shadow-violet-500/10 overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-white/10 bg-gradient-to-r from-violet-600 to-cyan-500 shrink-0">
           <div className="flex items-center gap-3">
             <img src={LOGO_URL} alt="" className="w-10 h-10 rounded-full bg-white/10" />
@@ -1831,11 +1841,6 @@ function KanAIModal({ messages, me, other, nameOf, chatKey, onClose, onUseReply 
           {turns.length === 0 && !loading && (
             <div className="text-center text-gray-400 text-sm pt-6 space-y-4">
               <p>اسألني أي حاجة، أو ابعتلي صورة أو أكتر وقولّي عايز إيه منها.</p>
-              <div className="flex gap-2 flex-wrap justify-center">
-                {AI_QUICK.map(a => (
-                  <button key={a.label} onClick={() => void ask(a.query, a.mode)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-white/5 rounded-full text-sm text-gray-200">{a.label}</button>
-                ))}
-              </div>
             </div>
           )}
           {turns.map((t, i) => t.role === 'user' ? (
@@ -1863,7 +1868,17 @@ function KanAIModal({ messages, me, other, nameOf, chatKey, onClose, onUseReply 
           <div ref={endRef} />
         </div>
 
-        <div className="p-3 border-t border-white/10 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="p-3 border-t border-white/10 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-gray-900">
+          <div className="grid grid-cols-3 gap-2 mb-2.5">
+            {AI_QUICK.map(a => {
+              const [ic, ...rest] = a.label.split(' ');
+              return (
+                <button key={a.label} onClick={() => void ask(a.query, a.mode)} disabled={loading} className="min-w-0 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-2xl bg-gradient-to-br from-violet-600/25 to-cyan-500/15 border border-violet-400/30 text-gray-100 text-[13px] font-semibold active:scale-95 disabled:opacity-50 shadow-sm shadow-violet-900/20">
+                  <span className="text-base leading-none shrink-0">{ic}</span><span className="truncate">{rest.join(' ')}</span>
+                </button>
+              );
+            })}
+          </div>
           {imgs.length > 0 && (
             <div className="flex gap-2 mb-2 overflow-x-auto">
               {imgs.map((u, i) => (
@@ -3775,21 +3790,23 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
         <span className="w-9" />
       </div>
       <div className="relative flex-1 min-h-0 flex items-center justify-center" onTouchStart={e => { swipeX.current = e.touches[0].clientX; }} onTouchEnd={e => { const dx = e.changedTouches[0].clientX - swipeX.current; if (Math.abs(dx) > 70) pickFlt(flt + (dx < 0 ? 1 : -1)); }}>
-        <div className="relative h-full max-w-full aspect-[9/16] bg-black rounded-2xl overflow-hidden ring-1 ring-white/10 flex items-center justify-center">
+        <div className="relative h-full max-w-full aspect-[9/16] bg-black rounded-[28px] overflow-hidden ring-1 ring-white/15 shadow-2xl shadow-violet-900/40 flex items-center justify-center">
           {isVideo
             ? <video src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay />
             : <img src={previewUrl} alt="" style={{ filter: STORY_FILTERS[flt].f }} className="w-full h-full object-contain" />}
-          <span className="absolute top-2 inset-x-0 mx-auto w-fit px-2.5 py-0.5 rounded-full bg-black/50 text-white/80 text-[11px] pointer-events-none z-10">معاينة كما ستظهر · 9:16</span>
+          <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 to-transparent pointer-events-none z-[5]" />
+          <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent pointer-events-none z-[5]" />
+          <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-black/45 ring-1 ring-white/15 text-white/90 text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />معاينة · 9:16</span>
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
-          <div className="absolute top-9 end-2 z-20 flex flex-col gap-2.5">
-            {([['text', 'Aa'], ['sticker', '😀'], ['music', '🎵'], ['filter', '🎨'], ['poll', '📊'], ['ask', '❓']] as const).map(([k, ic]) => (
-              <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-extrabold text-white active:scale-90 ${tool === k ? 'bg-white/90 !text-black' : 'bg-black/45 ring-1 ring-white/20'}`}>{ic}</button>
+          <div className="absolute top-12 end-3 z-20 flex flex-col gap-2.5">
+            {([['text', 'Aa', !!txt.trim()], ['sticker', '😀', stk.length > 0], ['music', '🎵', !!music], ['filter', '🎨', flt > 0], ['poll', '📊', !!extra.poll], ['ask', '❓', !!extra.ask]] as const).map(([k, ic, on]) => (
+              <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} className={`relative w-11 h-11 rounded-2xl flex items-center justify-center text-lg font-extrabold text-white active:scale-90 shadow-lg ${tool === k ? 'bg-gradient-to-br from-violet-600 to-cyan-500 ring-2 ring-white/70' : 'bg-black/45 ring-1 ring-white/25'}`}>{ic}{on && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-black" />}</button>
             ))}
           </div>
           <StoryOverlays extra={extra} onMove={(k, x, y) => { if (k === 'text') { setTxtX(x); setTxtY(y); } else if (k === 'poll') setPollPos({ x, y }); else setStkPos({ x, y }); }} />
         </div>
       </div>
-      <div className="px-3 pb-1">
+      <div className={`mx-3 mt-2 ${tool ? 'mb-1 rounded-2xl bg-white/[0.07] ring-1 ring-white/10 p-3' : ''}`}>
         {tool === 'text' && <div className="mb-2 space-y-2">
           <div className="flex gap-2"><input value={txt} onChange={e => setTxt(e.target.value.slice(0, 200))} placeholder="اكتب نصاً فوق الصورة..." className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><button onClick={() => { setTxtX(50); setTxtY(y => (y === 50 ? 20 : y === 20 ? 80 : 50)); }} className="px-3 rounded-full bg-white/10 text-white text-sm">الموضع</button></div>
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -3819,8 +3836,8 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
           ))}
         </div>
       </div>
-      <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2">
-        <input value={caption} onChange={e => setCaption(e.target.value.slice(0, 300))} placeholder="أضف تعليقاً..." className="flex-1 px-4 py-2.5 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" />
+      <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2 border-t border-white/10">
+        <input value={caption} onChange={e => setCaption(e.target.value.slice(0, 300))} placeholder="أضف تعليقاً..." className="flex-1 px-4 py-2.5 bg-white/10 ring-1 ring-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none focus:ring-violet-400/60" />
         <button onClick={() => void publish()} disabled={busy} className="px-5 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-70 active:scale-95 transition-transform">
           {busy ? <><RefreshCw size={15} className="animate-spin" /> {pct}%</> : <><Send size={15} /> {sched ? 'جدولة' : 'نشر'}</>}
         </button>
@@ -5958,7 +5975,10 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
       } else { a.pause(); }
     }, { threshold: [0, 0.5, 1] });
     io.observe(box);
-    return () => io.disconnect();
+    const hide = () => { if (document.hidden) a.pause(); };
+    document.addEventListener('visibilitychange', hide);
+    window.addEventListener('pagehide', () => a.pause());
+    return () => { io.disconnect(); document.removeEventListener('visibilitychange', hide); a.pause(); if (playingAudio === a) playingAudio = null; };
   }, [auto, start, win]);
   if (auto) {
     return (
@@ -7534,6 +7554,7 @@ function CreatePost({ currentUser, setPosts }: {
   const [music, setMusic] = useState<File | null>(null);
   const [musicStart, setMusicStart] = useState(0);
   const [musicEnd, setMusicEnd] = useState(0);
+  const musicRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (music) setRemoteMusic(null); }, [music]);
   const musicRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -7745,9 +7766,19 @@ function CreatePost({ currentUser, setPosts }: {
                 </div>
               </div>
             )}
-            <button onClick={() => { if (media.url) URL.revokeObjectURL(media.url); setMedia(null); clearCover(); }} className="absolute top-2 left-2 p-1.5 bg-gray-900/80 rounded-full text-white hover:bg-red-500">
+            <button onClick={() => { if (media.url) URL.revokeObjectURL(media.url); setMedia(null); clearCover(); setMusic(null); setMusicStart(0); setMusicEnd(0); }} className="absolute top-2 left-2 p-1.5 bg-gray-900/80 rounded-full text-white hover:bg-red-500">
               <X size={14} />
             </button>
+          </div>
+        )}
+        {media?.type === 'image' && music && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 text-sm text-white mb-2 px-1">
+              <Music size={16} className="text-fuchsia-300 shrink-0" />
+              <span className="flex-1 truncate" dir="auto">{music.name}</span>
+              <button onClick={() => { setMusic(null); setMusicStart(0); setMusicEnd(0); }} className="p-1 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
+            </div>
+            <MusicTrimmer file={music} start={musicStart} end={musicEnd} onStart={setMusicStart} onEnd={setMusicEnd} />
           </div>
         )}
         {extra.length > 0 && (
@@ -7794,6 +7825,10 @@ function CreatePost({ currentUser, setPosts }: {
             <button onClick={() => openPicker('video/*')} className="p-2 text-green-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="فيديو">
               <Video size={20} />
             </button>
+            {media?.type === 'image' && (
+              <button onClick={() => musicRef.current?.click()} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${music ? 'text-fuchsia-300 bg-gray-800' : 'text-fuchsia-400'}`} aria-label="موسيقى"><Music size={20} /></button>
+            )}
+            <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); setMusicStart(0); setMusicEnd(0); }} />
             {!videoOnly && (
               <button onClick={() => openPicker('*/*')} className="p-2 text-amber-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="ملف">
                 <Paperclip size={20} />
