@@ -5942,7 +5942,7 @@ function sortComments(list: Comment[], me: User, focusId?: string | null): Comme
   return [...list].sort((a, b) => score(b) - score(a) || b.timestamp - a.timestamp);
 }
 
-function MusicBar({ music, auto = false }: { music: { url: string; name: string; start?: number }; auto?: boolean }) {
+function MusicBar({ music, auto = false }: { music: { url: string; name: string; start?: number; end?: number }; auto?: boolean }) {
   const ref = useRef<HTMLAudioElement>(null);
   const start = music.start ?? 0;
   const win = music.start !== undefined ? (music.end && music.end > start ? music.end - start : 30) : Infinity;
@@ -7556,7 +7556,6 @@ function CreatePost({ currentUser, setPosts }: {
   const [musicEnd, setMusicEnd] = useState(0);
   const musicRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (music) setRemoteMusic(null); }, [music]);
-  const musicRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
   const videoOnly = kind !== 'post';
