@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useSyncExternalStore } from 'react';
 import type React from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,7 +9,8 @@ import {
   Check, X, Paperclip,
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
-  Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon, ChevronDown, Repeat, PictureInPicture2, BarChart3, HelpCircle, Clock, AtSign, Type as TypeIcon, Wand2
+  Gamepad2, Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon, ChevronDown, Repeat, PictureInPicture2, BarChart3, HelpCircle, Clock, AtSign, Type as TypeIcon, Wand2,
+  AlertTriangle, Info,
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -119,12 +120,19 @@ const kanTr = (raw: string): string => {
   if (out === undefined) for (const [re, f] of EN_RULES) { const m = re.exec(k); if (m) { out = f(m); break; } }
   return out === undefined ? raw : raw.replace(k, out);
 };
+// Modern in-app dialogs: replace the browser's alert()/confirm() (rendered by <KanDialogHost/>).
+type KanDlg = { id: number; kind: 'alert' | 'confirm'; tone: 'error' | 'danger' | 'info'; message: string; resolve: (v: boolean) => void };
+let kanDlgSeq = 0;
+let kanDlgQueue: KanDlg[] = [];
+const kanDlgSubs = new Set<() => void>();
+const kanDlgEmit = () => kanDlgSubs.forEach(f => f());
+const kanDlgPush = (kind: KanDlg['kind'], message: string, tone: KanDlg['tone']) =>
+  new Promise<boolean>(resolve => { kanDlgQueue = [...kanDlgQueue, { id: ++kanDlgSeq, kind, tone, message: LANG === 'en' ? kanTr(message) : message, resolve }]; kanDlgEmit(); });
+const kanConfirm = (message: string, danger = true) => kanDlgPush('confirm', message, danger ? 'danger' : 'info');
+const kanAlert = (message: string) => kanDlgPush('alert', message, /تعذّر|تعذر|فشل|لا يمكن|خطأ|error|fail|couldn/i.test(message) ? 'error' : 'info');
+if (typeof window !== 'undefined') window.alert = (m?: unknown) => { void kanAlert(String(m ?? '')); };
 // English mode: anything still written in Arabic on screen (text, placeholders, titles, alerts) is translated as it appears.
 if (LANG === 'en' && typeof window !== 'undefined') {
-  const nativeAlert = window.alert.bind(window);
-  const nativeConfirm = window.confirm.bind(window);
-  window.alert = (m?: unknown) => nativeAlert(kanTr(String(m ?? '')));
-  window.confirm = (m?: string) => nativeConfirm(kanTr(String(m ?? '')));
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
   const fixNode = (n: Node) => {
     if (n.nodeType === 3) { const v = n.nodeValue ?? ''; const o = kanTr(v); if (o !== v) n.nodeValue = o; return; }
@@ -1843,7 +1851,7 @@ function KanAIModal({ messages, me, other, nameOf, chatKey, onClose, onUseReply 
             <div className="leading-tight"><h2 className="font-extrabold text-white text-base">KIX AI</h2><p className="text-[11px] text-white/80">مساعد ذكي</p></div>
           </div>
           <div className="relative flex items-center gap-1.5">
-            {turns.length > 0 && <button onClick={() => { if (window.confirm('مسح محادثة KIX الخاصة بالشات ده؟')) { setTurns([]); setError(''); } }} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/15 backdrop-blur ring-1 ring-white/25 text-white active:scale-90 transition-transform" aria-label="مسح المحادثة"><Trash2 size={17} /></button>}
+            {turns.length > 0 && <button onClick={async () => { if (await kanConfirm('مسح محادثة KIX الخاصة بالشات ده؟')) { setTurns([]); setError(''); } }} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/15 backdrop-blur ring-1 ring-white/25 text-white active:scale-90 transition-transform" aria-label="مسح المحادثة"><Trash2 size={17} /></button>}
             <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/15 backdrop-blur ring-1 ring-white/25 text-white active:scale-90 transition-transform" aria-label="إغلاق"><X size={19} /></button>
           </div>
         </div>
@@ -2989,6 +2997,234 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
   );
 }
 
+// ============ "مفكرتي": tasks with a time + repeating reminders ============
+type PlanTask = { id: string; title: string; note?: string; due?: number; repeat: number; color: string; done: boolean; doneAt?: number; lastFired?: number; snoozeUntil?: number };
+const PLAN_COLORS = ['#8b5cf6', '#06b6d4', '#f472b6', '#f59e0b', '#22c55e'];
+let planUid = '';
+let planTasks: PlanTask[] = [];
+const planSubs = new Set<() => void>();
+const planEmit = () => planSubs.forEach(f => f());
+const planSubscribe = (cb: () => void) => { planSubs.add(cb); return () => { planSubs.delete(cb); }; };
+const planSnapshot = () => planTasks;
+function planLoad(uid: string) {
+  if (planUid === uid) return;
+  planUid = uid;
+  try { const v = JSON.parse(localStorage.getItem(`kan-planner:${uid}`) || '[]') as unknown; planTasks = Array.isArray(v) ? (v as PlanTask[]).filter(t => t && typeof t.id === 'string' && typeof t.title === 'string') : []; } catch { planTasks = []; }
+  planEmit();
+}
+function planSet(fn: (l: PlanTask[]) => PlanTask[]) {
+  planTasks = fn(planTasks);
+  try { localStorage.setItem(`kan-planner:${planUid}`, JSON.stringify(planTasks)); } catch { /* storage blocked: keep in memory */ }
+  planEmit();
+}
+const planOverdue = (t: PlanTask, now = Date.now()) => !t.done && !!t.due && t.due <= now;
+const fmtDue = (ts: number) => {
+  const d = new Date(ts), n = new Date();
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(d) - day(n)) / 86400000);
+  const time = d.toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' });
+  if (diff === 0) return `اليوم ${time}`;
+  if (diff === 1) return `بكرة ${time}`;
+  if (diff === -1) return `إمبارح ${time}`;
+  return `${d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })} ${time}`;
+};
+
+// Mounted once in the app: rings (banner + sound + device notification) for tasks that are due, and keeps ringing every few minutes while you are still browsing.
+function PlannerReminders({ userId }: { userId: string }) {
+  const tasks = useSyncExternalStore(planSubscribe, planSnapshot);
+  const [ring, setRing] = useState<string[]>([]);
+  useEffect(() => { planLoad(userId); }, [userId]);
+  useEffect(() => {
+    const tick = () => {
+      const now = Date.now();
+      const fire = planTasks.filter(t => planOverdue(t, now) && (t.snoozeUntil ?? 0) <= now && (!t.lastFired || (t.repeat > 0 && now - t.lastFired >= t.repeat * 60000)));
+      if (fire.length === 0) return;
+      planSet(l => l.map(t => (fire.some(f => f.id === t.id) ? { ...t, lastFired: now } : t)));
+      setRing(r => Array.from(new Set([...r, ...fire.map(f => f.id)])));
+      playSound('receive');
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) {
+        for (const t of fire) {
+          const opts = { body: t.note || 'حان وقت المهمة', tag: `plan-${t.id}`, icon: LOGO_URL, renotify: true, dir: 'rtl', lang: 'ar' } as NotificationOptions;
+          void getServiceWorker().then(reg => (reg ? reg.showNotification(`⏰ ${t.title}`, opts) : new Notification(`⏰ ${t.title}`, opts))).catch(() => undefined);
+        }
+      }
+    };
+    tick();
+    const h = window.setInterval(tick, 15000);
+    const vis = () => { if (!document.hidden) tick(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { window.clearInterval(h); document.removeEventListener('visibilitychange', vis); };
+  }, [userId]);
+  const live = ring.map(id => tasks.find(t => t.id === id)).filter((t): t is PlanTask => !!t && !t.done);
+  if (live.length === 0) return null;
+  return (
+    <div className="fixed top-14 inset-x-0 z-[55] px-3 pt-2 space-y-2 pointer-events-none" dir="rtl">
+      {live.slice(0, 3).map(t => (
+        <div key={t.id} className="pointer-events-auto mx-auto max-w-md rounded-2xl bg-gradient-to-br from-violet-700/95 to-fuchsia-700/90 backdrop-blur border border-white/20 shadow-2xl px-3.5 py-3 text-white" style={{ boxShadow: `0 10px 40px -10px ${t.color}` }}>
+          <div className="flex items-start gap-3">
+            <span className="text-2xl animate-bounce">⏰</span>
+            <div className="min-w-0 flex-1"><div className="font-bold text-sm truncate" dir="auto">{t.title}</div><div className="text-[11px] opacity-80">{t.note || 'حان وقت المهمة'}{t.repeat ? ` · هفكّرك كل ${t.repeat} د` : ''}</div></div>
+            <button onClick={() => setRing(r => r.filter(x => x !== t.id))} aria-label="إغلاق" className="p-1 opacity-70"><X size={16} /></button>
+          </div>
+          <div className="mt-2.5 flex gap-2">
+            <button onClick={() => { planSet(l => l.map(x => (x.id === t.id ? { ...x, done: true, doneAt: Date.now() } : x))); setRing(r => r.filter(x => x !== t.id)); }} className="flex-1 py-1.5 rounded-full bg-white text-violet-700 text-xs font-bold active:scale-95">تمت ✓</button>
+            <button onClick={() => { planSet(l => l.map(x => (x.id === t.id ? { ...x, snoozeUntil: Date.now() + 10 * 60000, lastFired: undefined } : x))); setRing(r => r.filter(x => x !== t.id)); }} className="flex-1 py-1.5 rounded-full bg-white/20 text-white text-xs font-bold active:scale-95">بعد 10 د</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PlanSheet({ task, onClose, onSave }: { task: PlanTask | null; onClose: () => void; onSave: (t: Omit<PlanTask, 'id' | 'done'>) => void }) {
+  const [title, setTitle] = useState(task?.title ?? '');
+  const [note, setNote] = useState(task?.note ?? '');
+  const [due, setDue] = useState<number | undefined>(task?.due);
+  const [custom, setCustom] = useState(false);
+  const [repeat, setRepeat] = useState(task?.repeat ?? 0);
+  const [color, setColor] = useState(task?.color ?? PLAN_COLORS[0]);
+  const at = (h: number, plusDays = 0) => { const d = new Date(); d.setDate(d.getDate() + plusDays); d.setHours(h, 0, 0, 0); return d.getTime(); };
+  const tonight = at(21) > Date.now() ? at(21) : at(21, 1);
+  const toLocal = (ts?: number) => { if (!ts) return ''; const d = new Date(ts - new Date(ts).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+  const chip = (on: boolean) => `px-3.5 py-2 rounded-full text-sm font-semibold ${on ? 'bg-white text-black' : 'bg-white/10 text-white'}`;
+  return createPortal(
+    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/65" onClick={onClose}>
+      <div className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-gray-900 border border-white/10 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]" onClick={e => e.stopPropagation()} dir="rtl">
+        <div className="flex items-center justify-between mb-3"><h3 className="text-white font-bold">{task ? 'تعديل المهمة' : 'مهمة جديدة'}</h3><button onClick={onClose} className="p-1.5 text-gray-400" aria-label="إغلاق"><X size={18} /></button></div>
+        <input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="إيه المهمة؟" maxLength={120} className="w-full rounded-2xl bg-gray-800 border border-gray-700 px-4 py-3 text-white text-[16px] placeholder-gray-500 focus:outline-none focus:border-violet-500" />
+        <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="ملاحظات (اختياري)" rows={2} maxLength={300} className="w-full mt-2 rounded-2xl bg-gray-800 border border-gray-700 px-4 py-2.5 text-white text-[16px] placeholder-gray-500 focus:outline-none focus:border-violet-500 resize-none" />
+        <p className="text-xs text-gray-400 mt-3 mb-2">⏰ امتى أفكّرك؟</p>
+        <div className="flex flex-wrap gap-2">
+          {([['بدون وقت', undefined], ['بعد 15 د', Date.now() + 15 * 60000], ['بعد ساعة', Date.now() + 3600000], ['الليلة 9 م', tonight], ['بكرة 9 ص', at(9, 1)]] as [string, number | undefined][]).map(([l, v]) => <button key={l} onClick={() => { setDue(v); setCustom(false); }} className={chip(!custom && (v === undefined ? due === undefined : !!due && Math.abs(due - v) < 60000))}>{l}</button>)}
+          <button onClick={() => setCustom(true)} className={chip(custom)}>وقت محدد</button>
+        </div>
+        {custom && <input type="datetime-local" value={toLocal(due)} onChange={e => setDue(e.target.value ? new Date(e.target.value).getTime() : undefined)} className="w-full mt-2 rounded-xl bg-gray-800 border border-gray-700 px-3 py-2 text-white text-[16px]" />}
+        <p className="text-xs text-gray-400 mt-3 mb-2">🔁 التنبيه (الافتراضي مرة واحدة في الوقت اللي حددته بس)</p>
+        <div className="flex flex-wrap gap-2">
+          {([[0, 'مرة واحدة'], [5, 'كل 5 د'], [15, 'كل 15 د'], [30, 'كل 30 د'], [60, 'كل ساعة']] as const).map(([k, l]) => <button key={k} onClick={() => setRepeat(k)} className={chip(repeat === k)}>{l}</button>)}
+        </div>
+        <div className="flex items-center gap-2.5 mt-3.5"><span className="text-xs text-gray-400">اللون</span>{PLAN_COLORS.map(c => <button key={c} onClick={() => setColor(c)} aria-label={c} className={`w-7 h-7 rounded-full ring-2 ${color === c ? 'ring-white scale-110' : 'ring-white/10'}`} style={{ background: c }} />)}</div>
+        <button disabled={!title.trim()} onClick={() => onSave({ title: title.trim(), note: note.trim() || undefined, due, repeat: due ? repeat : 0, color, lastFired: task && task.due === due ? task.lastFired : undefined, doneAt: task?.doneAt })} className="w-full mt-4 py-3 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 text-white font-bold disabled:opacity-40 active:scale-[0.98]">حفظ</button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function PlannerPane({ userId }: { userId: string }) {
+  const tasks = useSyncExternalStore(planSubscribe, planSnapshot);
+  const [now, setNow] = useState(Date.now());
+  const [sheet, setSheet] = useState<PlanTask | 'new' | null>(null);
+  const [quick, setQuick] = useState('');
+  const [perm, setPerm] = useState<string>(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
+  useEffect(() => { planLoad(userId); const h = window.setInterval(() => setNow(Date.now()), 20000); return () => window.clearInterval(h); }, [userId]);
+  const open = tasks.filter(t => !t.done);
+  const overdue = open.filter(t => planOverdue(t, now));
+  const rest = open.filter(t => !planOverdue(t, now));
+  const done = tasks.filter(t => t.done);
+  const todayN = open.filter(t => t.due && new Date(t.due).toDateString() === new Date(now).toDateString()).length;
+  const pct = tasks.length ? Math.round((done.length / tasks.length) * 100) : 0;
+  const move = (id: string, dir: -1 | 1) => planSet(l => { const i = l.findIndex(t => t.id === id); const j = i + dir; if (i < 0 || j < 0 || j >= l.length) return l; const n = l.slice(); [n[i], n[j]] = [n[j], n[i]]; return n; });
+  const save = (v: Omit<PlanTask, 'id' | 'done'>) => {
+    if (sheet && sheet !== 'new') { const id = sheet.id; planSet(l => l.map(t => (t.id === id ? { ...t, ...v, snoozeUntil: undefined } : t))); }
+    else planSet(l => [{ id: crypto.randomUUID(), done: false, ...v }, ...l]);
+    setSheet(null);
+  };
+  const addQuick = () => { const t = quick.trim(); if (!t) return; planSet(l => [{ id: crypto.randomUUID(), title: t.slice(0, 120), repeat: 0, color: PLAN_COLORS[0], done: false }, ...l]); setQuick(''); };
+  const Card = ({ t, first, last }: { t: PlanTask; first: boolean; last: boolean }) => {
+    const late = planOverdue(t, now);
+    return (
+      <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={`relative flex items-start gap-3 ps-4 pe-2 py-3 rounded-2xl border overflow-hidden ${late ? 'bg-red-500/10 border-red-400/30' : 'bg-white/5 border-white/10'}`}>
+        <span className="absolute inset-y-0 start-0 w-1.5" style={{ background: t.done ? '#4b5563' : t.color }} />
+        <button onClick={() => planSet(l => l.map(x => (x.id === t.id ? { ...x, done: !x.done, doneAt: x.done ? undefined : Date.now(), lastFired: undefined } : x)))} aria-label={t.done ? 'إرجاع المهمة' : 'تمت'} className={`mt-0.5 w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${t.done ? 'bg-emerald-500 border-emerald-500' : 'border-white/40'}`}>{t.done && <Check size={14} className="text-white" strokeWidth={3} />}</button>
+        <button onClick={() => setSheet(t)} className="min-w-0 flex-1 text-right">
+          <div className={`text-[15px] font-semibold ${t.done ? 'line-through text-gray-500' : 'text-white'}`} dir="auto">{t.title}</div>
+          {t.note && <div className="text-xs text-gray-400 mt-0.5 line-clamp-2" dir="auto">{t.note}</div>}
+          {(t.due || t.repeat > 0) && <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {t.due && <span className={`px-2 py-0.5 rounded-full text-[11px] ${late ? 'bg-red-500/25 text-red-200' : 'bg-white/10 text-gray-300'}`}>⏰ {fmtDue(t.due)}</span>}
+            {t.due && t.repeat > 0 && !t.done && <span className="px-2 py-0.5 rounded-full text-[11px] bg-white/10 text-gray-300">🔁 كل {t.repeat} د</span>}
+          </div>}
+        </button>
+        <div className="flex flex-col items-center gap-0.5 shrink-0">
+          <button disabled={first} onClick={() => move(t.id, -1)} aria-label="فوق" className="p-0.5 text-gray-500 disabled:opacity-20"><ChevronDown size={16} className="rotate-180" /></button>
+          <button disabled={last} onClick={() => move(t.id, 1)} aria-label="تحت" className="p-0.5 text-gray-500 disabled:opacity-20"><ChevronDown size={16} /></button>
+        </div>
+        <button onClick={() => planSet(l => l.filter(x => x.id !== t.id))} aria-label="حذف" className="p-1.5 text-gray-600 hover:text-red-400 shrink-0"><X size={15} /></button>
+      </motion.div>
+    );
+  };
+  const group = (title: string, list: PlanTask[], tint: string) => list.length > 0 && (
+    <div className="space-y-2">
+      <p className={`text-xs font-bold px-1 pt-1 ${tint}`}>{title} · {list.length}</p>
+      {list.map(t => <Card key={t.id} t={t} first={tasks[0]?.id === t.id} last={tasks[tasks.length - 1]?.id === t.id} />)}
+    </div>
+  );
+  const R = 26, C = 2 * Math.PI * R;
+  return (
+    <div className="space-y-3.5" dir="rtl">
+      <div className="relative overflow-hidden rounded-3xl p-4 bg-gradient-to-br from-violet-700 via-fuchsia-600 to-cyan-500 text-white shadow-[0_12px_40px_-12px_rgba(139,92,246,.8)]">
+        <div className="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-white/15 blur-2xl" />
+        <div className="relative flex items-center gap-4">
+          <svg width="64" height="64" viewBox="0 0 64 64" className="shrink-0 -rotate-90"><circle cx="32" cy="32" r={R} stroke="rgba(255,255,255,.25)" strokeWidth="7" fill="none" /><circle cx="32" cy="32" r={R} stroke="#fff" strokeWidth="7" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C - (C * pct) / 100} style={{ transition: 'stroke-dashoffset .5s' }} /></svg>
+          <div className="min-w-0 flex-1">
+            <div className="font-extrabold text-lg leading-tight">📝 مفكرتي</div>
+            <div className="text-xs opacity-90 mt-0.5">{tasks.length === 0 ? 'اكتب أول مهمة وأنا أفكّرك بيها' : `${done.length} من ${tasks.length} خلصت · ${pct}%`}</div>
+          </div>
+          <div className="flex gap-2 text-center shrink-0">
+            <div className="rounded-2xl bg-black/20 px-3 py-1.5"><div className="text-lg font-extrabold tabular-nums">{overdue.length}</div><div className="text-[10px] opacity-80">متأخرة</div></div>
+            <div className="rounded-2xl bg-black/20 px-3 py-1.5"><div className="text-lg font-extrabold tabular-nums">{todayN}</div><div className="text-[10px] opacity-80">النهارده</div></div>
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <input value={quick} onChange={e => setQuick(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addQuick(); }} placeholder="اكتب مهمة وخلاص..." maxLength={120} className="flex-1 min-w-0 rounded-full bg-gray-800 border border-gray-700 px-4 py-2.5 text-white text-[16px] placeholder-gray-500 focus:outline-none focus:border-violet-500" />
+        <button onClick={addQuick} disabled={!quick.trim()} aria-label="إضافة" className="w-11 h-11 shrink-0 rounded-full bg-white/10 text-white flex items-center justify-center disabled:opacity-40 active:scale-90"><Plus size={20} /></button>
+        <button onClick={() => setSheet('new')} className="h-11 px-4 shrink-0 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 text-white text-sm font-bold active:scale-95">⏰ بوقت</button>
+      </div>
+      {perm !== 'granted' && perm !== 'unsupported' && (
+        <button onClick={() => { void Notification.requestPermission().then(p => setPerm(p)); }} className="w-full text-start rounded-2xl bg-amber-500/10 border border-amber-400/25 px-3.5 py-2.5 text-xs text-amber-200">🔔 {perm === 'denied' ? 'الإشعارات محظورة من إعدادات المتصفح، فعّلها عشان توصلك التذكيرات برّه التطبيق' : 'دوس هنا وفعّل إشعارات الجهاز عشان التذكير يوصلك حتى لو في تطبيق تاني'}</button>
+      )}
+      {tasks.length === 0 && <div className="text-center py-10"><div className="text-5xl mb-2">🗒️</div><p className="text-gray-400 text-sm">مفيش مهام لسه</p><p className="text-gray-600 text-xs mt-1">حط مهمة ووقتها، وهفضل أفكّرك لحد ما تخلصها</p></div>}
+      {group('⚠️ متأخرة', overdue, 'text-red-300')}
+      {group('📌 جاية', rest, 'text-violet-300')}
+      {done.length > 0 && <div className="space-y-2"><div className="flex items-center justify-between px-1 pt-1"><p className="text-xs font-bold text-gray-500">✅ خلصت · {done.length}</p><button onClick={() => planSet(l => l.filter(t => !t.done))} className="text-[11px] text-gray-500 hover:text-red-400">مسح المنجز</button></div>{done.map(t => <Card key={t.id} t={t} first={tasks[0]?.id === t.id} last={tasks[tasks.length - 1]?.id === t.id} />)}</div>}
+      <p className="text-[11px] text-gray-600 text-center pt-2">التذكيرات بتشتغل طول ما التطبيق مفتوح. المهام محفوظة على الجهاز ده.</p>
+      {sheet && <PlanSheet task={sheet === 'new' ? null : sheet} onClose={() => setSheet(null)} onSave={save} />}
+    </div>
+  );
+}
+
+// Overdue tasks show up right inside the notifications list.
+function PlannerDueCard({ userId, onOpen }: { userId: string; onOpen: () => void }) {
+  const tasks = useSyncExternalStore(planSubscribe, planSnapshot);
+  useEffect(() => { planLoad(userId); }, [userId]);
+  const late = tasks.filter(t => planOverdue(t));
+  if (late.length === 0) return null;
+  return (
+    <div className="mb-4 rounded-2xl bg-gradient-to-br from-violet-600/25 to-fuchsia-600/20 border border-violet-400/30 p-3 space-y-2" dir="rtl">
+      <div className="flex items-center justify-between"><span className="text-sm font-bold text-white">⏰ مهام جه وقتها · {late.length}</span><button onClick={onOpen} className="text-xs text-violet-200 underline">فتح مفكرتي</button></div>
+      {late.slice(0, 3).map(t => (
+        <div key={t.id} className="flex items-center gap-2.5 rounded-xl bg-black/25 px-3 py-2">
+          <span className="w-1.5 self-stretch rounded-full" style={{ background: t.color }} />
+          <div className="min-w-0 flex-1"><div className="text-sm text-white truncate" dir="auto">{t.title}</div>{t.due && <div className="text-[11px] text-gray-400">{fmtDue(t.due)}</div>}</div>
+          <button onClick={() => planSet(l => l.map(x => (x.id === t.id ? { ...x, done: true, doneAt: Date.now() } : x)))} className="px-3 py-1 rounded-full bg-emerald-500 text-white text-xs font-bold active:scale-95">تمت ✓</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NotifPaneSwitch({ pane, setPane }: { pane: 'notifs' | 'planner'; setPane: (p: 'notifs' | 'planner') => void }) {
+  const tasks = useSyncExternalStore(planSubscribe, planSnapshot);
+  const late = tasks.filter(t => planOverdue(t)).length;
+  return (
+    <div className="grid grid-cols-2 gap-1 p-1 mb-4 rounded-full bg-white/5 border border-white/10">
+      <button onClick={() => setPane('notifs')} className={`py-2 rounded-full text-sm font-bold ${pane === 'notifs' ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-300'}`}>🔔 الإشعارات</button>
+      <button onClick={() => setPane('planner')} className={`relative py-2 rounded-full text-sm font-bold ${pane === 'planner' ? 'bg-gradient-to-r from-violet-600 to-fuchsia-500 text-white' : 'text-gray-300'}`}>📝 مفكرتي{late > 0 && <span className="absolute top-1 end-3 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] leading-[18px] font-bold">{late}</span>}</button>
+    </div>
+  );
+}
+
 function NotificationsTab({ currentUser, users, notifications, setNotifications, onOpenProfile, onOpenMine, onOpenGroup, soundOn, bannersOn, onToggleSound, onToggleBanners }: {
   soundOn: boolean; bannersOn: boolean; onToggleSound: () => void; onToggleBanners: () => void;
   currentUser: User; users: User[];
@@ -2998,6 +3234,7 @@ function NotificationsTab({ currentUser, users, notifications, setNotifications,
   onOpenMine: () => void;
   onOpenGroup: (id: string) => void;
 }) {
+  const [pane, setPane] = useState<'notifs' | 'planner'>('notifs');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [prefs, setPrefs] = useState<NotifPrefs>({});
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -3114,8 +3351,13 @@ function NotificationsTab({ currentUser, users, notifications, setNotifications,
     );
   };
 
+  if (pane === 'planner') return (
+    <div className="px-4 py-4"><NotifPaneSwitch pane={pane} setPane={setPane} /><PlannerPane userId={currentUser.id} /></div>
+  );
   return (
     <div className="px-4 py-4">
+      <NotifPaneSwitch pane={pane} setPane={setPane} />
+      <PlannerDueCard userId={currentUser.id} onOpen={() => setPane('planner')} />
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-white flex items-center gap-2"><Bell size={20} className="text-violet-300" /> الإشعارات</h2>
         <div className="flex items-center gap-1.5">
@@ -3207,6 +3449,39 @@ function notificationText(n: AppNotification): string {
     case 'follow': return 'بدأ بمتابعتك';
     default: return `أضافك إلى مجموعة ${n.snippet}`;
   }
+}
+
+function KanDialogHost() {
+  const [, force] = useState(0);
+  useEffect(() => { const f = () => force(n => n + 1); kanDlgSubs.add(f); return () => { kanDlgSubs.delete(f); }; }, []);
+  const d = kanDlgQueue[0];
+  const close = (v: boolean) => { if (!d) return; kanDlgQueue = kanDlgQueue.slice(1); d.resolve(v); kanDlgEmit(); };
+  useEffect(() => {
+    if (!d) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  const bad = d?.tone !== 'info';
+  return createPortal(
+    <AnimatePresence>
+      {d && (
+        <motion.div key={d.id} dir={DIR} className="fixed inset-0 z-[400] flex items-center justify-center p-5 bg-black/60 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => close(false)}>
+          <motion.div role="alertdialog" aria-modal="true" className="kan-theme-text w-full max-w-xs rounded-3xl bg-gray-900/95 border border-white/10 shadow-2xl p-5 text-center" initial={{ scale: 0.88, y: 16, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ type: 'spring', stiffness: 380, damping: 28 }} onClick={e => e.stopPropagation()}>
+            <div className={`mx-auto mb-3 w-14 h-14 rounded-2xl flex items-center justify-center ${d.tone === 'error' ? 'bg-red-500/15 text-red-400' : d.tone === 'danger' ? 'bg-amber-500/15 text-amber-400' : 'bg-cyan-500/15 text-cyan-300'}`}>
+              {d.tone === 'error' ? <AlertTriangle size={28} /> : d.tone === 'danger' ? <Trash2 size={26} /> : <Info size={28} />}
+            </div>
+            <p className="text-[15px] leading-relaxed text-white font-semibold whitespace-pre-line" dir="auto">{d.message}</p>
+            <div className="mt-5 flex gap-2">
+              {d.kind === 'confirm' && <button onClick={() => close(false)} className="flex-1 py-2.5 rounded-full bg-white/10 text-gray-200 text-sm font-semibold active:scale-95 transition-transform">{LANG === 'en' ? 'Cancel' : 'إلغاء'}</button>}
+              <button autoFocus onClick={() => close(true)} className={`flex-1 py-2.5 rounded-full text-white text-sm font-bold active:scale-95 transition-transform ${d.kind === 'confirm' && bad ? 'bg-gradient-to-r from-red-500 to-rose-500' : 'bg-gradient-to-r from-violet-600 to-cyan-500'}`}>{d.kind === 'confirm' ? (LANG === 'en' ? 'Confirm' : 'تأكيد') : (LANG === 'en' ? 'OK' : 'حسنًا')}</button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
 }
 
 function ToastBanner({ toast, onClose }: { toast: InAppToast; onClose: () => void }) {
@@ -3444,7 +3719,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
         document.body,
       )}
       {textComposer && <TextStoryComposer onClose={() => setTextComposer(false)} onNext={f => { setTextComposer(false); setComposer(f); }} />}
-      {composer && <StoryComposer file={composer} currentUser={currentUser} onClose={() => setComposer(null)} onDone={() => { setComposer(null); void load(); }} />}
+      {composer && <StoryComposer file={composer} currentUser={currentUser} users={users} onClose={() => setComposer(null)} onDone={() => { setComposer(null); void load(); }} />}
       {openAt !== null && viewerGroups[openAt] && (
         <StoryViewer
           groups={viewerGroups}
@@ -3478,7 +3753,7 @@ const bakeFilter = async (f: File, css: string): Promise<File | null> => {
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
 };
-type StoryExtra = { d?: number; items?: { k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string }[]; bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'none'; tp?: { x: number; y: number } }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string; o?: string[] }; pp?: { x: number; y: number; s?: number; r?: number }; ap?: { x: number; y: number; s?: number; r?: number }; ask?: string };
+type StoryExtra = { d?: number; items?: { k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string }[]; bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'none'; tp?: { x: number; y: number; r?: number } }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean; k?: 'loc' | 'men' | 'lnk'; u?: string; r?: number }[]; stickers?: string[]; poll?: { q: string; a: string; b: string; o?: string[] }; pp?: { x: number; y: number; s?: number; r?: number }; ap?: { x: number; y: number; s?: number; r?: number }; ask?: string };
 
 type StoryItemEdit = { id: string; k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string; file?: File };
 const STORY_FONTS = ['inherit', 'Georgia, "Times New Roman", serif', '"Courier New", monospace', '"Segoe Script", "Comic Sans MS", cursive'];
@@ -3502,7 +3777,8 @@ const pollOptions = (p: { a: string; b: string; o?: string[] }): string[] => (p.
 // Rotation snaps to every 45 degrees when you are within a few degrees of it.
 const snapAng = (r: number) => { const n = ((((r + 540) % 360) + 360) % 360) - 180; const m = Math.round(n / 45) * 45; return Math.abs(n - m) < 3.5 ? m : n; };
 
-function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSelect, xsel, onXSelect, onXf, onXRemove }: { extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk' | 'poll' | 'item', x: number, y: number, idx?: number) => void; onScale?: (idx: number, s: number) => void; onRotate?: (idx: number, r: number) => void; onRemove?: (idx: number) => void; sel?: number; onSelect?: (idx: number) => void; xsel?: '' | 'poll' | 'ask'; onXSelect?: (k: 'poll' | 'ask') => void; onXf?: (k: 'poll' | 'ask', p: Partial<StoryXf>) => void; onXRemove?: (k: 'poll' | 'ask') => void }) {
+function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSelect, xsel, onXSelect, onXf, onXRemove, onMention }: {
+  onMention?: (ref: string) => void; extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk' | 'poll' | 'item', x: number, y: number, idx?: number) => void; onScale?: (idx: number, s: number) => void; onRotate?: (idx: number, r: number) => void; onRemove?: (idx: number) => void; sel?: number; onSelect?: (idx: number) => void; xsel?: '' | 'poll' | 'ask'; onXSelect?: (k: 'poll' | 'ask') => void; onXf?: (k: 'poll' | 'ask', p: Partial<StoryXf>) => void; onXRemove?: (k: 'poll' | 'ask') => void }) {
   const root = useRef<HTMLDivElement>(null);
   const ptrs = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ d: number; s: number; a: number; r: number } | null>(null);
@@ -3521,12 +3797,12 @@ function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSele
     return { x, y };
   };
   const endGd = () => setGd(g => (g.x || g.y ? { x: false, y: false } : g));
-  const drag = (k: 'text' | 'stk' | 'poll') => (onMove ? {
+  const drag = (k: 'text' | 'stk' | 'poll', idx?: number) => (onMove ? {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => { e.currentTarget.setPointerCapture(e.pointerId); e.stopPropagation(); },
     onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
       if (!e.currentTarget.hasPointerCapture(e.pointerId) || !root.current) return;
       const p = pos(e.clientX, e.clientY);
-      onMove(k, p.x, p.y);
+      onMove(k, p.x, p.y, idx);
     },
     onPointerUp: endGd,
     onPointerCancel: endGd,
@@ -3569,8 +3845,15 @@ function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSele
   return (
     <div ref={root} className="absolute inset-0 pointer-events-none z-[5] kan-always-white" style={{ containerType: 'inline-size' } as React.CSSProperties}>
       {(extra.texts ?? []).map((x, i) => {
-        const d = drag('text');
-        return <div key={i} onPointerDown={d.onPointerDown} onPointerMove={d.onPointerMove} onPointerUp={d.onPointerUp} onPointerCancel={d.onPointerCancel} className={`absolute max-w-[88%] text-center text-white text-3xl font-extrabold leading-snug drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] whitespace-pre-wrap break-words ${d.className}`} style={{ left: `${x.x ?? 50}%`, top: `${x.y}%`, transform: 'translate(-50%,-50%)', color: x.c, fontSize: x.s ? `${x.s}px` : undefined, ...(x.bg ? { background: 'rgba(0,0,0,0.55)', padding: '0.25em 0.6em', borderRadius: '0.6em', textShadow: 'none' } : null) }} dir="auto">{x.t}</div>;
+        const d = drag('text', i);
+        const live = !onMove && !!x.k; // viewer: location opens Google Maps, mention opens the profile, link opens the page
+        const go = () => {
+          if (x.k === 'loc') window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.t)}`, '_blank', 'noopener');
+          else if (x.k === 'men') onMention?.(x.u || x.t.replace(/^@/, ''));
+          else if (x.k === 'lnk' && !x.t.trim().startsWith('#')) { const u = x.t.trim(); window.open(/^https?:\/\//i.test(u) ? u : `https://${u}`, '_blank', 'noopener'); }
+        };
+        const icon = x.k === 'loc' ? '📍 ' : x.k === 'lnk' && !x.t.trim().startsWith('#') ? '🔗 ' : '';
+        return <div key={i} onPointerDown={live ? (e => e.stopPropagation()) : d.onPointerDown} onPointerMove={d.onPointerMove} onPointerUp={d.onPointerUp} onPointerCancel={d.onPointerCancel} onClick={live ? (e => { e.stopPropagation(); go(); }) : undefined} role={live ? 'link' : undefined} className={`absolute max-w-[88%] text-center text-white text-3xl font-extrabold leading-snug drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] whitespace-pre-wrap break-words ${live ? 'pointer-events-auto cursor-pointer active:scale-95' : d.className}`} style={{ left: `${x.x ?? 50}%`, top: `${x.y}%`, transform: `translate(-50%,-50%) rotate(${x.r ?? 0}deg)`, color: x.c, fontSize: x.s ? `${x.s}px` : undefined, ...(x.bg ? { background: 'rgba(0,0,0,0.55)', padding: '0.25em 0.6em', borderRadius: '0.6em', textShadow: 'none' } : null) }} dir="auto">{icon}{x.t}</div>;
       })}
       {(extra.items ?? []).map((it, i) => {
         const editable = !!onMove;
@@ -3851,7 +4134,7 @@ function TextStoryComposer({ onClose, onNext }: { onClose: () => void; onNext: (
   );
 }
 
-function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; currentUser: User; onClose: () => void; onDone: () => void }) {
+function StoryComposer({ file, currentUser, users, onClose, onDone }: { file: File; currentUser: User; users: User[]; onClose: () => void; onDone: () => void }) {
   useBackLayer(true, onClose);
   const [previewUrl] = useState(() => URL.createObjectURL(file));
   useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
@@ -3870,6 +4153,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [tp, setTp] = useState<Pct | undefined>(undefined);
   const [bgc, setBgc] = useState('#000000');
   const [rot, setRot] = useState(0);
+  const [blurBg, setBlurBg] = useState(false);
   const [libOpen, setLibOpen] = useState(false);
   const [txt, setTxt] = useState('');
   const [txtY, setTxtY] = useState(50);
@@ -3914,8 +4198,8 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [tNew, setTNew] = useState('');
   const [tCol, setTCol] = useState('#ffffff');
   const [tBg, setTBg] = useState(false);
-  const moved = zoom !== 1 || off.x !== 0 || off.y !== 0 || bgc !== '#000000' || rot !== 0;
-  const resetBase = () => { setZoom(1); setOff({ x: 0, y: 0 }); setBgc('#000000'); setRot(0); };
+  const moved = zoom !== 1 || off.x !== 0 || off.y !== 0 || bgc !== '#000000' || rot !== 0 || blurBg;
+  const resetBase = () => { setZoom(1); setOff({ x: 0, y: 0 }); setBgc('#000000'); setRot(0); setBlurBg(false); };
   const redraw = () => {
     const c = cvs.current; const g = c?.getContext('2d'); if (!c || !g) return;
     g.clearRect(0, 0, c.width, c.height); g.lineCap = 'round'; g.lineJoin = 'round';
@@ -3935,6 +4219,19 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
       const c = document.createElement('canvas'); c.width = W; c.height = H;
       const g = c.getContext('2d'); if (!g) return f;
       g.fillStyle = bgc; g.fillRect(0, 0, W, H);
+      if (blurBg) {
+        // Soft blurred copy of the photo behind it (shrink + stretch works on every browser, unlike ctx.filter).
+        const sw = 32, sh = Math.round((32 * H) / W);
+        const t = document.createElement('canvas'); t.width = sw; t.height = sh;
+        const tg = t.getContext('2d');
+        if (tg) {
+          const cs = Math.max(sw / bmp.width, sh / bmp.height);
+          tg.imageSmoothingQuality = 'high';
+          tg.drawImage(bmp, (sw - bmp.width * cs) / 2, (sh - bmp.height * cs) / 2, bmp.width * cs, bmp.height * cs);
+          g.imageSmoothingQuality = 'high';
+          g.drawImage(t, 0, 0, W, H);
+        }
+      }
       const sc = Math.min(W / bmp.width, H / bmp.height);
       g.save(); g.translate(W / 2 + (off.x / 100) * W, H / 2 + (off.y / 100) * H); g.rotate((rot * Math.PI) / 180); g.scale(zoom, zoom);
       g.drawImage(bmp, -(bmp.width * sc) / 2, -(bmp.height * sc) / 2, bmp.width * sc, bmp.height * sc); g.restore();
@@ -3950,12 +4247,18 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [loc, setLoc] = useState('');
   const [men, setMen] = useState('');
   const [lnk, setLnk] = useState('');
+  const [locP, setLocP] = useState<Pct>({ x: 50, y: 66, r: 0 });
+  const [menP, setMenP] = useState<Pct>({ x: 50, y: 74, r: 0 });
+  const [lnkP, setLnkP] = useState<Pct>({ x: 50, y: 82, r: 0 });
+  const menName = men.trim().replace(/^@/, '').toLowerCase();
+  const menUser = menName ? users.find(u => u.id !== currentUser.id && u.username.toLowerCase() === menName) : undefined;
+  const menHints = menName && !menUser ? users.filter(u => u.id !== currentUser.id && (u.username.toLowerCase().startsWith(menName) || u.displayName.toLowerCase().includes(menName))).slice(0, 5) : [];
   const extra: StoryExtra = {
     texts: (() => {
       const all: NonNullable<StoryExtra['texts']> = [];
-      if (loc.trim()) all.push({ t: loc.trim().slice(0, 40), y: 66, x: 50, s: 22, bg: true });
-      if (men.trim()) all.push({ t: '@' + men.trim().replace(/^@/, '').slice(0, 30), y: 74, x: 50, c: '#a5f3fc', s: 24, bg: true });
-      if (lnk.trim()) all.push({ t: lnk.trim().slice(0, 40), y: 82, x: 50, s: 20, bg: true });
+      if (loc.trim()) all.push({ t: loc.trim().slice(0, 40), y: locP.y, x: locP.x, r: locP.r || undefined, s: 22, bg: true, k: 'loc' });
+      if (menUser) all.push({ t: '@' + menUser.username, y: menP.y, x: menP.x, r: menP.r || undefined, c: '#a5f3fc', s: 24, bg: true, k: 'men', u: menUser.id });
+      if (lnk.trim()) all.push({ t: lnk.trim().slice(0, 40), y: lnkP.y, x: lnkP.x, r: lnkP.r || undefined, s: 20, bg: true, k: 'lnk' });
       return all.length ? all : undefined;
     })(),
     sp: stk.length ? stkPos : undefined,
@@ -4081,10 +4384,10 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
         <span className="w-9" />
       </div>
       <div className="relative flex-1 min-h-0 flex items-center justify-center">
-        <div style={{ background: isVideo ? undefined : bgc }} className="relative h-full max-w-full aspect-[9/16] bg-black rounded-[32px] overflow-hidden ring-2 ring-violet-400/40 shadow-[0_0_60px_-10px_rgba(139,92,246,0.6)] flex items-center justify-center">
+        <div style={{ background: isVideo ? undefined : bgc }} className="relative h-full w-full sm:w-auto sm:max-w-full sm:aspect-[9/16] bg-black sm:rounded-[32px] overflow-hidden sm:ring-2 ring-violet-400/40 sm:shadow-[0_0_60px_-10px_rgba(139,92,246,0.6)] flex items-center justify-center">
           {isVideo
             ? <video src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay />
-            : <><img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="relative w-full h-full object-contain select-none pointer-events-none" /></>}
+            : <>{blurBg && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}<img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="relative w-full h-full object-contain select-none pointer-events-none" /></>}
           {!isVideo && tool !== 'draw' && <div className="absolute inset-0 z-[4] touch-none cursor-grab"
             onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); setSel(-1); setXsel(''); if (bp.current.size === 2) { const [p, q] = [...bp.current.values()]; bz.current = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom }; } }}
             onPointerMove={e => {
@@ -4105,14 +4408,14 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
           <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 to-transparent pointer-events-none z-[5]" />
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent pointer-events-none z-[5]" />
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
-          {remoteM && !music && mStyle === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={setTp} />}
+          {remoteM && !music && mStyle === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={q => setTp(o => ({ ...q, r: o?.r }))} />}
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
           <div className="absolute top-12 end-3 z-20 flex flex-col gap-2 max-h-[calc(100%-4rem)] overflow-y-auto no-scrollbar">
             {([['text', TypeIcon, 'نص', items.some(i => i.k === 't')], ['sticker', Smile, 'ملصق', items.length > 0], ['music', Music, 'موسيقى', !!music || !!remoteM], ['filter', Wand2, 'فلتر', flt > 0], ...(isVideo ? [] : [['frame', ImageIcon, 'الخلفية والتدوير', bgc !== '#000000' || rot !== 0] as const]), ['draw', Pencil, 'رسم', strokes.current.length > 0], ['tags', MapPin, 'موقع ومنشن', !!(loc.trim() || men.trim() || lnk.trim())], ['poll', BarChart3, 'استطلاع', !!extra.poll], ['ask', HelpCircle, 'سؤال', !!extra.ask], ['count', Clock, 'عدّاد', items.some(i => i.k === 'c')], ['dur', Play, 'مدة العرض', dur !== 5], ['aud', Users, 'مقربين', aud === 'close'], ['sched', Calendar, 'جدولة', !!sched]] as const).map(([k, Ic, label, on]) => (
               <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} aria-label={label} title={label} className={`relative shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-white active:scale-90 transition-transform ${tool === k ? 'bg-white/30 backdrop-blur-xl ring-2 ring-white' : 'bg-black/35 backdrop-blur-xl ring-1 ring-white/30'}`} style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.5))' }}><Ic size={22} strokeWidth={2.3} color="#fff" />{on && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-white ring-2 ring-violet-600" />}</button>
             ))}
           </div>
-          <StoryOverlays extra={extra} sel={sel} xsel={xsel} onXSelect={k => { setXsel(k); setSel(-1); setTool(k); }} onXf={(k, p) => (k === 'poll' ? setPollPos(o => ({ ...o, ...p })) : setAskPos(o => ({ ...o, ...p })))} onXRemove={k => { if (k === 'poll') { setPq(''); setPa(''); setPb(''); setPxs([]); } else setAsk(''); setXsel(''); }} onSelect={i => { setSel(i); setXsel(''); if (items[i]?.k === 't') setTool('text'); }} onRemove={removeItem} onScale={(i, sz) => setItems(a => a.map((x, k) => (k === i ? { ...x, s: sz } : x)))} onRotate={(i, r) => setItems(a => a.map((x, k) => (k === i ? { ...x, r } : x)))} onMove={(k, x, y, idx) => { if (k === 'text') { setTxtX(x); setTxtY(y); } else if (k === 'poll') setPollPos(o => ({ ...o, x, y })); else if (k === 'item' && idx !== undefined) setItems(a => a.map((it, i) => (i === idx ? { ...it, x, y } : it))); else setStkPos({ x, y }); }} />
+          <StoryOverlays extra={extra} sel={sel} xsel={xsel} onXSelect={k => { setXsel(k); setSel(-1); setTool(k); }} onXf={(k, p) => (k === 'poll' ? setPollPos(o => ({ ...o, ...p })) : setAskPos(o => ({ ...o, ...p })))} onXRemove={k => { if (k === 'poll') { setPq(''); setPa(''); setPb(''); setPxs([]); } else setAsk(''); setXsel(''); }} onSelect={i => { setSel(i); setXsel(''); if (items[i]?.k === 't') setTool('text'); }} onRemove={removeItem} onScale={(i, sz) => setItems(a => a.map((x, k) => (k === i ? { ...x, s: sz } : x)))} onRotate={(i, r) => setItems(a => a.map((x, k) => (k === i ? { ...x, r } : x)))} onMove={(k, x, y, idx) => { if (k === 'text') { const tk = extra.texts?.[idx ?? -1]?.k; if (tk === 'loc') setLocP(o => ({ ...o, x, y })); else if (tk === 'men') setMenP(o => ({ ...o, x, y })); else if (tk === 'lnk') setLnkP(o => ({ ...o, x, y })); } else if (k === 'poll') setPollPos(o => ({ ...o, x, y })); else if (k === 'item' && idx !== undefined) setItems(a => a.map((it, i) => (i === idx ? { ...it, x, y } : it))); else setStkPos({ x, y }); }} />
         </div>
       </div>
       <div className={`absolute inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 ${tool ? 'rounded-3xl bg-black/70 backdrop-blur-2xl ring-1 ring-white/15 p-3 max-h-[42%] overflow-y-auto shadow-2xl' : 'hidden'}`}>
@@ -4148,8 +4451,15 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
           </div>
           {selControls}
         </div>}
+        {sel >= 0 && items[sel] && <div className="flex items-center gap-2 mb-2 rounded-2xl bg-white/10 px-3 py-2">
+          <span className="text-white/80 text-xs shrink-0">تدوير العنصر</span>
+          <input type="range" min={-180} max={180} step={1} value={Math.round(items[sel].r ?? 0)} onChange={e => patchSel({ r: Number(e.target.value) })} className="flex-1 min-w-0 accent-violet-400" />
+          <span className="w-11 text-center text-white text-xs tabular-nums" dir="ltr">{Math.round(items[sel].r ?? 0)}°</span>
+          <button onClick={() => patchSel({ r: ((items[sel].r ?? 0) + 90 > 180 ? (items[sel].r ?? 0) - 270 : (items[sel].r ?? 0) + 90) })} className="shrink-0 px-2.5 py-1 rounded-full bg-white/15 text-white text-xs font-semibold">90°</button>
+        </div>}
         {tool === 'filter' && <div className="flex gap-2.5 overflow-x-auto no-scrollbar mb-2">{STORY_FILTERS.map((f, i) => <button key={f.n} onClick={() => pickFlt(i)} className="shrink-0 flex flex-col items-center gap-1 w-16"><span className={`block w-16 h-16 rounded-xl overflow-hidden ${flt === i ? 'ring-2 ring-white' : 'opacity-80'}`}>{isVideo ? <video src={`${previewUrl}#t=0.1`} preload="metadata" muted playsInline style={{ filter: f.f }} className="w-full h-full object-cover pointer-events-none" /> : <img src={previewUrl} alt="" style={{ filter: f.f }} className="w-full h-full object-cover" />}</span><span className={`text-[11px] ${flt === i ? 'text-white font-bold' : 'text-white/70'}`}>{f.n}</span></button>)}</div>}
         {tool === 'frame' && !isVideo && <div className="space-y-2.5 mb-1">
+          <button onClick={() => setBlurBg(b => !b)} className={`w-full py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] ${blurBg ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>🌫️ خلفية ضبابية من نفس الصورة {blurBg ? '✓' : ''}</button>
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             <span className="text-white/80 text-xs shrink-0">لون الخلفية</span>
             {['#000000', '#ffffff', '#7c3aed', '#06b6d4', '#ec4899', '#f97316', '#22c55e', '#eab308', '#1e3a8a', '#6b7280'].map(c => <button key={c} onClick={() => setBgc(c)} aria-label="لون الخلفية" className={`shrink-0 w-8 h-8 rounded-full border-2 ${bgc === c ? 'border-white scale-110' : 'border-white/30'}`} style={{ background: c }} />)}
@@ -4159,7 +4469,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
             <button onClick={() => setRot(r => (r + 90 > 180 ? r - 270 : r + 90))} className="shrink-0 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold flex items-center gap-1"><RefreshCw size={13} /> 90°</button>
             <input type="range" min={-180} max={180} step={1} value={rot} onChange={e => setRot(Number(e.target.value))} className="flex-1 min-w-0 accent-violet-400" />
             <span className="w-10 text-center text-white text-xs tabular-nums" dir="ltr">{rot}°</span>
-            {(bgc !== '#000000' || rot !== 0) && <button onClick={() => { setBgc('#000000'); setRot(0); }} className="shrink-0 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs">إعادة</button>}
+            {(bgc !== '#000000' || rot !== 0 || blurBg) && <button onClick={() => { setBgc('#000000'); setRot(0); setBlurBg(false); }} className="shrink-0 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs">إعادة</button>}
           </div>
         </div>}
         {tool === 'music' && <div className="mb-2">{music
@@ -4168,7 +4478,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
               {remoteM && <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2">
                 <div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{remoteM.name}</span><button onClick={() => { setRemoteM(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div>
                 <div className="flex gap-2 px-2 mt-2">{([['cover', '🖼 غلاف'], ['none', '🚫 بدون غلاف']] as const).filter(([k]) => k !== 'cover' || !!remoteM.cover).map(([k, l]) => <button key={k} onClick={() => setMStyle(k)} className={`flex-1 py-1.5 rounded-full text-xs font-semibold ${mStyle === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}</div>
-                {mStyle === 'cover' && <p className="px-2 mt-1.5 text-[11px] text-gray-400">اسحب الغلاف على الشاشة لتحريكه</p>}
+                {mStyle === 'cover' && <div className="mt-1.5 flex items-center gap-2 px-2"><span className="text-[11px] text-gray-300 shrink-0">اسحب الغلاف لتحريكه · تدوير</span><input type="range" min={-180} max={180} value={Math.round(tp?.r ?? 0)} onChange={e => setTp(o => ({ x: o?.x ?? 50, y: o?.y ?? 62, r: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round(tp?.r ?? 0)}°</span></div>}
                 <div className="mt-2"><MusicTrimmer key={remoteM.url} src={remoteM.url} name={remoteM.name} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div>
               </div>}
               {remoteM && !libOpen
@@ -4176,7 +4486,16 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
                 : <MusicLibrary onDevice={() => musicPick.current?.click()} onClose={remoteM ? () => setLibOpen(false) : undefined} onPick={t => { setMusic(null); setRemoteM(t); setMStart(t.start ?? 0); setMEnd(t.end ?? 0); setMStyle(t.cover ? 'cover' : 'none'); setLibOpen(false); }} />}
             </div>}
           <input ref={musicPick} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setMusic(f); setRemoteM(null); setMStart(0); setMEnd(0); } }} /></div>}
-        {tool === 'tags' && <div className="space-y-2 mb-2">{([[MapPin, loc, setLoc, 'أضف موقعاً'], [AtSign, men, setMen, 'منشن لصديق (اسم المستخدم)'], [LinkIcon, lnk, setLnk, 'رابط أو هاشتاج']] as const).map(([Ic, v, set, ph]) => <div key={ph} className="flex items-center gap-2 bg-white/10 rounded-full ps-3"><Ic size={18} color="#fff" strokeWidth={2.2} /><input value={v} onChange={e => set(e.target.value)} placeholder={ph} className="flex-1 min-w-0 px-2 py-2 bg-transparent text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>)}</div>}
+        {tool === 'tags' && <div className="space-y-2 mb-2">{([[MapPin, loc, setLoc, 'أضف موقعاً'], [AtSign, men, setMen, 'منشن لصديق (اسم المستخدم)'], [LinkIcon, lnk, setLnk, 'رابط أو هاشتاج']] as const).map(([Ic, v, set, ph]) => <div key={ph} className="flex items-center gap-2 bg-white/10 rounded-full ps-3"><Ic size={18} color="#fff" strokeWidth={2.2} /><input value={v} onChange={e => set(e.target.value)} placeholder={ph} className="flex-1 min-w-0 px-2 py-2 bg-transparent text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>)}
+          {menHints.length > 0 && <div className="flex gap-2 overflow-x-auto no-scrollbar">{menHints.map(u => <button key={u.id} onClick={() => setMen(u.username)} className="shrink-0 flex items-center gap-2 pe-3 ps-1 py-1 rounded-full bg-white/10 text-white text-xs active:scale-95"><Avatar userId={u.id} src={u.avatar} name={u.displayName} size="sm" />@{u.username}</button>)}</div>}
+          {menName && !menUser && menHints.length === 0 && <p className="text-[11px] text-amber-300 px-2">مفيش مستخدم بالاسم ده، اختار حد من المقترحات</p>}
+          {menUser && <p className="text-[11px] text-emerald-300 px-2">✓ هيظهر @{menUser.username} وأي حد يدوس عليه يفتح بروفايله</p>}
+          {(loc.trim() || menUser || lnk.trim()) && <p className="text-[11px] text-gray-400 px-2">اسحبهم على القصة لتحريكهم. الموقع بيفتح خرائط جوجل.</p>}
+          {([[loc.trim(), '📍', locP, setLocP], [menUser ? '1' : '', '@', menP, setMenP], [lnk.trim(), '🔗', lnkP, setLnkP]] as const).filter(r => r[0]).map(([, ic, v, set]) => <div key={ic} className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5"><span className="text-sm shrink-0">{ic}</span><span className="text-white/70 text-[11px] shrink-0">تدوير</span><input type="range" min={-180} max={180} value={Math.round(v.r ?? 0)} onChange={e => set(o => ({ ...o, r: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round(v.r ?? 0)}°</span></div>)}
+        </div>}
+        {(xsel === 'poll' || xsel === 'ask') && <div className="mb-2 space-y-1.5 rounded-2xl bg-white/10 px-3 py-2">
+          {([['تدوير', -180, 180, 1, (xsel === 'poll' ? pollPos : askPos).r ?? 0, 'r', '°'], ['الحجم', 0.5, 2, 0.05, (xsel === 'poll' ? pollPos : askPos).s ?? 1, 's', '×']] as const).map(([lb, mn, mx, st, val, key, un]) => <div key={key} className="flex items-center gap-2"><span className="w-12 shrink-0 text-white/80 text-xs">{lb}</span><input type="range" min={mn} max={mx} step={st} value={val} onChange={e => (xsel === 'poll' ? setPollPos : setAskPos)(o => ({ ...o, [key]: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-11 text-center text-white text-xs tabular-nums" dir="ltr">{key === 'r' ? Math.round(val) : val.toFixed(2)}{un}</span></div>)}
+        </div>}
         {tool === 'poll' && <div className="space-y-2 mb-2">
           <input value={pq} onChange={e => setPq(e.target.value)} placeholder="سؤال الاستطلاع" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" />
           {[pa, pb, ...pxs].map((v, i) => (
@@ -4231,7 +4550,7 @@ async function shrinkImageFile(f: File): Promise<File> {
   } catch { return f; }
 }
 
-type Pct = { x: number; y: number };
+type Pct = { x: number; y: number; r?: number };
 // Drag an absolutely-positioned child around its parent; reports the position in % of the parent.
 function pctDrag(onMove?: (p: Pct) => void) {
   return (e: React.PointerEvent<HTMLDivElement>) => {
@@ -4252,7 +4571,7 @@ function StoryMusicTag({ m, pos, onMove }: { m: { name: string; cover?: string; 
   const cover = m.style === 'cover' && !!m.cover;
   const p = pos ?? (cover ? { x: 50, y: 62 } : { x: 50, y: 13 });
   return (
-    <div onPointerDown={pctDrag(onMove)} style={{ left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', touchAction: onMove ? 'none' : undefined, color: '#fff' }}
+    <div onPointerDown={pctDrag(onMove)} style={{ left: `${p.x}%`, top: `${p.y}%`, transform: `translate(-50%,-50%) rotate(${p.r ?? 0}deg)`, touchAction: onMove ? 'none' : undefined, color: '#fff' }}
       className={`absolute z-10 w-fit max-w-[80%] kan-always-white ${onMove ? 'cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-2xl' : 'pointer-events-none'}`}>
       {cover ? (
         <div className="flex items-center gap-3 p-2 pe-4 rounded-2xl bg-white/20 backdrop-blur-xl ring-1 ring-white/30 shadow-xl">
@@ -4473,7 +4792,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
   }, [paused, showViewers, replyFocus, story?.id]);
 
   const remove = async () => {
-    if (!story || !window.confirm('حذف هذه القصة؟')) return;
+    if (!story || !(await kanConfirm('حذف هذه القصة؟'))) return;
     const { error } = await supabase.from('stories').delete().eq('id', story.id);
     if (error) { console.error(error); return; }
     // A shared post's media belongs to the post, so only delete files this story uploaded itself.
@@ -4549,7 +4868,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
               onError={() => setProgress(1)}
             />
           )}
-        <StoryOverlays extra={story.extra} />
+        <StoryOverlays extra={story.extra} onMention={ref => { const u = users.find(x => x.id === ref || x.username.toLowerCase() === ref.toLowerCase()); if (u) { onClose(); openUserProfile(u.id); } }} />
         {(() => {
           const ex = story.extra;
           const stack = !!ex?.poll && !!ex?.ask && !ex?.ap;
@@ -4929,6 +5248,8 @@ function ChatPoll({ id, text, all, meId, onVote }: { id: string; text: string; a
 }
 
 function describeMessage(m: Message): string {
+  const gm = parseGame(m.text);
+  if (gm) return gm.k === 'inv' ? '♟️ دعوة لعب شطرنج' : '♟️ شطرنج';
   const pl = parsePoll(m.text);
   if (pl) return '📊 ' + pl.q;
   if (parseVote(m.text)) return '🗳️ تصويت';
@@ -5130,7 +5451,7 @@ function GlobalUploadBar({ onOpen }: { onOpen: () => void }) {
         const pct = r.pct === null ? 0 : Math.max(0, Math.min(100, r.pct));
         const title = fail ? (r.down ? 'فشل التحميل' : 'فشل الرفع') : done ? (r.down ? 'تم التحميل ✓' : 'تم النشر ✓') : (r.down ? 'جاري تحميل الملف...' : 'جاري رفع الملف... لا تقفل التطبيق');
         return (
-          <div key={r.id} className="pointer-events-auto mx-auto max-w-md rounded-2xl bg-gray-900/95 backdrop-blur border border-white/10 shadow-xl px-3.5 py-2.5">
+          <div key={r.id} className={`pointer-events-auto mx-auto max-w-md rounded-2xl backdrop-blur-xl border shadow-2xl px-3.5 py-2.5 ${fail ? 'bg-red-950/90 border-red-500/40 shadow-red-900/30' : done ? 'bg-gray-900/95 border-emerald-500/40' : 'bg-gray-900/95 border-white/10'}`}>
             <div className="flex items-center gap-2.5">
               <button onClick={onOpen} className="min-w-0 flex-1 text-right">
                 <div className="text-[13px] text-white truncate" dir="auto">{title}{r.label ? ` · ${r.label}` : ''}</div>
@@ -5615,6 +5936,30 @@ export default function App() {
     openGroup: id => { setOpenGroupId(id); goTab('messages'); },
     openNotifs: () => goTab('notifications'),
   };
+  // Swipe left/right anywhere on the main screens walks through the tabs in nav order:
+  // home -> reels -> create -> videos -> my profile (swipe left = next, right = back).
+  const swipeRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const swipeStart = (e: React.TouchEvent<HTMLElement>) => {
+    const t = e.touches[0];
+    const host = e.currentTarget;
+    let ok = e.touches.length === 1 && !viewedUserId && screens.length === 0 && selectedChat === null && host.contains(e.target as Node);
+    for (let el = e.target as HTMLElement | null; ok && el && el !== host; el = el.parentElement) {
+      if (el.matches('input,textarea,select,canvas,[contenteditable="true"],[data-noswipe]')) ok = false; // sliders, text fields, drawing, trimmer keep their own drag
+      else if (el.scrollWidth > el.clientWidth + 4 && /(auto|scroll)/.test(getComputedStyle(el).overflowX)) ok = false; // horizontal lists (stories, carousels)
+    }
+    swipeRef.current = ok ? { x: t.clientX, y: t.clientY, t: Date.now() } : null;
+  };
+  const swipeEnd = (e: React.TouchEvent<HTMLElement>) => {
+    const s0 = swipeRef.current; swipeRef.current = null;
+    if (!s0) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s0.x, dy = t.clientY - s0.y;
+    if (Math.abs(dx) < 90 || Math.abs(dx) < Math.abs(dy) * 2 || Date.now() - s0.t > 700) return;
+    const order = ['feed', 'reels', 'create', 'videos', 'profile'] as const;
+    const i = (order as readonly string[]).indexOf(activeTab);
+    const next = i < 0 ? undefined : order[i + (dx < 0 ? 1 : -1)];
+    if (next) goTab(next);
+  };
   // Home button: already on the feed -> one tap scrolls to the top, a quick second tap refreshes it.
   const lastHomeTap = useRef(0);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
@@ -5751,6 +6096,7 @@ export default function App() {
 
   return (
     <div dir={LANG === 'en' ? 'ltr' : 'rtl'} className="min-h-screen bg-gray-950 text-white font-sans">
+      <KanDialogHost />
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={popScreen} />}
       {/* Header */}
@@ -5810,6 +6156,7 @@ export default function App() {
         </div>
       </header>
 
+      {currentUser && <PlannerReminders userId={currentUser.id} />}
       <GlobalUploadBar onOpen={() => { openFilesTab = true; window.dispatchEvent(new Event('kan-open-files')); goTab('profile'); }} />
 
       {storageError && (
@@ -5822,7 +6169,7 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <main className="kan-enter pt-16 pb-20 w-full min-h-screen md:px-4 lg:px-8">
+      <main onTouchStart={swipeStart} onTouchEnd={swipeEnd} className="kan-enter pt-16 pb-20 w-full min-h-screen md:px-4 lg:px-8">
         <InstallBanner />
         <AnimatePresence mode="wait" initial={false}>
           {viewedUserId && (
@@ -6697,7 +7044,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   };
 
   const deleteComment = async (commentId: string) => {
-    if (!window.confirm('حذف هذا التعليق؟')) return;
+    if (!(await kanConfirm('حذف هذا التعليق؟'))) return;
     const snapshot = post.comments;
     mutatePost(p => ({ ...p, comments: p.comments.filter(c => c.id !== commentId) }));
     const { error } = await supabase.from('comments').delete().eq('id', commentId);
@@ -6708,7 +7055,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   };
 
   const deleteReply = async (commentId: string, replyId: string) => {
-    if (!window.confirm('حذف هذا الرد؟')) return;
+    if (!(await kanConfirm('حذف هذا الرد؟'))) return;
     const snapshot = post.comments;
     mutatePost(p => ({
       ...p,
@@ -7086,7 +7433,7 @@ function PostMenu({ post, author, currentUser, setPosts, saved, onToggleSave, da
             {mine ? (
               <>
                 <MenuRow icon={<Pencil size={20} />} label="تعديل" onClick={pick(() => setSheet('edit'))} />
-                <MenuRow icon={<Trash2 size={20} />} label="حذف" danger onClick={pick(() => { if (window.confirm('حذف المنشور كله؟ لحذف ملف واحد منه اختر تعديل.')) void deleteMyPost(post, setPosts); })} />
+                <MenuRow icon={<Trash2 size={20} />} label="حذف" danger onClick={pick(async () => { if (await kanConfirm('حذف المنشور كله؟ لحذف ملف واحد منه اختر تعديل.')) void deleteMyPost(post, setPosts); })} />
               </>
             ) : (
               <>
@@ -7392,6 +7739,11 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
   onClose: () => void;
 }) {
   useBackLayer(true, onClose);
+  useEffect(() => {
+    const was = Array.from(document.querySelectorAll('video')).filter(v => !v.paused);
+    was.forEach(v => v.pause());
+    return () => { was.forEach(v => { if (v.isConnected) void v.play().catch(() => undefined); }); };
+  }, []);
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<{ parentId: string; name: string } | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -7433,7 +7785,7 @@ function ReelComments({ post, users, currentUser, setPosts, onOpenProfile, onClo
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm('حذف هذا التعليق؟')) return;
+    if (!(await kanConfirm('حذف هذا التعليق؟'))) return;
     const snapshot = post.comments;
     mutate(p => ({
       ...p,
@@ -7550,6 +7902,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   const [muted, setMuted] = useState(true);
   const autoNext = true;
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
+  const [lockH, setLockH] = useState<number | null>(null); // keyboard must not resize the reels list (that scrolled to the next reel)
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const reelsByTime = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
   const reels = rankByInterests(reelsByTime, currentUser.id);
@@ -7601,7 +7954,8 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   return createPortal(
     <div dir={DIR} className="fixed inset-0 z-[60] bg-black">
       <div
-        className="h-full overflow-y-scroll overscroll-contain snap-y snap-mandatory no-scrollbar"
+        className={`${lockH ? '' : 'h-full'} ${commentsFor ? 'overflow-y-hidden' : 'overflow-y-scroll'} overscroll-contain snap-y snap-mandatory no-scrollbar`}
+        style={lockH ? { height: lockH } : undefined}
         onScroll={e => {
           const el = e.currentTarget;
           if (el.scrollTop + el.clientHeight * 2.5 >= el.scrollHeight) void loadMore();
@@ -7622,7 +7976,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
                 onToggleMute={() => setMuted(m => !m)}
                 setPosts={setPosts}
                 onOpenProfile={onOpenProfile}
-                onOpenComments={() => setCommentsFor(post.id)}
+                onOpenComments={() => { setLockH(window.innerHeight); setCommentsFor(post.id); }}
                 onShowLikes={() => setListModal({ title: 'الإعجابات', ids: post.likes })}
                 autoNext={autoNext}
                 onNext={() => { const n = reels[reels.findIndex(r => r.id === post.id) + 1]; if (n) document.getElementById(`reel-${n.id}`)?.scrollIntoView({ behavior: 'smooth' }); }}
@@ -7637,7 +7991,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
         <span className="text-xs text-white/80 font-medium">ريلز</span>
       </div>
       {commentPost && (
-        <ReelComments post={commentPost} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} onClose={() => setCommentsFor(null)} />
+        <ReelComments post={commentPost} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} onClose={() => { setCommentsFor(null); setLockH(null); }} />
       )}
       {listModal && (
         <UserListModal title={listModal.title} userIds={listModal.ids} users={users} onOpenProfile={onOpenProfile} onClose={() => setListModal(null)} />
@@ -8310,7 +8664,7 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
         </div>
         <div className="px-2.5 py-1 rounded-full bg-white/10 text-white text-xs tabular-nums shrink-0">{Math.round(winLen)} ث</div>
       </div>
-      <div dir="ltr" onPointerDown={dragWin} style={{ touchAction: 'none' }} className="relative h-16 rounded-xl bg-black/40 overflow-hidden cursor-grab active:cursor-grabbing select-none" aria-label="اسحب لتحديد المقطع">
+      <div data-noswipe dir="ltr" onPointerDown={dragWin} style={{ touchAction: 'none' }} className="relative h-16 rounded-xl bg-black/40 overflow-hidden cursor-grab active:cursor-grabbing select-none" aria-label="اسحب لتحديد المقطع">
         <div className="absolute inset-0 flex items-center gap-[2px] px-1">
           {bars.map((h, i) => {
             const t = ((i + 0.5) / bars.length) * total;
@@ -10246,6 +10600,393 @@ function ScrollDownFab({ fab, onClick }: { fab: ChatFab; onClick: () => void }) 
   );
 }
 
+// ============ Games in chat (chess first) ============
+// Everything travels as hidden chat messages (same trick as poll votes), so no new tables are needed:
+// invite (with start time) -> accept/decline -> moves -> resign. Results and the win counter are derived from them.
+const GAME_TAG = '⟦g⟧';
+type GameMsg = { k: 'inv' | 'acc' | 'dec' | 'mv' | 'res' | 'dr' | 'da' | 'dd' | 'to'; g: string; at?: number; tc?: number; n?: number; m?: string };
+function parseGame(t?: string | null): GameMsg | null {
+  if (!t || !t.startsWith(GAME_TAG)) return null;
+  try { const d = JSON.parse(t.slice(GAME_TAG.length)); return d && typeof d.g === 'string' && typeof d.k === 'string' ? (d as GameMsg) : null; } catch { return null; }
+}
+const gameText = (d: GameMsg) => GAME_TAG + JSON.stringify(d);
+
+// ---- chess rules (board index 0 = a8 ... 63 = h1) ----
+type CBoard = (string | null)[];
+type CState = { b: CBoard; t: 'w' | 'b'; c: string; ep: number; h: number };
+type CMove = { f: number; to: number; p?: string; ep?: boolean; cs?: 'K' | 'Q' };
+const sqName = (i: number) => 'abcdefgh'[i % 8] + (8 - Math.floor(i / 8));
+const sqIdx = (s: string) => (8 - Number(s[1])) * 8 + 'abcdefgh'.indexOf(s[0]);
+function chessStart(): CState {
+  const back = ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'];
+  const b: CBoard = Array(64).fill(null);
+  for (let i = 0; i < 8; i++) { b[i] = 'b' + back[i]; b[8 + i] = 'bP'; b[48 + i] = 'wP'; b[56 + i] = 'w' + back[i]; }
+  return { b, t: 'w', c: 'KQkq', ep: -1, h: 0 };
+}
+function chessAttacked(b: CBoard, sq: number, by: 'w' | 'b'): boolean {
+  const r = Math.floor(sq / 8), f = sq % 8;
+  const at = (rr: number, ff: number) => (rr >= 0 && rr < 8 && ff >= 0 && ff < 8 ? b[rr * 8 + ff] : null);
+  const pr = by === 'w' ? r + 1 : r - 1;
+  if (at(pr, f - 1) === by + 'P' || at(pr, f + 1) === by + 'P') return true;
+  for (const [dr, df] of [[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]]) if (at(r + dr, f + df) === by + 'N') return true;
+  for (let dr = -1; dr <= 1; dr++) for (let df = -1; df <= 1; df++) if ((dr || df) && at(r + dr, f + df) === by + 'K') return true;
+  for (const [dr, df, kinds] of [[1, 0, 'RQ'], [-1, 0, 'RQ'], [0, 1, 'RQ'], [0, -1, 'RQ'], [1, 1, 'BQ'], [1, -1, 'BQ'], [-1, 1, 'BQ'], [-1, -1, 'BQ']] as [number, number, string][]) {
+    let rr = r + dr, ff = f + df;
+    while (rr >= 0 && rr < 8 && ff >= 0 && ff < 8) {
+      const p = b[rr * 8 + ff];
+      if (p) { if (p[0] === by && kinds.includes(p[1])) return true; break; }
+      rr += dr; ff += df;
+    }
+  }
+  return false;
+}
+function chessPseudo(s: CState, from: number): CMove[] {
+  const p = s.b[from];
+  if (!p || p[0] !== s.t) return [];
+  const me = s.t, op = me === 'w' ? 'b' : 'w', type = p[1], r = Math.floor(from / 8), f = from % 8;
+  const out: CMove[] = [];
+  const add = (to: number, extra: Partial<CMove> = {}) => out.push({ f: from, to, ...extra });
+  if (type === 'P') {
+    const dir = me === 'w' ? -1 : 1, start = me === 'w' ? 6 : 1, last = me === 'w' ? 0 : 7;
+    const push = (to: number) => { if (Math.floor(to / 8) === last) { for (const q of ['q', 'r', 'b', 'n']) add(to, { p: q }); } else add(to); };
+    const one = from + dir * 8;
+    if (one >= 0 && one < 64 && s.b[one] === null) { push(one); if (r === start && s.b[one + dir * 8] === null) add(one + dir * 8); }
+    for (const df of [-1, 1]) {
+      const nf = f + df;
+      if (nf < 0 || nf > 7 || one < 0 || one > 63) continue;
+      const to = one + df;
+      const tp = s.b[to];
+      if (tp && tp[0] === op) push(to); else if (!tp && to === s.ep) add(to, { ep: true });
+    }
+    return out;
+  }
+  const step = (offs: number[][]) => { for (const [dr, df] of offs) { const rr = r + dr, ff = f + df; if (rr < 0 || rr > 7 || ff < 0 || ff > 7) continue; const t = s.b[rr * 8 + ff]; if (!t || t[0] === op) add(rr * 8 + ff); } };
+  const slide = (dirs: number[][]) => { for (const [dr, df] of dirs) { let rr = r + dr, ff = f + df; while (rr >= 0 && rr < 8 && ff >= 0 && ff < 8) { const t = s.b[rr * 8 + ff]; if (!t) add(rr * 8 + ff); else { if (t[0] === op) add(rr * 8 + ff); break; } rr += dr; ff += df; } } };
+  const ROOK = [[1, 0], [-1, 0], [0, 1], [0, -1]], BISH = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+  if (type === 'N') step([[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]]);
+  else if (type === 'B') slide(BISH);
+  else if (type === 'R') slide(ROOK);
+  else if (type === 'Q') slide([...ROOK, ...BISH]);
+  else if (type === 'K') {
+    step([...ROOK, ...BISH]);
+    const row = me === 'w' ? 56 : 0;
+    if (from === row + 4 && !chessAttacked(s.b, from, op)) {
+      const K = me === 'w' ? 'K' : 'k', Q = me === 'w' ? 'Q' : 'q';
+      if (s.c.includes(K) && !s.b[row + 5] && !s.b[row + 6] && s.b[row + 7] === me + 'R' && !chessAttacked(s.b, row + 5, op) && !chessAttacked(s.b, row + 6, op)) add(row + 6, { cs: 'K' });
+      if (s.c.includes(Q) && !s.b[row + 3] && !s.b[row + 2] && !s.b[row + 1] && s.b[row] === me + 'R' && !chessAttacked(s.b, row + 3, op) && !chessAttacked(s.b, row + 2, op)) add(row + 2, { cs: 'Q' });
+    }
+  }
+  return out;
+}
+function chessApply(s: CState, m: CMove): CState {
+  const b = s.b.slice();
+  const p = b[m.f] as string, me = s.t, cap = b[m.to];
+  b[m.to] = m.p ? me + m.p.toUpperCase() : p;
+  b[m.f] = null;
+  if (m.ep) b[m.to + (me === 'w' ? 8 : -8)] = null;
+  if (m.cs) { const row = me === 'w' ? 56 : 0; if (m.cs === 'K') { b[row + 5] = b[row + 7]; b[row + 7] = null; } else { b[row + 3] = b[row]; b[row] = null; } }
+  let c = s.c;
+  if (p[1] === 'K') c = c.replace(me === 'w' ? /[KQ]/g : /[kq]/g, '');
+  for (const [sq, ch] of [[63, 'K'], [56, 'Q'], [7, 'k'], [0, 'q']] as [number, string][]) if (m.f === sq || m.to === sq) c = c.replace(ch, '');
+  const ep = p[1] === 'P' && Math.abs(m.to - m.f) === 16 ? (m.f + m.to) / 2 : -1;
+  return { b, t: me === 'w' ? 'b' : 'w', c, ep, h: p[1] === 'P' || cap || m.ep ? 0 : s.h + 1 };
+}
+function chessLegal(s: CState, from?: number): CMove[] {
+  const out: CMove[] = [];
+  const opp = s.t === 'w' ? 'b' : 'w';
+  for (let i = 0; i < 64; i++) {
+    if (from !== undefined && i !== from) continue;
+    for (const m of chessPseudo(s, i)) {
+      const n = chessApply(s, m);
+      const k = n.b.indexOf(s.t + 'K');
+      if (k >= 0 && !chessAttacked(n.b, k, opp)) out.push(m);
+    }
+  }
+  return out;
+}
+type ChessStatus = 'play' | 'check' | 'mate' | 'stalemate' | 'draw';
+function chessStatus(s: CState): ChessStatus {
+  const k = s.b.indexOf(s.t + 'K');
+  const inCheck = k >= 0 && chessAttacked(s.b, k, s.t === 'w' ? 'b' : 'w');
+  if (chessLegal(s).length === 0) return inCheck ? 'mate' : 'stalemate';
+  const rest = (s.b.filter(Boolean) as string[]).filter(x => x[1] !== 'K');
+  if (s.h >= 100 || rest.length === 0 || (rest.length === 1 && (rest[0][1] === 'N' || rest[0][1] === 'B'))) return 'draw';
+  return inCheck ? 'check' : 'play';
+}
+const chessMoveStr = (m: { f: number; to: number; p?: string }) => sqName(m.f) + sqName(m.to) + (m.p ?? '');
+const chessParse = (s: CState, str: string): CMove | undefined => chessLegal(s, sqIdx(str.slice(0, 2))).find(m => m.to === sqIdx(str.slice(2, 4)) && (m.p ?? '') === (str[4] ?? ''));
+
+// ---- game state derived from the chat ----
+type GameInfo = {
+  g: string; inviter: string; invitee: string; at: number; ts: number; tc: number; // tc = minutes per player (0 = no clock)
+  accepted: boolean | null; moves: string[]; st: CState; status: ChessStatus; last?: [number, number];
+  startTs: number; lastTs: number; spent: { w: number; b: number };
+  resignedBy?: string; drawBy?: string; agreed?: boolean; timeout?: 'w' | 'b'; winner: string | null;
+};
+function collectGames(msgs: Message[], meId: string, otherId: string): GameInfo[] {
+  const by = new Map<string, GameInfo>();
+  const acc = new Map<string, number>();
+  const mv = new Map<string, Map<number, { m: string; ts: number }>>();
+  const claims: { g: string; by: string; ts: number }[] = [];
+  for (const m of [...msgs].sort((a, b) => a.timestamp - b.timestamp)) {
+    const d = parseGame(m.text);
+    if (!d) continue;
+    if (d.k === 'inv') {
+      if (!by.has(d.g)) by.set(d.g, { g: d.g, inviter: m.senderId, invitee: m.senderId === meId ? otherId : meId, at: d.at ?? m.timestamp, ts: m.timestamp, tc: Math.max(0, Math.min(60, d.tc ?? 0)), accepted: null, moves: [], st: chessStart(), status: 'play', startTs: 0, lastTs: 0, spent: { w: 0, b: 0 }, winner: null });
+      continue;
+    }
+    const gi = by.get(d.g);
+    if (!gi) continue;
+    if (d.k === 'acc' && m.senderId !== gi.inviter && gi.accepted === null) { gi.accepted = true; acc.set(gi.g, m.timestamp); }
+    else if (d.k === 'dec' && m.senderId !== gi.inviter && gi.accepted === null) gi.accepted = false;
+    else if (d.k === 'mv' && gi.accepted && typeof d.n === 'number' && d.m) {
+      let mm = mv.get(d.g);
+      if (!mm) { mm = new Map(); mv.set(d.g, mm); }
+      if (((m.senderId === gi.inviter) === (d.n % 2 === 0)) && !mm.has(d.n)) { mm.set(d.n, { m: d.m, ts: m.timestamp }); gi.drawBy = undefined; }
+    } else if (d.k === 'res' && gi.accepted && !gi.resignedBy) gi.resignedBy = m.senderId;
+    else if (d.k === 'dr' && gi.accepted) gi.drawBy = m.senderId;
+    else if (d.k === 'dd' && gi.drawBy && gi.drawBy !== m.senderId) gi.drawBy = undefined;
+    else if (d.k === 'da' && gi.drawBy && gi.drawBy !== m.senderId) gi.agreed = true;
+    else if (d.k === 'to' && gi.accepted) claims.push({ g: gi.g, by: m.senderId, ts: m.timestamp });
+  }
+  for (const gi of by.values()) {
+    if (!gi.accepted) continue;
+    const mm = mv.get(gi.g);
+    const budget = gi.tc * 60000;
+    gi.startTs = Math.max(gi.at, acc.get(gi.g) ?? 0);
+    gi.lastTs = gi.startTs;
+    let s = chessStart();
+    for (let n = 0; mm?.has(n); n++) {
+      const e = mm.get(n) as { m: string; ts: number };
+      const m = chessParse(s, e.m);
+      if (!m) break;
+      const side = s.t;
+      const used = gi.spent[side] + Math.max(0, e.ts - gi.lastTs);
+      if (budget > 0 && used > budget) { gi.timeout = side; break; } // moved after the flag fell
+      gi.spent[side] = used;
+      gi.lastTs = e.ts;
+      gi.last = [m.f, m.to];
+      s = chessApply(s, m);
+      gi.moves.push(e.m);
+    }
+    gi.st = s;
+    gi.status = chessStatus(s);
+    if (!gi.timeout && budget > 0 && gi.status !== 'mate') {
+      for (const c of claims) {
+        if (c.g !== gi.g) continue;
+        const loser = gi.st.t === 'w' ? gi.inviter : gi.invitee;
+        if (c.by !== loser && gi.spent[gi.st.t] + Math.max(0, c.ts - gi.lastTs) >= budget - 1500) { gi.timeout = gi.st.t; break; }
+      }
+    }
+    const colorId = (c: 'w' | 'b') => (c === 'w' ? gi.inviter : gi.invitee);
+    if (gi.status === 'mate') gi.winner = colorId(s.t === 'w' ? 'b' : 'w'); // the side to move is the mated one
+    else if (gi.status === 'stalemate' || gi.status === 'draw' || gi.agreed) gi.winner = 'draw';
+    else if (gi.timeout) gi.winner = colorId(gi.timeout === 'w' ? 'b' : 'w');
+    else if (gi.resignedBy) gi.winner = gi.resignedBy === gi.inviter ? gi.invitee : gi.inviter;
+  }
+  return [...by.values()].sort((a, b) => a.ts - b.ts);
+}
+function gameScore(games: GameInfo[], meId: string) {
+  let me = 0, them = 0, draw = 0;
+  for (const g of games) { if (g.winner === 'draw') draw++; else if (g.winner === meId) me++; else if (g.winner) them++; }
+  return { me, them, draw };
+}
+const fmtCountdown = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return `${h > 0 ? h + ':' : ''}${String(m).padStart(h > 0 ? 2 : 1, '0')}:${String(sec).padStart(2, '0')}`; };
+const fmtGameTime = (at: number) => new Date(at).toLocaleString('ar-EG', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+const PIECE_GLYPH: Record<string, string> = { K: '♚︎', Q: '♛︎', R: '♜︎', B: '♝︎', N: '♞︎', P: '♟︎' };
+const PIECE_START: Record<string, number> = { Q: 1, R: 2, B: 2, N: 2, P: 8 };
+// Pieces of `color` that are no longer on the board.
+function chessLost(b: CBoard, color: 'w' | 'b'): string[] {
+  const have: Record<string, number> = {};
+  for (const p of b) if (p && p[0] === color) have[p[1]] = (have[p[1]] ?? 0) + 1;
+  const out: string[] = [];
+  for (const k of ['Q', 'R', 'B', 'N', 'P']) for (let i = 0; i < PIECE_START[k] - (have[k] ?? 0); i++) out.push(k);
+  return out;
+}
+
+function GameInviteCard({ game, games, meId, other, onAccept, onDecline, onOpen }: { game: GameInfo; games: GameInfo[]; meId: string; other: User; onAccept: () => void; onDecline: () => void; onOpen: () => void }) {
+  const [now, setNow] = useState(Date.now());
+  const waiting = game.accepted === true && game.at > now && game.winner === null;
+  useEffect(() => {
+    if (!waiting) return;
+    const h = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(h);
+  }, [waiting]);
+  const mine = game.inviter === meId;
+  const sc = gameScore(games, meId);
+  const done = game.winner !== null;
+  return (
+    <div className="min-w-[14.5rem] rounded-2xl bg-gradient-to-br from-[#2b2f3a] to-[#1b1e27] ring-1 ring-white/15 p-3.5 text-white shadow-lg">
+      <div className="flex items-center gap-2.5">
+        <span className="w-10 h-10 shrink-0 rounded-xl bg-[#ebecd0] text-[#2b2f3a] flex items-center justify-center text-2xl leading-none">♞</span>
+        <div className="min-w-0"><div className="font-bold text-sm leading-tight">{mine ? `دعوة شطرنج لـ ${other.displayName}` : `${other.displayName} بيدعوك لشطرنج`}</div><div className="text-[11px] opacity-70 mt-0.5">⏰ {fmtGameTime(game.at)}{game.tc ? ` · ⏱ ${game.tc} د لكل لاعب` : ' · بدون ساعة'}</div></div>
+      </div>
+      <div className="mt-2.5 flex items-center justify-center gap-3 rounded-xl bg-black/30 py-1.5 text-xs">
+        <span className="opacity-70">أنت</span><b className="text-base tabular-nums">{sc.me}</b><span className="opacity-50">–</span><b className="text-base tabular-nums">{sc.them}</b><span className="opacity-70 truncate max-w-[6rem]">{other.displayName}</span>{sc.draw ? <span className="opacity-60">· تعادل {sc.draw}</span> : null}
+      </div>
+      <div className="mt-2.5">
+        {game.accepted === null && (mine
+          ? <div className="text-xs opacity-80 text-center">في انتظار رد {other.displayName}...</div>
+          : <div className="flex gap-2"><button onClick={onAccept} className="flex-1 py-2 rounded-full bg-emerald-500 text-white text-xs font-bold active:scale-95">قبول</button><button onClick={onDecline} className="flex-1 py-2 rounded-full bg-white/15 text-white text-xs font-bold active:scale-95">رفض</button></div>)}
+        {game.accepted === false && <div className="text-xs text-red-300 text-center">الدعوة اترفضت</div>}
+        {game.accepted === true && !done && (waiting
+          ? <div className="text-xs text-center"><span className="opacity-80">تبدأ بعد </span><b className="tabular-nums">{fmtCountdown(game.at - now)}</b></div>
+          : <button onClick={onOpen} className="w-full py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-xs font-bold active:scale-95">{game.moves.length ? 'كمّل المباراة' : 'ادخل المباراة'}</button>)}
+        {game.accepted === true && done && (
+          <div className="flex items-center justify-between gap-2"><span className="text-xs font-bold">{game.winner === 'draw' ? '🤝 تعادل' : game.winner === meId ? '🏆 فزت' : `🏆 فاز ${other.displayName}`}</span><button onClick={onOpen} className="px-3 py-1 rounded-full bg-white/15 text-xs">عرض</button></div>)}
+      </div>
+    </div>
+  );
+}
+
+function GamePicker({ onClose, onInvite }: { onClose: () => void; onInvite: (at: number, tc: number) => void }) {
+  const [step, setStep] = useState<'list' | 'time'>('list');
+  const [pick, setPick] = useState<'now' | '15' | '60' | 'custom'>('now');
+  const [custom, setCustom] = useState('');
+  const [tc, setTc] = useState(10);
+  const at = pick === 'now' ? Date.now() : pick === 'custom' ? (custom ? new Date(custom).getTime() : 0) : Date.now() + Number(pick) * 60000;
+  const chip = (on: boolean) => `px-3.5 py-2 rounded-full text-sm font-semibold ${on ? 'bg-white text-black' : 'bg-white/10 text-white'}`;
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl bg-gray-900 border border-white/10 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]" onClick={e => e.stopPropagation()} dir="rtl">
+        <div className="flex items-center justify-between mb-3"><h3 className="text-white font-bold">{step === 'list' ? 'العب مع صاحبك' : 'إعدادات المباراة'}</h3><button onClick={onClose} className="p-1.5 text-gray-400" aria-label="إغلاق"><X size={18} /></button></div>
+        {step === 'list' ? (
+          <div className="grid grid-cols-2 gap-2.5">
+            <button onClick={() => setStep('time')} className="rounded-2xl bg-gradient-to-br from-violet-600/30 to-cyan-500/20 ring-1 ring-violet-400/40 p-4 text-center active:scale-95"><div className="text-4xl">♟️</div><div className="mt-1 text-white font-bold text-sm">شطرنج</div></button>
+            {['❌⭕ إكس أو', '🎲 طاولة', '🃏 كوتشينة'].map(n => <div key={n} className="rounded-2xl bg-white/5 p-4 text-center opacity-50"><div className="text-white text-sm font-bold">{n}</div><div className="text-[11px] text-gray-400 mt-1">قريبًا</div></div>)}
+          </div>
+        ) : (
+          <div>
+            <p className="text-xs text-gray-400 mb-2">امتى تبدأ؟</p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {([['now', 'دلوقتي'], ['15', 'بعد 15 دقيقة'], ['60', 'بعد ساعة'], ['custom', 'وقت محدد']] as const).map(([k, l]) => <button key={k} onClick={() => setPick(k)} className={chip(pick === k)}>{l}</button>)}
+            </div>
+            {pick === 'custom' && <input type="datetime-local" value={custom} onChange={e => setCustom(e.target.value)} className="w-full mb-3 rounded-xl bg-gray-800 border border-gray-700 px-3 py-2 text-white text-[16px]" />}
+            <p className="text-xs text-gray-400 mb-2">الوقت لكل لاعب</p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {([[0, 'بدون ساعة'], [3, '3 د'], [5, '5 د'], [10, '10 د'], [15, '15 د']] as const).map(([k, l]) => <button key={k} onClick={() => setTc(k)} className={chip(tc === k)}>{l}</button>)}
+            </div>
+            <button disabled={pick === 'custom' && !custom} onClick={() => onInvite(Math.max(at, Date.now()), tc)} className="w-full py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white font-bold disabled:opacity-40 active:scale-[0.98]">إرسال الدعوة</button>
+            <button onClick={() => setStep('list')} className="w-full mt-2 py-2 text-xs text-gray-400">رجوع</button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onTimeout, onNew, onClose }: { game: GameInfo; games: GameInfo[]; meId: string; me: User; other: User; onMove: (mv: string) => void; onResign: () => void; onDraw: (k: 'dr' | 'da' | 'dd') => void; onTimeout: () => void; onNew: () => void; onClose: () => void }) {
+  const myColor: 'w' | 'b' = game.inviter === meId ? 'w' : 'b';
+  const oppColor: 'w' | 'b' = myColor === 'w' ? 'b' : 'w';
+  const [sel, setSel] = useState<number | null>(null);
+  const [promo, setPromo] = useState<{ f: number; to: number } | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const over = game.winner !== null;
+  const timed = game.tc > 0;
+  const running = !over && game.accepted === true;
+  useEffect(() => {
+    if (!running || !timed) return;
+    const h = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(h);
+  }, [running, timed]);
+  const budget = game.tc * 60000;
+  const left = (c: 'w' | 'b') => (budget - game.spent[c] - (running && game.st.t === c ? Math.max(0, now - game.lastTs) : 0));
+  // The opponent's flag fell: the winner's device reports it, which makes the result permanent for both.
+  const claimed = useRef(false);
+  useEffect(() => {
+    if (running && timed && game.st.t === oppColor && left(oppColor) <= 0 && !claimed.current) { claimed.current = true; onTimeout(); }
+  });
+  const myTurn = running && game.st.t === myColor && (!timed || left(myColor) > 0);
+  const legal = useMemo(() => (myTurn ? chessLegal(game.st) : []), [game.st, myTurn]);
+  useEffect(() => { setSel(null); setPromo(null); }, [game.moves.length]);
+  const targets = sel === null ? [] : legal.filter(m => m.f === sel);
+  const sc = gameScore(games, meId);
+  const kingSq = game.status === 'check' || game.status === 'mate' ? game.st.b.indexOf(game.st.t + 'K') : -1;
+  const order = Array.from({ length: 64 }, (_, k) => (myColor === 'w' ? k : 63 - k));
+  const tap = (i: number) => {
+    if (!myTurn || promo) return;
+    const hit = targets.filter(m => m.to === i);
+    if (sel !== null && hit.length > 0) { if (hit.length > 1) setPromo({ f: sel, to: i }); else onMove(chessMoveStr(hit[0])); return; }
+    const pc = game.st.b[i];
+    setSel(pc && pc[0] === myColor && legal.some(m => m.f === i) ? i : null);
+  };
+  const reason = game.status === 'mate' ? 'كش مات' : game.status === 'stalemate' ? 'لا توجد حركات' : game.status === 'draw' ? 'تعادل' : game.agreed ? 'بالاتفاق' : game.timeout ? 'انتهى الوقت' : game.resignedBy ? 'استسلام' : '';
+  const headline = !over ? (myTurn ? 'دورك' : `دور ${other.displayName}`) : game.winner === 'draw' ? '🤝 تعادل' : game.winner === meId ? '🏆 فزت!' : `🏆 فاز ${other.displayName}`;
+  const Bar = ({ u, c, mineBar }: { u: User; c: 'w' | 'b'; mineBar: boolean }) => {
+    const lost = chessLost(game.st.b, c === 'w' ? 'b' : 'w'); // what this player has captured
+    const active = running && game.st.t === c;
+    const ms = left(c);
+    return (
+      <div className={`w-full flex items-center gap-2.5 rounded-2xl px-3 py-2 ${active ? 'bg-white/10 ring-1 ring-emerald-400/50' : 'bg-white/5'}`}>
+        <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="sm" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-sm text-white font-semibold truncate"><span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c === 'w' ? 'bg-white' : 'bg-gray-700 ring-1 ring-white/40'}`} />{mineBar ? 'أنت' : u.displayName}</div>
+          <div dir="ltr" className="h-4 text-[13px] leading-4 text-gray-300 truncate">{lost.map((k, i) => <span key={i}>{PIECE_GLYPH[k]}</span>)}</div>
+        </div>
+        {timed && <span dir="ltr" className={`tabular-nums text-lg font-bold px-3 py-1 rounded-xl ${ms <= 0 ? 'bg-red-600 text-white' : ms < 30000 && active ? 'bg-red-500/25 text-red-300' : active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-black/30 text-gray-300'}`}>{fmtCountdown(Math.max(0, ms))}</span>}
+      </div>
+    );
+  };
+  return createPortal(
+    <div className="fixed inset-0 z-[90] bg-[#161512] flex flex-col items-center overflow-y-auto" dir="rtl">
+      <div className="w-full max-w-md px-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between">
+        <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white" aria-label="إغلاق"><X size={18} /></button>
+        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 text-sm">
+          <span className="text-gray-400">أنت</span><b className="text-white text-base tabular-nums">{sc.me}</b><span className="text-gray-600">–</span><b className="text-white text-base tabular-nums">{sc.them}</b><span className="text-gray-400 truncate max-w-[5rem]">{other.displayName}</span>{sc.draw ? <span className="text-gray-500 text-xs">· {sc.draw} تعادل</span> : null}
+        </div>
+        <span className="w-9" />
+      </div>
+      <div className="w-full max-w-md px-3 mt-3"><Bar u={other} c={oppColor} mineBar={false} /></div>
+      <div className="w-full max-w-md px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
+      <div dir="ltr" className="relative mt-2 w-full max-w-md px-2">
+        <div className="grid grid-cols-8 aspect-square w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(0,0,0,.8)] ring-4 ring-[#3a3631]">
+          {order.map((i, k) => {
+            const r = Math.floor(i / 8), f = i % 8;
+            const dark = (r + f) % 2 === 1;
+            const pc = game.st.b[i];
+            const isLast = game.last && (game.last[0] === i || game.last[1] === i);
+            const tgt = targets.some(m => m.to === i);
+            const rankLbl = k % 8 === 0 ? String(8 - r) : '';
+            const fileLbl = k >= 56 ? 'abcdefgh'[f] : '';
+            return (
+              <button key={i} onClick={() => tap(i)} className={`relative flex items-center justify-center ${dark ? 'bg-[#779556]' : 'bg-[#ebecd0]'} ${i === kingSq ? '!bg-red-500' : ''}`}>
+                {isLast && <span className="absolute inset-0 bg-yellow-300/50 pointer-events-none" />}
+                {sel === i && <span className="absolute inset-0 bg-sky-400/50 pointer-events-none" />}
+                {rankLbl && <span className={`absolute top-0.5 left-1 text-[9px] font-bold ${dark ? 'text-[#ebecd0]' : 'text-[#779556]'}`}>{rankLbl}</span>}
+                {fileLbl && <span className={`absolute bottom-0 right-1 text-[9px] font-bold ${dark ? 'text-[#ebecd0]' : 'text-[#779556]'}`}>{fileLbl}</span>}
+                {pc && <span className={`relative leading-none select-none text-[clamp(28px,10.5vw,56px)] transition-transform ${sel === i ? 'scale-110' : ''} ${pc[0] === 'w' ? 'text-white [text-shadow:0_0_2px_#000,0_0_3px_#000,0_2px_3px_rgba(0,0,0,.6)]' : 'text-[#1b1b1b] [text-shadow:0_0_1.5px_rgba(255,255,255,.55),0_2px_3px_rgba(0,0,0,.35)]'}`}>{PIECE_GLYPH[pc[1]]}</span>}
+                {tgt && <span className={`absolute rounded-full pointer-events-none ${pc ? 'inset-1 ring-[5px] ring-black/25' : 'w-[30%] h-[30%] bg-black/25'}`} />}
+              </button>
+            );
+          })}
+        </div>
+        {promo && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-xl">
+            <div className="flex gap-2 rounded-2xl bg-gray-900 p-3 ring-1 ring-white/20">
+              {(['q', 'r', 'b', 'n'] as const).map(q => <button key={q} onClick={() => { onMove(chessMoveStr({ f: promo.f, to: promo.to, p: q })); setPromo(null); }} className="w-14 h-14 rounded-xl bg-[#ebecd0] text-4xl text-gray-900 active:scale-95">{PIECE_GLYPH[q.toUpperCase()]}</button>)}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="w-full max-w-md px-3 mt-3"><Bar u={me} c={myColor} mineBar /></div>
+      <div className="w-full max-w-md px-3 mt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        {over ? (
+          <button onClick={onNew} className="w-full py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold active:scale-[0.98]">لعبة جديدة</button>
+        ) : game.drawBy && game.drawBy !== meId ? (
+          <div className="flex items-center gap-2 rounded-2xl bg-amber-500/15 ring-1 ring-amber-400/30 px-3 py-2"><span className="flex-1 text-sm text-amber-200">{other.displayName} بيعرض تعادل 🤝</span><button onClick={() => onDraw('da')} className="px-4 py-1.5 rounded-full bg-emerald-500 text-white text-xs font-bold">قبول</button><button onClick={() => onDraw('dd')} className="px-4 py-1.5 rounded-full bg-white/15 text-white text-xs font-bold">رفض</button></div>
+        ) : (
+          <div className="flex gap-2">
+            <button onClick={() => onDraw('dr')} disabled={game.drawBy === meId} className="flex-1 py-2.5 rounded-full bg-white/10 text-white text-sm font-semibold disabled:opacity-50 active:scale-[0.98]">{game.drawBy === meId ? 'بانتظار رده...' : '🤝 عرض تعادل'}</button>
+            <button onClick={async () => { if (await kanConfirm('تستسلم في المباراة؟')) onResign(); }} className="flex-1 py-2.5 rounded-full bg-red-500/15 text-red-300 text-sm font-semibold active:scale-[0.98]">🏳️ استسلام</button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function ChatView({ currentUser, chatUser, conversation, setConversations, onBack, allConvIds = [] }: {
   currentUser: User; chatUser: User; allConvIds?: string[];
   conversation: Conversation | undefined;
@@ -10273,7 +11014,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [aiOpen, setAiOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
-  const [stickerStart, setStickerStart] = useState(false);
+  const stickerStart = false; // stickers now live only inside the emoji panel (its stickers tab)
   const lastTap = useRef<{ id: string; t: number }>({ id: '', t: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
   const [recording, setRecording] = useState(false);
@@ -10283,6 +11024,11 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [error, setError] = useState('');
 
   const messages = conversation?.messages || [];
+  const [showGames, setShowGames] = useState(false);
+  const [openGid, setOpenGid] = useState<string | null>(null);
+  const games = useMemo(() => collectGames(messages, currentUser.id, chatUser.id), [messages, currentUser.id, chatUser.id]);
+  const openGame = games.find(x => x.g === openGid) ?? null;
+  const sendGame = (d: GameMsg) => { void send({ text: gameText(d) }); };
   const bg = conversation?.background;
   const [bgSrc, setBgSrc] = useState<string | null>(() => (bg?.type === 'image' ? ((bg.key && bgMem.get(bg.key)) || bg.value) : null));
   useEffect(() => {
@@ -10578,7 +11324,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   };
 
   const deleteMessage = async (msg: Message) => {
-    if (!conversation || !window.confirm('حذف هذه الرسالة للجميع؟')) return;
+    if (!conversation || !(await kanConfirm('حذف هذه الرسالة للجميع؟'))) return;
     const convId = conversation.id;
     setActiveMsgId(null);
     if (replyingTo?.id === msg.id) setReplyingTo(null);
@@ -10613,7 +11359,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     return { first, hidden };
   })();
   const deleteAlbum = async (items: Message[]) => {
-    if (!conversation || !window.confirm('حذف كل ملفات الألبوم للجميع؟')) return;
+    if (!conversation || !(await kanConfirm('حذف كل ملفات الألبوم للجميع؟'))) return;
     const convId = conversation.id;
     const ids = items.map(i => i.id);
     setActiveMsgId(null);
@@ -10661,6 +11407,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               : <div className="text-xs text-gray-500">@{chatUser.username}</div>}
           </div>
         </button>
+        {showGames && <GamePicker onClose={() => setShowGames(false)} onInvite={(at, tc) => { sendGame({ k: 'inv', g: crypto.randomUUID(), at, tc }); setShowGames(false); }} />}
+        {openGame && <ChessGame game={openGame} games={games} meId={currentUser.id} me={currentUser} other={chatUser} onMove={mv => sendGame({ k: 'mv', g: openGame.g, n: openGame.moves.length, m: mv })} onResign={() => sendGame({ k: 'res', g: openGame.g })} onDraw={k => sendGame({ k, g: openGame.g })} onTimeout={() => sendGame({ k: 'to', g: openGame.g })} onNew={() => { sendGame({ k: 'inv', g: crypto.randomUUID(), at: Date.now(), tc: openGame.tc }); setOpenGid(null); }} onClose={() => setOpenGid(null)} />}
         <div className="relative">
           <button
             onClick={() => setShowBgPicker(!showBgPicker)}
@@ -10691,6 +11439,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
         )}
         {messages.map((msg, idx) => {
           if (parseVote(msg.text)) return null;
+          { const gm = parseGame(msg.text); if (gm && gm.k !== 'inv') return null; }
           if (albumMap.hidden.has(msg.id)) return null;
           const isMine = msg.senderId === currentUser.id;
           const showAvatar = idx === 0 || messages[idx - 1]?.senderId !== msg.senderId;
@@ -10810,7 +11559,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                       <Download size={16} className="shrink-0" />
                     </button>
                   )}
-                  {msg.text && (parsePoll(msg.text) ? <ChatPoll id={msg.id} text={msg.text} all={messages} meId={currentUser.id} onVote={i => void send({ text: VOTE_TAG + JSON.stringify({ p: msg.id, i }) })} /> : <p className="text-sm leading-relaxed whitespace-pre-wrap break-words" dir="auto"><Linkified text={msg.text} /></p>)}
+                  {msg.text && (parseGame(msg.text)?.k === 'inv' ? (() => { const gi = games.find(x => x.g === parseGame(msg.text)?.g); return gi ? <GameInviteCard game={gi} games={games} meId={currentUser.id} other={chatUser} onAccept={() => sendGame({ k: 'acc', g: gi.g })} onDecline={() => sendGame({ k: 'dec', g: gi.g })} onOpen={() => setOpenGid(gi.g)} /> : null; })() : parsePoll(msg.text) ? <ChatPoll id={msg.id} text={msg.text} all={messages} meId={currentUser.id} onVote={i => void send({ text: VOTE_TAG + JSON.stringify({ p: msg.id, i }) })} /> : <p className="text-sm leading-relaxed whitespace-pre-wrap break-words" dir="auto"><Linkified text={msg.text} /></p>)}
                   {msg.sharedPostId && (
                     <button
                       onClick={e => { e.stopPropagation(); openPost(msg.sharedPostId!, msg.sharedCommentId); }}
@@ -10982,8 +11731,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                 <button onClick={() => { fileRef.current?.click(); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95">
                   <Paperclip size={16} /> إرفاق
                 </button>
-                <button onClick={() => { setToolsOpen(false); inputRef.current?.blur(); setStickerStart(true); setEmojiOpen(true); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95">
-                  <Smile size={16} /> ملصقات
+                <button onClick={() => { setToolsOpen(false); inputRef.current?.blur(); setShowGames(true); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-white active:scale-95">
+                  <Gamepad2 size={16} className="text-white" /> العب
                 </button>
                 <button
                   onPointerDown={e => e.preventDefault()}
