@@ -4007,7 +4007,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
         if (mErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); setErr(`تعذّر رفع الموسيقى: ${(mErr as { message?: string }).message ?? ''}`); setBusy(false); return; }
         mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, style: 'text' };
       } else if (remoteM) {
-        mObj = { url: remoteM.url, name: remoteM.name.slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, cover: remoteM.cover, style: mStyle };
+        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, cover: remoteM.cover, style: mStyle };
       }
       const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj, items: uploadedItems }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
       if (insErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); throw insErr; }
@@ -4150,11 +4150,11 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
               {remoteM && <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2">
                 <div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{remoteM.name}</span><button onClick={() => { setRemoteM(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div>
                 <div className="flex gap-2 px-2 mt-2">{([['cover', '🖼 صورة الغلاف'], ['text', 'Aa اسم الأغنية']] as const).filter(([k]) => k === 'text' || !!remoteM.cover).map(([k, l]) => <button key={k} onClick={() => setMStyle(k)} className={`flex-1 py-1.5 rounded-full text-xs font-semibold ${mStyle === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}</div>
-                <div className="mt-2"><MusicTrimmer key={remoteM.url} src={remoteM.url} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div>
+                <div className="mt-2"><MusicTrimmer key={remoteM.url} src={remoteM.url} name={remoteM.name} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div>
               </div>}
               {remoteM && !libOpen
                 ? <button onClick={() => setLibOpen(true)} className="w-full py-2.5 rounded-2xl bg-white/10 text-white text-xs font-semibold">تغيير الأغنية</button>
-                : <MusicLibrary onDevice={() => musicPick.current?.click()} onClose={remoteM ? () => setLibOpen(false) : undefined} onPick={t => { setMusic(null); setRemoteM(t); setMStart(0); setMEnd(0); setMStyle(t.cover ? 'cover' : 'text'); setLibOpen(false); }} />}
+                : <MusicLibrary onDevice={() => musicPick.current?.click()} onClose={remoteM ? () => setLibOpen(false) : undefined} onPick={t => { setMusic(null); setRemoteM(t); setMStart(t.start ?? 0); setMEnd(t.end ?? 0); setMStyle(t.cover ? 'cover' : 'text'); setLibOpen(false); }} />}
             </div>}
           <input ref={musicPick} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setMusic(f); setRemoteM(null); setMStart(0); setMEnd(0); } }} /></div>}
         {tool === 'tags' && <div className="space-y-2 mb-2">{([[MapPin, loc, setLoc, 'أضف موقعاً'], [AtSign, men, setMen, 'منشن لصديق (اسم المستخدم)'], [LinkIcon, lnk, setLnk, 'رابط أو هاشتاج']] as const).map(([Ic, v, set, ph]) => <div key={ph} className="flex items-center gap-2 bg-white/10 rounded-full ps-3"><Ic size={18} color="#fff" strokeWidth={2.2} /><input value={v} onChange={e => set(e.target.value)} placeholder={ph} className="flex-1 min-w-0 px-2 py-2 bg-transparent text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>)}</div>}
@@ -6366,16 +6366,20 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
     return (
       <div ref={holder} className="absolute top-2 left-2 z-10" onClick={e => e.stopPropagation()}>
         <audio ref={ref} src={music.url} preload="none" muted={muted} onPlay={() => setOn(true)} onPause={() => setOn(false)} onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= start + win) a.currentTime = start; }} onEnded={e => { const a = e.currentTarget; a.currentTime = start; void a.play().catch(() => undefined); }} />
-        <button onClick={() => setMuted(m => !m)} aria-label={muted ? 'تشغيل الصوت' : 'كتم الصوت'} className="w-7 h-7 rounded-full bg-black/40 text-white flex items-center justify-center opacity-70 active:scale-90">
-          {muted || !on ? <VolumeX size={14} /> : <Volume2 size={14} />}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => setMuted(m => !m)} aria-label={muted ? 'تشغيل الصوت' : 'كتم الصوت'} className="w-7 h-7 rounded-full bg-black/40 text-white flex items-center justify-center opacity-70 active:scale-90">
+            {muted || !on ? <VolumeX size={14} /> : <Volume2 size={14} />}
+          </button>
+          <SaveClipButton clip={{ url: music.url, name: music.name, start: music.start, end: music.end }} className="w-7 h-7 bg-black/40" />
+        </div>
       </div>
     );
   }
   return (
     <div className="px-4 pb-3" onClick={e => e.stopPropagation()}>
       <audio ref={ref} src={music.url} preload="none" onPlay={() => setOn(true)} onPause={() => setOn(false)} onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= start + win) a.currentTime = start; }} onEnded={e => { const a = e.currentTarget; a.currentTime = start; void a.play().catch(() => undefined); }} />
-      <button onClick={toggle} className="w-full flex items-center gap-3 p-2.5 rounded-2xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25 active:scale-[0.99] transition-transform text-right">
+      <div className="flex items-center gap-2">
+      <button onClick={toggle} className="flex-1 min-w-0 flex items-center gap-3 p-2.5 rounded-2xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25 active:scale-[0.99] transition-transform text-right">
         <span className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white">{on ? <Pause size={18} fill="white" /> : <Play size={18} fill="white" className="translate-x-px" />}</span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm text-white truncate" dir="auto">{music.name}</span>
@@ -6387,6 +6391,8 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
           ))}
         </span>
       </button>
+      <SaveClipButton clip={{ url: music.url, name: music.name, start: music.start, end: music.end }} className="w-10 h-10 bg-white/10" />
+      </div>
     </div>
   );
 }
@@ -7185,7 +7191,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
           )}
         </div>
         {post.text && <p className="text-white text-sm leading-snug line-clamp-2 whitespace-pre-wrap" dir="auto">{post.text}</p>}
-        <div className="mt-1.5 flex items-center gap-1.5 text-white/80 text-xs max-w-full"><Music size={12} className="shrink-0" /><span className="truncate" dir="auto">{audioName}</span></div>
+        <div className="mt-1.5 flex items-center gap-1.5 text-white/80 text-xs max-w-full"><Music size={12} className="shrink-0" /><span className="truncate" dir="auto">{audioName}</span>{(post.music?.url ?? post.media?.url) && <SaveClipButton clip={{ url: post.music?.url ?? post.media!.url, name: audioName.slice(0, 80), start: post.music?.start, end: post.music?.end }} className="w-6 h-6" />}</div>
       </div>
 
       {/* Bottom bar: thin line while playing, full seek bar while paused */}
@@ -7884,12 +7890,46 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
 
 // Pick the part of the song that plays with the post (like Instagram): preview it and slide to the start you like.
 // ============ Music library (Instagram-style: search songs, preview, add a 30s clip) ============
+// ---- Saved audio clips (kept on this device): save the sound of any post/reel, pick it later from the music library. ----
+type SavedClip = { url: string; name: string; cover?: string; start?: number; end?: number };
+const SAVED_CLIPS_KEY = 'kix-saved-audio';
+let savedClips: SavedClip[] | null = null;
+const savedClipSubs = new Set<() => void>();
+const savedClipsSnapshot = (): SavedClip[] => {
+  if (savedClips) return savedClips;
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVED_CLIPS_KEY) || '[]') as unknown;
+    savedClips = Array.isArray(v) ? (v as SavedClip[]).filter(x => x && typeof x.url === 'string' && typeof x.name === 'string') : [];
+  } catch { savedClips = []; }
+  return savedClips;
+};
+const savedClipsSubscribe = (cb: () => void) => { savedClipSubs.add(cb); return () => { savedClipSubs.delete(cb); }; };
+const clipKey = (u: string) => stableUrl(u).split('?')[0];
+const isClipSaved = (list: SavedClip[], url: string) => list.some(c => clipKey(c.url) === clipKey(url));
+function toggleSavedClip(c: SavedClip) {
+  const cur = savedClipsSnapshot();
+  const k = clipKey(c.url);
+  const next = cur.some(x => clipKey(x.url) === k) ? cur.filter(x => clipKey(x.url) !== k) : [{ ...c, url: stableUrl(c.url) }, ...cur].slice(0, 100);
+  savedClips = next;
+  try { localStorage.setItem(SAVED_CLIPS_KEY, JSON.stringify(next)); } catch { /* storage blocked: keep in memory */ }
+  savedClipSubs.forEach(f => f());
+}
+function SaveClipButton({ clip, className = '' }: { clip: SavedClip; className?: string }) {
+  const list = useSyncExternalStore(savedClipsSubscribe, savedClipsSnapshot);
+  const on = isClipSaved(list, clip.url);
+  return (
+    <button onClick={e => { e.stopPropagation(); toggleSavedClip(clip); }} aria-label={on ? 'إزالة الصوت من المحفوظات' : 'حفظ الصوت'} title={on ? 'محفوظ' : 'حفظ الصوت'} className={`shrink-0 flex items-center justify-center rounded-full active:scale-90 ${on ? 'text-cyan-300' : 'text-white/80'} ${className}`}>
+      <Bookmark size={15} fill={on ? 'currentColor' : 'none'} />
+    </button>
+  );
+}
+
 type LibTrack = { id: string; name: string; artist: string; cover: string; url: string };
 const LIB_CHIPS: { label: string; term: string }[] = [
   { label: '🔥 رائج', term: '__chart' }, { label: '🎤 عربي', term: 'أغاني عربية' }, { label: '🎶 مهرجانات', term: 'مهرجانات' },
   { label: '🎧 راب', term: 'rap' }, { label: '🌙 هادي', term: 'chill' }, { label: '💃 رقص', term: 'dance' }, { label: '🎻 موسيقى', term: 'instrumental' },
 ];
-function MusicLibrary({ onPick, onDevice, onClose }: { onPick: (t: { url: string; name: string; cover?: string }) => void; onDevice?: () => void; onClose?: () => void }) {
+function MusicLibrary({ onPick, onDevice, onClose }: { onPick: (t: { url: string; name: string; cover?: string; start?: number; end?: number }) => void; onDevice?: () => void; onClose?: () => void }) {
   const [q, setQ] = useState('');
   const [term, setTerm] = useState(LIB_CHIPS[0].term);
   const [list, setList] = useState<LibTrack[]>([]);
@@ -7897,6 +7937,16 @@ function MusicLibrary({ onPick, onDevice, onClose }: { onPick: (t: { url: string
   const [err, setErr] = useState('');
   const [playing, setPlaying] = useState<string | null>(null);
   const au = useRef<HTMLAudioElement | null>(null);
+  const [view, setView] = useState<'kix' | 'saved'>('kix');
+  const saved = useSyncExternalStore(savedClipsSubscribe, savedClipsSnapshot);
+  const [signed, setSigned] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (view !== 'saved') return;
+    let dead = false;
+    void signMediaUrls(saved.map(c => c.url)).then(m => { if (!dead) setSigned(m); });
+    return () => { dead = true; };
+  }, [view, saved]);
+  useEffect(() => { au.current?.pause(); setPlaying(null); }, [view]);
   useEffect(() => () => { au.current?.pause(); au.current = null; }, []);
   useEffect(() => {
     const v = q.trim();
@@ -7918,7 +7968,7 @@ function MusicLibrary({ onPick, onDevice, onClose }: { onPick: (t: { url: string
       .catch(() => { if (!dead) { setErr('تعذّر تحميل الأغاني، تأكد من النت وحاول تاني'); setLoading(false); } });
     return () => { dead = true; };
   }, [term]);
-  const toggle = (t: LibTrack) => {
+  const toggle = (t: { id: string; url: string }) => {
     if (playing === t.id) { au.current?.pause(); setPlaying(null); return; }
     au.current?.pause();
     const a = new Audio(t.url);
@@ -7928,15 +7978,37 @@ function MusicLibrary({ onPick, onDevice, onClose }: { onPick: (t: { url: string
     setPlaying(t.id);
   };
   const pick = (t: LibTrack) => { au.current?.pause(); onPick({ url: t.url, name: `${t.name} - ${t.artist}`.slice(0, 80), cover: t.cover }); onClose?.(); };
+  const playUrl = (c: SavedClip) => signed.get(c.url) ?? c.url;
+  const pickSaved = (c: SavedClip) => { au.current?.pause(); onPick({ url: playUrl(c), name: c.name, cover: c.cover, start: c.start, end: c.end }); onClose?.(); };
   return (
     <div className="rounded-2xl bg-gray-900/90 ring-1 ring-white/10 overflow-hidden">
       <div className="flex items-center gap-2 p-2">
-        <div className="flex-1 grid grid-cols-2 gap-1 p-1 bg-white/10 rounded-full">
-          <span className="py-1.5 rounded-full text-xs font-bold text-center bg-gradient-to-r from-violet-600 to-cyan-500 text-white">🎵 موسيقى KIX</span>
-          {onDevice ? <button onClick={() => { au.current?.pause(); onDevice(); onClose?.(); }} className="py-1.5 rounded-full text-xs font-bold text-center text-gray-200 active:scale-95">📱 من الجهاز</button> : <span />}
+        <div className={`flex-1 grid ${onDevice ? 'grid-cols-3' : 'grid-cols-2'} gap-1 p-1 bg-white/10 rounded-full`}>
+          <button onClick={() => setView('kix')} className={`py-1.5 rounded-full text-xs font-bold text-center active:scale-95 ${view === 'kix' ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-200'}`}>🎵 KIX</button>
+          {onDevice && <button onClick={() => { au.current?.pause(); onDevice(); onClose?.(); }} className="py-1.5 rounded-full text-xs font-bold text-center text-gray-200 active:scale-95">📱 من الجهاز</button>}
+          <button onClick={() => setView('saved')} className={`py-1.5 rounded-full text-xs font-bold text-center active:scale-95 ${view === 'saved' ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-200'}`}>🔖 المحفوظة{saved.length > 0 ? ` ${saved.length}` : ''}</button>
         </div>
         {onClose && <button onClick={onClose} className="p-2 rounded-full bg-white/10 text-white shrink-0" aria-label="إغلاق"><X size={15} /></button>}
       </div>
+      {view === 'saved' ? (
+        <div className="max-h-56 overflow-y-auto px-2 pb-2">
+          {saved.length === 0 && <p className="text-center text-gray-500 text-xs py-6 px-4">لسه ما حفظتش أي صوت. دوس على علامة الحفظ 🔖 جنب الصوت في أي منشور أو ريل.</p>}
+          {saved.map(c => (
+            <div key={c.url} className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-white/5">
+              <button onClick={() => toggle({ id: c.url, url: playUrl(c) })} className="relative w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-gray-800 active:scale-95" aria-label="تشغيل">
+                {c.cover && <img src={c.cover} alt="" loading="lazy" className="w-full h-full object-cover" />}
+                <span className="absolute inset-0 bg-black/35 flex items-center justify-center text-white">{playing === c.url ? <Pause size={18} fill="white" /> : <Play size={18} fill="white" className="translate-x-px" />}</span>
+              </button>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-white truncate" dir="auto">{c.name}</div>
+                <div className="text-[11px] text-gray-400">{c.start !== undefined ? `من ${Math.floor(c.start / 60)}:${String(Math.floor(c.start % 60)).padStart(2, '0')}` : 'مقطع محفوظ'}</div>
+              </div>
+              <button onClick={() => toggleSavedClip(c)} className="shrink-0 p-2 text-gray-400 active:scale-90" aria-label="حذف من المحفوظات"><X size={14} /></button>
+              <button onClick={() => pickSaved(c)} className="shrink-0 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-xs font-bold active:scale-95">إضافة</button>
+            </div>
+          ))}
+        </div>
+      ) : (<>
       <div className="px-2">
         <div className="flex items-center gap-2 bg-gray-800 rounded-full px-4 py-2 border border-gray-700 focus-within:border-violet-500">
           <Search size={15} className="text-gray-400 shrink-0" />
@@ -7965,11 +8037,12 @@ function MusicLibrary({ onPick, onDevice, onClose }: { onPick: (t: { url: string
           </div>
         ))}
       </div>
+      </>)}
     </div>
   );
 }
 
-function MusicTrimmer({ file, src, start, end, onStart, onEnd }: { file?: File; src?: string; start: number; end: number; onStart: (n: number) => void; onEnd: (n: number) => void }) {
+function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: File; src?: string; name?: string; start: number; end: number; onStart: (n: number) => void; onEnd: (n: number) => void }) {
   const [url] = useState(() => src ?? URL.createObjectURL(file as File));
   useEffect(() => () => { if (!src) URL.revokeObjectURL(url); }, [url, src]);
   const ref = useRef<HTMLAudioElement>(null);
@@ -7984,7 +8057,7 @@ function MusicTrimmer({ file, src, start, end, onStart, onEnd }: { file?: File; 
     const fake = () => Array.from({ length: N }, (_, i) => 0.3 + 0.55 * Math.abs(Math.sin(i * 1.7) * Math.cos(i * 0.43)));
     void (async () => {
       try {
-        if (file.size > 12 * 1024 * 1024) throw new Error('big');
+        if (!file || file.size > 12 * 1024 * 1024) throw new Error('no local file / big');
         const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!Ctx) throw new Error('no audio ctx');
         const ctx = new Ctx();
@@ -8040,7 +8113,7 @@ function MusicTrimmer({ file, src, start, end, onStart, onEnd }: { file?: File; 
           {on ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" className="translate-x-px" />}
         </button>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 text-sm font-bold text-white truncate"><Music size={14} className="shrink-0 text-violet-300" /><span className="truncate">{file.name.replace(/\.[^.]+$/, '')}</span></div>
+          <div className="flex items-center gap-1.5 text-sm font-bold text-white truncate"><Music size={14} className="shrink-0 text-violet-300" /><span className="truncate">{(file?.name ?? name ?? 'موسيقى').replace(/\.[^.]+$/, '')}</span></div>
           <div className="text-[11px] text-gray-400">اسحب الإطار على الموجة لاختيار الجزء · {fmt(start)} – {fmt(eff)}</div>
         </div>
         <div className="px-2.5 py-1 rounded-full bg-white/10 text-white text-xs tabular-nums shrink-0">{Math.round(winLen)} ث</div>
@@ -8203,7 +8276,7 @@ function CreatePost({ currentUser, setPosts }: {
         uploaded.push(mp);
         musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size, start: musicStart, end: musicEnd > musicStart ? musicEnd : undefined, ...(media?.type === 'video' ? { vv: videoVol, mv: musicVol } : {}) };
       } else if (remoteMusic) {
-        musicItem = { type: 'file', url: remoteMusic.url, name: `kan-music|${remoteMusic.name}`, size: 0, start: musicStart, end: musicEnd > musicStart ? musicEnd : undefined, ...(media?.type === 'video' ? { vv: videoVol, mv: musicVol } : {}) };
+        musicItem = { type: 'file', url: stableUrl(remoteMusic.url), name: `kan-music|${remoteMusic.name}`, size: 0, start: musicStart, end: musicEnd > musicStart ? musicEnd : undefined, ...(media?.type === 'video' ? { vv: videoVol, mv: musicVol } : {}) };
       }
       if (kind === 'video' && cover) {
         const coverPath = `${currentUser.id}/${crypto.randomUUID()}-cover.${cover.blob.type === 'image/png' ? 'png' : cover.blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
@@ -8327,7 +8400,7 @@ function CreatePost({ currentUser, setPosts }: {
             <button onClick={() => setRemoteMusic(null)} className="p-1 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
           </div>
         )}
-        {canMusic && remoteMusic && !music && <MusicTrimmer key={remoteMusic.url} src={remoteMusic.url} start={musicStart} end={musicEnd} onStart={setMusicStart} onEnd={setMusicEnd} />}
+        {canMusic && remoteMusic && !music && <MusicTrimmer key={remoteMusic.url} src={remoteMusic.url} name={remoteMusic.name} start={musicStart} end={musicEnd} onStart={setMusicStart} onEnd={setMusicEnd} />}
         {media?.type === 'video' && kind === 'reel' && (music || remoteMusic) && (
           <div className="mb-4 rounded-2xl bg-gray-800/60 border border-gray-700 p-3 space-y-2.5">
             <p className="text-xs text-gray-300 font-semibold">مستوى الصوت</p>
@@ -8345,7 +8418,7 @@ function CreatePost({ currentUser, setPosts }: {
             </div>
           </div>
         )}
-        {libOpen && <MusicLibrary onClose={() => setLibOpen(false)} onDevice={() => musicRef.current?.click()} onPick={t => { setMusic(null); setMusicStart(0); setMusicEnd(0); setRemoteMusic(t); }} />}
+        {libOpen && <MusicLibrary onClose={() => setLibOpen(false)} onDevice={() => musicRef.current?.click()} onPick={t => { setMusic(null); setMusicStart(t.start ?? 0); setMusicEnd(t.end ?? 0); setRemoteMusic(t); }} />}
         {extra.length > 0 && (
           <div className="mb-4 rounded-xl bg-gray-800/60 border border-gray-700 p-3">
             <div className="flex items-center justify-between mb-2 text-xs text-gray-300">
@@ -8591,6 +8664,9 @@ function fileNameOf(url: string, name?: string): string {
   try { return decodeURIComponent(new URL(url, 'http://x').pathname.split('/').pop() || 'ملف'); } catch { return 'ملف'; }
 }
 
+// Library tracks (KIX music) are not the user's uploads; only files in our own storage count.
+const isOwnUpload = (u: string) => u.startsWith('kanb2://') || /\/post-media\//.test(u);
+
 function collectFiles(posts: Post[]): MyFile[] {
   const out: MyFile[] = [];
   const seen = new Set<string>();
@@ -8598,10 +8674,11 @@ function collectFiles(posts: Post[]): MyFile[] {
   for (const p of posts) {
     for (const m of [p.media, ...(p.extraMedia ?? [])]) {
       if (!m?.url) continue;
+      if (!isOwnUpload(m.url)) continue;
       if (m.name?.startsWith('kan-music|')) { add({ type: 'audio', url: m.url, name: m.name.slice('kan-music|'.length) || 'موسيقى', size: m.size, ts: p.timestamp }); continue; }
       add({ type: m.type, url: m.url, name: fileNameOf(m.url, m.name), size: m.size, ts: p.timestamp });
     }
-    if (p.music?.url) add({ type: 'audio', url: p.music.url, name: p.music.name || 'موسيقى', ts: p.timestamp });
+    if (p.music?.url && isOwnUpload(p.music.url)) add({ type: 'audio', url: p.music.url, name: p.music.name || 'موسيقى', ts: p.timestamp });
   }
   return out;
 }
@@ -8624,7 +8701,7 @@ function MyFilesPanel({ files }: { files: MyFile[] }) {
       <div key={j.id} className="mb-3 rounded-2xl bg-gray-900 border border-gray-800 px-4 py-3">
         <div className="flex items-center justify-between gap-3 text-sm text-white mb-2">
           <span className="truncate" dir="auto">{j.label || 'جاري الرفع...'}</span>
-          <span className={`tabular-nums text-xs shrink-0 ${fail ? 'text-red-400' : 'text-cyan-300'}`}>{fail ? 'فشل الرفع' : `${Math.round(j.pct)}%`}</span>
+          <span className={`tabular-nums text-xs shrink-0 ${fail ? 'text-red-400' : 'text-cyan-300'}`}>{fail ? 'فشل الرفع' : `${Math.round(j.pct)}%`}{fail && <button onClick={() => dropJob(j.id)} className="mr-2 text-gray-400 underline">إخفاء</button>}</span>
         </div>
         <div className="h-2 rounded-full bg-gray-800 overflow-hidden"><div className={`h-full rounded-full transition-all duration-300 ${fail ? 'bg-red-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`} style={{ width: `${Math.max(3, Math.min(100, j.pct))}%` }} /></div>
       </div>
@@ -8694,6 +8771,7 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
   const bookmarkedPosts = posts.filter(p => p.bookmarks.includes(currentUser.id)).sort((a, b) => b.timestamp - a.timestamp);
   const displayPosts = tab === 'posts' ? myPosts : tab === 'likes' ? likedPosts : bookmarkedPosts;
   const myFiles = collectFiles(myPosts);
+  const activeUploads = useSyncExternalStore(pubSubscribe, pubSnapshot).filter(j => j.status !== 'done').length;
 
   return (
     <div className="px-4 py-4">
@@ -8721,7 +8799,7 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
         </div>
       </div>
       <div className="seg flex gap-1 mb-4 bg-gray-900/70 rounded-2xl p-1 border border-white/5">
-        {[{ key: 'posts' as const, label: 'منشوراتي', Icon: FileText, n: myPosts.length }, { key: 'likes' as const, label: 'إعجاباتي', Icon: Heart, n: likedPosts.length }, { key: 'bookmarks' as const, label: 'محفوظاتي', Icon: Bookmark, n: bookmarkedPosts.length }, { key: 'files' as const, label: 'تحميلاتي', Icon: Download, n: 0 }].map(t => (
+        {[{ key: 'posts' as const, label: 'منشوراتي', Icon: FileText, n: myPosts.length }, { key: 'likes' as const, label: 'إعجاباتي', Icon: Heart, n: likedPosts.length }, { key: 'bookmarks' as const, label: 'محفوظاتي', Icon: Bookmark, n: bookmarkedPosts.length }, { key: 'files' as const, label: 'تحميلاتي', Icon: Download, n: myFiles.length + activeUploads }].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} className={`seg-btn relative flex-1 basis-0 px-1 py-2 rounded-xl text-sm font-medium transition-colors ${tab === t.key ? 'seg-on text-violet-100' : 'text-gray-500 hover:text-gray-300'}`}>
             {tab === t.key && <span className="seg-pill absolute inset-0 rounded-xl bg-violet-500/15 ring-1 ring-violet-400/25" />}
             <span className="relative flex items-center justify-center gap-1.5 whitespace-nowrap text-[13px] min-[400px]:text-sm">
