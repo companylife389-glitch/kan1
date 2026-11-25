@@ -2518,6 +2518,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
+  const [limit, setLimit] = useState(60);
   const [infoOpen, setInfoOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -2710,8 +2711,10 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
         )}
         <div ref={scrollRef} onScroll={onScroll} onWheel={onUserScroll} onTouchMove={onUserScroll} className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" onClick={() => { setActiveMsgId(null); setReactingTo(null); }}>
           {group.messages.length === 0 && <p className="text-center text-gray-500 text-sm py-12">ابدأ المحادثة في المجموعة 👋</p>}
+          {group.messages.length > limit && <button onClick={() => setLimit(l => l + 60)} className="mx-auto block my-2 px-4 py-1.5 rounded-full bg-white/10 text-xs text-white">عرض رسائل أقدم</button>}
           {group.messages.map((m, i) => {
             if (parseVote(m.text)) return null;
+            if (i < group.messages.length - limit) return null;
             if (m.isSystem) {
               return <div key={m.id} className="text-center"><span className="inline-block px-3 py-1 rounded-full bg-gray-800/80 text-[11px] text-gray-400">{person(m.senderId)?.displayName ?? 'مستخدم'} {m.text}</span></div>;
             }
@@ -3168,7 +3171,7 @@ function PlannerPane({ userId }: { userId: string }) {
         <div className="relative flex items-center gap-4">
           <svg width="64" height="64" viewBox="0 0 64 64" className="shrink-0 -rotate-90"><circle cx="32" cy="32" r={R} stroke="rgba(255,255,255,.25)" strokeWidth="7" fill="none" /><circle cx="32" cy="32" r={R} stroke="#fff" strokeWidth="7" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C - (C * pct) / 100} style={{ transition: 'stroke-dashoffset .5s' }} /></svg>
           <div className="min-w-0 flex-1">
-            <div className="font-extrabold text-lg leading-tight">📝 مفكرتي</div>
+            <div className="font-extrabold text-lg leading-tight flex items-center gap-1.5"><AlarmClock size={20} className="text-white" /> مفكرتي</div>
             <div className="text-xs opacity-90 mt-0.5">{tasks.length === 0 ? 'اكتب أول مهمة وأنا أفكّرك بيها' : `${done.length} من ${tasks.length} خلصت · ${pct}%`}</div>
           </div>
           <div className="flex gap-2 text-center shrink-0">
@@ -3220,8 +3223,8 @@ function NotifPaneSwitch({ pane, setPane }: { pane: 'notifs' | 'planner'; setPan
   const late = tasks.filter(t => planOverdue(t)).length;
   return (
     <div className="grid grid-cols-2 gap-1 p-1 mb-4 rounded-full bg-white/5 border border-white/10">
-      <button onClick={() => setPane('notifs')} className={`py-2 rounded-full text-sm font-bold ${pane === 'notifs' ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-300'}`}>🔔 الإشعارات</button>
-      <button onClick={() => setPane('planner')} className={`relative py-2 rounded-full text-sm font-bold ${pane === 'planner' ? 'bg-gradient-to-r from-violet-600 to-fuchsia-500 text-white' : 'text-gray-300'}`}>📝 مفكرتي{late > 0 && <span className="absolute top-1 end-3 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] leading-[18px] font-bold">{late}</span>}</button>
+      <button onClick={() => setPane('notifs')} className={`py-2 rounded-full text-sm font-bold flex items-center justify-center gap-1.5 ${pane === 'notifs' ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-300'}`}><Bell size={16} className="text-white" /> الإشعارات</button>
+      <button onClick={() => setPane('planner')} className={`relative py-2 rounded-full text-sm font-bold flex items-center justify-center gap-1.5 ${pane === 'planner' ? 'bg-gradient-to-r from-violet-600 to-fuchsia-500 text-white' : 'text-gray-300'}`}><AlarmClock size={16} className="text-white" /> مفكرتي{late > 0 && <span className="absolute top-1 end-3 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] leading-[18px] font-bold">{late}</span>}</button>
     </div>
   );
 }
@@ -3360,7 +3363,7 @@ function NotificationsTab({ currentUser, users, notifications, setNotifications,
       <NotifPaneSwitch pane={pane} setPane={setPane} />
       <PlannerDueCard userId={currentUser.id} onOpen={() => setPane('planner')} />
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2"><Bell size={20} className="text-violet-300" /> الإشعارات</h2>
+        <h2 className="text-xl font-bold text-white flex items-center gap-2"><Bell size={20} className="text-white" /> الإشعارات</h2>
         <div className="flex items-center gap-1.5">
           {unread > 0 && <button onClick={() => void markAllRead()} className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-gray-300 hover:text-white">تحديد الكل كمقروء</button>}
           <button onClick={onToggleSound} aria-label={soundOn ? 'إيقاف الصوت' : 'تشغيل الصوت'} aria-pressed={soundOn} className={`w-9 h-9 rounded-full flex items-center justify-center border border-white/10 bg-white/5 active:scale-90 transition-all ${soundOn ? 'text-cyan-300' : 'text-gray-500'}`}>
@@ -5309,7 +5312,7 @@ async function downloadFile(url: string, filename: string) {
       try { sink = await (await picker({ suggestedName: filename })).createWritable(); }
       catch (e) { if ((e as { name?: string })?.name === 'AbortError') { ctl.abort(); dropDown(id); return; } sink = null; }
     }
-    if (!sink && total > (mobile ? 120 : MEMORY_SAVE_MB) * 1024 * 1024) {
+    if (!sink && total > (mobile ? 40 : 300) * 1024 * 1024) {
       handoff = true; ctl.abort();
       viaBrowser();
       downPatch(id, { pct: 100, status: 'done', note: 'اتفتح في تحميلات المتصفح' });
@@ -5347,12 +5350,10 @@ async function downloadFile(url: string, filename: string) {
     if (sink) void sink.abort().catch(() => undefined);
     if (ctl.signal.aborted && !handoff) return; // cancelled by the user: already removed from the list
     console.error(e);
-    if (e instanceof TypeError || (e as { name?: string })?.name === 'TypeError') {
-      // Blocked/network error from fetch (CORS, memory...): let the browser download it directly.
+    {
+      // Any failure (CORS, memory, expired stream...): let the browser's own download manager take over.
       viaBrowser();
       downPatch(id, { pct: 100, status: 'done', note: 'اتفتح في تحميلات المتصفح' });
-    } else {
-      downPatch(id, { status: 'fail', note: 'تعذّر التحميل، حاول مرة أخرى' });
     }
   } finally {
     downCtl.delete(id);
@@ -6159,7 +6160,7 @@ export default function App() {
                         aria-label={label}
                         className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 ${on ? 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-md shadow-violet-500/30' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
                       >
-                        <Icon size={18} />
+                        <Icon size={18} className="text-white" />
                         {badge > 0 && (
                           <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 bg-rose-500 ring-2 ring-gray-950 rounded-full text-[10px] flex items-center justify-center font-bold text-white">{badge > 9 ? '9+' : badge}</span>
                         )}
@@ -6197,7 +6198,7 @@ export default function App() {
       {/* Main Content */}
       <main onTouchStart={swipeStart} onTouchEnd={swipeEnd} className="kan-enter pt-16 pb-20 w-full min-h-screen md:px-4 lg:px-8">
         <InstallBanner />
-        <AnimatePresence mode="wait" initial={false}>
+        <>
           {viewedUserId && (
             <motion.div key={`user-${viewedUserId}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
               <UserProfile
@@ -6294,7 +6295,7 @@ export default function App() {
               />
             </motion.div>
           )}
-        </AnimatePresence>
+        </>
       </main>
 
       {/* Bottom Nav */}
@@ -11122,6 +11123,28 @@ function GamePicker({ onClose, onInvite }: { onClose: () => void; onInvite: (at:
 }
 
 let chessAudio: AudioContext | null = null;
+function ChessPiece({ t, w, className = '' }: { t: string; w: boolean; className?: string }) {
+  const fill = w ? '#fbfaff' : '#2b2150';
+  const line = w ? '#2b2150' : '#e9e4ff';
+  const accent = w ? '#2b2150' : '#e9e4ff';
+  const body: Record<string, React.ReactNode> = {
+    P: <><circle cx="22.5" cy="13" r="5.5" /><path d="M15.5 36c0-7.5 2-11 7-13 5 2 7 5.5 7 13z" /></>,
+    R: <path d="M13 11h4v3h3.5v-3h4v3H28v-3h4v9l-3 3v9l3.5 4h-20L16 32v-9l-3-3z" />,
+    N: <><path d="M12 37c0-9 2-15.5 8.5-19L17 14l3.5-3.5 3 1.2C26 8 28.5 6.5 31 6.5c6 4 8 12.5 6.5 30.5z" /><circle cx="25" cy="15" r="1.3" fill={accent} stroke="none" /></>,
+    B: <><circle cx="22.5" cy="8.5" r="3" /><path d="M22.5 12c6.5 4 9.5 8.5 8.5 13.5-.8 3-3 4-3 6.5H17c0-2.5-2.200-3.500-3-6.500-1-5 2-9.500 8.500-13.500z" /><path d="M22.5 16v6M19.5 19h6" stroke={accent} fill="none" /></>,
+    Q: <><path d="M9 13l5 15 4-14 4.500 14 4.500-14 4 14 5-15-3 24H12z" /><circle cx="9" cy="12" r="2" /><circle cx="18" cy="9.500" r="2" /><circle cx="27" cy="9.500" r="2" /><circle cx="36" cy="12" r="2" /></>,
+    K: <><path d="M22.500 4.500v8M18.500 8.500h8" fill="none" /><path d="M16 22c0-5 2.800-8.500 6.500-8.500S29 17 29 22z" /><path d="M12.500 36c-1.500-8 2-14 10-14s11.500 6 10 14z" /></>,
+  };
+  return (
+    <svg viewBox="0 0 45 45" className={className} aria-hidden="true">
+      <g fill={fill} stroke={line} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
+        {body[t]}
+        <rect x="9" y="36" width="27" height="4" rx="2" />
+      </g>
+    </svg>
+  );
+}
+
 function chessSound(kind: 'move' | 'capture' | 'check') {
   try {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -11242,7 +11265,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
     );
   };
   return createPortal(
-    <div className="fixed inset-0 z-[90] bg-[#161512] flex flex-col items-center overflow-y-auto" dir="rtl">
+    <div className="fixed inset-0 z-[90] bg-gray-950 flex flex-col items-center overflow-y-auto" dir="rtl">
       <div className="w-full max-w-xl px-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white" aria-label="إغلاق"><X size={18} /></button>
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 text-sm">
@@ -11253,7 +11276,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
       <div className="w-full max-w-xl px-3 mt-3"><Bar u={other} c={oppColor} mineBar={false} /></div>
       <div className="w-full max-w-xl px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
       <div dir="ltr" className="relative mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `min(${bsize}%, calc((100dvh - 17rem) * ${bsize / 100}))`, minWidth: '14rem' }}>
-        <div className="[container-type:inline-size] grid grid-cols-8 aspect-square w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(0,0,0,.8)] ring-4 ring-[#3a3631]">
+        <div className="grid w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(0,0,0,.6)] ring-4 ring-violet-500/30" style={{ aspectRatio: '1 / 1', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gridTemplateRows: 'repeat(8, minmax(0, 1fr))' }}>
           {order.map((i, k) => {
             const r = Math.floor(i / 8), f = i % 8;
             const dark = (r + f) % 2 === 1;
@@ -11263,13 +11286,13 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
             const rankLbl = k % 8 === 0 ? String(8 - r) : '';
             const fileLbl = k >= 56 ? 'abcdefgh'[f] : '';
             return (
-              <button key={i} onClick={() => tap(i)} className={`relative flex items-center justify-center ${dark ? 'bg-[#779556]' : 'bg-[#ebecd0]'} ${i === kingSq ? '!bg-red-500' : ''}`}>
-                {isLast && <span className="absolute inset-0 bg-yellow-300/50 pointer-events-none" />}
-                {sel === i && <span className="absolute inset-0 bg-sky-400/50 pointer-events-none" />}
+              <button key={i} onClick={() => tap(i)} className={`relative flex items-center justify-center min-w-0 min-h-0 overflow-hidden p-0 ${dark ? 'bg-[#7a64c8]' : 'bg-[#e6e1fa]'} ${i === kingSq ? '!bg-red-500' : ''}`}>
+                {isLast && <span className="absolute inset-0 bg-cyan-300/45 pointer-events-none" />}
+                {sel === i && <span className="absolute inset-0 bg-white/45 pointer-events-none" />}
                 {pre && (pre.f === i || pre.to === i) && <span className="absolute inset-0 bg-orange-500/55 pointer-events-none" />}
-                {rankLbl && <span className={`absolute top-0.5 left-1 text-[9px] font-bold ${dark ? 'text-[#ebecd0]' : 'text-[#779556]'}`}>{rankLbl}</span>}
-                {fileLbl && <span className={`absolute bottom-0 right-1 text-[9px] font-bold ${dark ? 'text-[#ebecd0]' : 'text-[#779556]'}`}>{fileLbl}</span>}
-                {pc && <span className={`relative leading-none select-none text-[9.8cqw] transition-transform ${sel === i ? 'scale-110' : ''} ${pc[0] === 'w' ? 'text-white [text-shadow:0_0_2px_#000,0_0_3px_#000,0_2px_3px_rgba(0,0,0,.6)]' : 'text-[#1b1b1b] [text-shadow:0_0_1.5px_rgba(255,255,255,.55),0_2px_3px_rgba(0,0,0,.35)]'}`}>{PIECE_GLYPH[pc[1]]}</span>}
+                {rankLbl && <span className={`absolute top-0.5 left-1 text-[9px] font-bold ${dark ? 'text-[#e6e1fa]' : 'text-[#7a64c8]'}`}>{rankLbl}</span>}
+                {fileLbl && <span className={`absolute bottom-0 right-1 text-[9px] font-bold ${dark ? 'text-[#e6e1fa]' : 'text-[#7a64c8]'}`}>{fileLbl}</span>}
+                {pc && <ChessPiece t={pc[1]} w={pc[0] === 'w'} className={`relative w-[88%] h-[88%] pointer-events-none select-none drop-shadow-[0_2px_2px_rgba(20,10,50,.45)] transition-transform ${sel === i ? 'scale-110' : ''}`} />}
                 {tgt && <span className={`absolute rounded-full pointer-events-none ${pc ? 'inset-1 ring-[5px] ring-black/25' : 'w-[30%] h-[30%] bg-black/25'}`} />}
               </button>
             );
@@ -11278,7 +11301,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
         {promo && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-xl">
             <div className="flex gap-2 rounded-2xl bg-gray-900 p-3 ring-1 ring-white/20">
-              {(['q', 'r', 'b', 'n'] as const).map(q => <button key={q} onClick={() => { onMove(chessMoveStr({ f: promo.f, to: promo.to, p: q })); setPromo(null); }} className="w-14 h-14 rounded-xl bg-[#ebecd0] text-4xl text-gray-900 active:scale-95">{PIECE_GLYPH[q.toUpperCase()]}</button>)}
+              {(['q', 'r', 'b', 'n'] as const).map(q => <button key={q} onClick={() => { onMove(chessMoveStr({ f: promo.f, to: promo.to, p: q })); setPromo(null); }} className="w-14 h-14 rounded-xl bg-[#e6e1fa] flex items-center justify-center active:scale-95"><ChessPiece t={q.toUpperCase()} w className="w-10 h-10" /></button>)}
             </div>
           </div>
         )}
@@ -11356,6 +11379,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [aiOpen, setAiOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
+  const [limit, setLimit] = useState(60);
   const stickerStart = false; // stickers now live only inside the emoji panel (its stickers tab)
   const lastTap = useRef<{ id: string; t: number }>({ id: '', t: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
@@ -11779,8 +11803,10 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
             <p className="text-gray-400">ابدأ المحادثة مع {chatUser.displayName}</p>
           </div>
         )}
+        {messages.length > limit && <button onClick={() => setLimit(l => l + 60)} className="mx-auto block my-2 px-4 py-1.5 rounded-full bg-white/10 text-xs text-white">عرض رسائل أقدم</button>}
         {messages.map((msg, idx) => {
           if (parseVote(msg.text)) return null;
+          if (idx < messages.length - limit) return null;
           { const gm = parseGame(msg.text); if (gm && gm.k !== 'inv') return null; }
           if (albumMap.hidden.has(msg.id)) return null;
           const isMine = msg.senderId === currentUser.id;
