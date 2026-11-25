@@ -1988,6 +1988,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
   const [sentTo, setSentTo] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [storyAsk, setStoryAsk] = useState(false);
+  const [shareFile, setShareFile] = useState<File | null>(null);
   const [storyCaption, setStoryCaption] = useState('');
   const filePromise = useRef<Promise<File | null> | null>(null);
   const getFile = () => {
@@ -2025,6 +2026,27 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
   };
   const openExternal = (url: string) => { window.open(url, '_blank', 'noopener'); };
   // Puts the post on your own story for 24 hours (the story keeps a link back to the post).
+  // Sharing to your story opens the same preview/editor as a new story.
+  const openStoryPreview = async () => {
+    if (busy) return;
+    setBusy('story');
+    try {
+      const m = post.media;
+      const src = m?.type === 'image' ? m.url : post.coverUrl;
+      const caption = (comment ? comment.text : [post.title, post.text].filter(Boolean).join('\n')) || `${author.displayName} (@${author.username})`;
+      let f: File | null = null;
+      if (src) {
+        try {
+          const u = src.startsWith('kanb2://') ? (await signMediaUrls([src])).get(src) ?? src : src;
+          const r = await fetch(u);
+          if (r.ok) { const b = await r.blob(); if (b.type.startsWith('image/')) f = new File([b], 'shared-post.jpg', { type: b.type }); }
+        } catch { /* fall back to a text card */ }
+      }
+      if (!f) f = await renderTextStory(caption.slice(0, 200), 0);
+      setShareFile(f);
+    } catch (e) { console.error(e); flash('تعذّر فتح المعاينة'); }
+    setBusy(null);
+  };
   const shareToStory = async () => {
     if (busy) return;
     setBusy('story');
@@ -2053,7 +2075,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
     setBusy(null);
   };
   const actions: { key: string; label: string; Icon: typeof Copy; cls: string; run: () => void }[] = [
-    { key: 'story', label: 'قصتك', Icon: Plus, cls: 'from-violet-600 via-fuchsia-500 to-cyan-400', run: () => setStoryAsk(true) },
+    { key: 'story', label: 'قصتك', Icon: Plus, cls: 'from-violet-600 via-fuchsia-500 to-cyan-400', run: () => { void openStoryPreview(); } },
     { key: 'link', label: 'نسخ الرابط', Icon: Copy, cls: 'from-violet-600 to-fuchsia-500', run: () => void copyLink() },
     { key: 'wa', label: 'واتساب', Icon: MessageCircle, cls: 'from-emerald-500 to-green-600', run: () => openExternal(`https://wa.me/?text=${encodeURIComponent(text)}`) },
     { key: 'tg', label: 'تيليجرام', Icon: Send, cls: 'from-sky-500 to-cyan-500', run: () => openExternal(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text.replace(`\n${link}`, '').slice(0, 300))}`) },
@@ -2163,6 +2185,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
             })}
           </div>
         </div>
+        {shareFile && createPortal(<div className="fixed inset-0 z-[130]"><StoryComposer file={shareFile} currentUser={currentUser} users={users} sharedPostId={post.id} onClose={() => setShareFile(null)} onDone={() => { setShareFile(null); notifyStoriesChanged(); flash('تمت المشاركة في قصتك ✓'); window.setTimeout(onClose, 600); }} /></div>, document.body)}
         {storyAsk && (
           <div className="absolute inset-0 z-20 bg-gray-900 flex flex-col p-4 gap-3">
             <h3 className="font-bold kan-gradient-text">نشر في قصتك؟</h3>
@@ -4138,7 +4161,7 @@ function TextStoryComposer({ onClose, onNext }: { onClose: () => void; onNext: (
   );
 }
 
-function StoryComposer({ file, currentUser, users, onClose, onDone }: { file: File; currentUser: User; users: User[]; onClose: () => void; onDone: () => void }) {
+function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId }: { file: File; currentUser: User; users: User[]; onClose: () => void; onDone: () => void; sharedPostId?: string }) {
   useBackLayer(true, onClose);
   const [previewUrl] = useState(() => URL.createObjectURL(file));
   useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
@@ -4330,7 +4353,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone }: { file: Fi
       } else if (remoteM) {
         mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, cover: remoteM.cover, style: mStyle === 'cover' && remoteM.cover ? 'cover' : 'none', ...(tp && mStyle === 'cover' ? { tp } : {}) };
       }
-      const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj, items: uploadedItems }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
+      const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, shared_post_id: sharedPostId ?? null, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj, items: uploadedItems }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
       if (insErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); throw insErr; }
       notifyStoriesChanged();
       storyOk = true;
@@ -11124,9 +11147,9 @@ function GamePicker({ onClose, onInvite }: { onClose: () => void; onInvite: (at:
 
 let chessAudio: AudioContext | null = null;
 function ChessPiece({ t, w, className = '' }: { t: string; w: boolean; className?: string }) {
-  const fill = w ? '#fbfaff' : '#2b2150';
-  const line = w ? '#2b2150' : '#e9e4ff';
-  const accent = w ? '#2b2150' : '#e9e4ff';
+  const fill = w ? '#ffc2c4' : '#33407f';
+  const line = w ? '#7b4aa8' : '#f0b6e8';
+  const accent = w ? '#7b4aa8' : '#f0b6e8';
   const body: Record<string, React.ReactNode> = {
     P: <><circle cx="22.5" cy="13" r="5.5" /><path d="M15.5 36c0-7.5 2-11 7-13 5 2 7 5.5 7 13z" /></>,
     R: <path d="M13 11h4v3h3.5v-3h4v3H28v-3h4v9l-3 3v9l3.5 4h-20L16 32v-9l-3-3z" />,
@@ -11265,7 +11288,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
     );
   };
   return createPortal(
-    <div className="fixed inset-0 z-[90] bg-gray-950 flex flex-col items-center overflow-y-auto" dir="rtl">
+    <div className="fixed inset-0 z-[90] flex flex-col items-center overflow-y-auto" style={{ background: 'linear-gradient(180deg,#272a62 0%,#5a3c82 60%,#9a4f96 100%)' }} dir="rtl">
       <div className="w-full max-w-xl px-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white" aria-label="إغلاق"><X size={18} /></button>
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 text-sm">
@@ -11276,7 +11299,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
       <div className="w-full max-w-xl px-3 mt-3"><Bar u={other} c={oppColor} mineBar={false} /></div>
       <div className="w-full max-w-xl px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
       <div dir="ltr" className="relative mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `min(${bsize}%, calc((100dvh - 17rem) * ${bsize / 100}))`, minWidth: '14rem' }}>
-        <div className="grid w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(0,0,0,.6)] ring-4 ring-violet-500/30" style={{ aspectRatio: '1 / 1', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gridTemplateRows: 'repeat(8, minmax(0, 1fr))' }}>
+        <div className="grid w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(20,10,60,.7)]" style={{ aspectRatio: '1 / 1', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gridTemplateRows: 'repeat(8, minmax(0, 1fr))' }}>
           {order.map((i, k) => {
             const r = Math.floor(i / 8), f = i % 8;
             const dark = (r + f) % 2 === 1;
@@ -11286,12 +11309,12 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
             const rankLbl = k % 8 === 0 ? String(8 - r) : '';
             const fileLbl = k >= 56 ? 'abcdefgh'[f] : '';
             return (
-              <button key={i} onClick={() => tap(i)} className={`relative flex items-center justify-center min-w-0 min-h-0 overflow-hidden p-0 ${dark ? 'bg-[#7a64c8]' : 'bg-[#e6e1fa]'} ${i === kingSq ? '!bg-red-500' : ''}`}>
-                {isLast && <span className="absolute inset-0 bg-cyan-300/45 pointer-events-none" />}
+              <button key={i} onClick={() => tap(i)} className={`relative flex items-center justify-center min-w-0 min-h-0 overflow-hidden p-0 ${dark ? 'bg-[#4b8eab]' : 'bg-[#faf0e8]'} ${i === kingSq ? '!bg-red-500' : ''}`}>
+                {isLast && <span className="absolute inset-0 bg-[#56c4b4]/85 pointer-events-none" />}
                 {sel === i && <span className="absolute inset-0 bg-white/45 pointer-events-none" />}
                 {pre && (pre.f === i || pre.to === i) && <span className="absolute inset-0 bg-orange-500/55 pointer-events-none" />}
-                {rankLbl && <span className={`absolute top-0.5 left-1 text-[9px] font-bold ${dark ? 'text-[#e6e1fa]' : 'text-[#7a64c8]'}`}>{rankLbl}</span>}
-                {fileLbl && <span className={`absolute bottom-0 right-1 text-[9px] font-bold ${dark ? 'text-[#e6e1fa]' : 'text-[#7a64c8]'}`}>{fileLbl}</span>}
+                {rankLbl && <span className={`absolute top-0.5 left-1 text-[9px] font-bold ${dark ? 'text-[#faf0e8]' : 'text-[#4b8eab]'}`}>{rankLbl}</span>}
+                {fileLbl && <span className={`absolute bottom-0 right-1 text-[9px] font-bold ${dark ? 'text-[#faf0e8]' : 'text-[#4b8eab]'}`}>{fileLbl}</span>}
                 {pc && <ChessPiece t={pc[1]} w={pc[0] === 'w'} className={`relative w-[88%] h-[88%] pointer-events-none select-none drop-shadow-[0_2px_2px_rgba(20,10,50,.45)] transition-transform ${sel === i ? 'scale-110' : ''}`} />}
                 {tgt && <span className={`absolute rounded-full pointer-events-none ${pc ? 'inset-1 ring-[5px] ring-black/25' : 'w-[30%] h-[30%] bg-black/25'}`} />}
               </button>
@@ -11301,7 +11324,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
         {promo && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-xl">
             <div className="flex gap-2 rounded-2xl bg-gray-900 p-3 ring-1 ring-white/20">
-              {(['q', 'r', 'b', 'n'] as const).map(q => <button key={q} onClick={() => { onMove(chessMoveStr({ f: promo.f, to: promo.to, p: q })); setPromo(null); }} className="w-14 h-14 rounded-xl bg-[#e6e1fa] flex items-center justify-center active:scale-95"><ChessPiece t={q.toUpperCase()} w className="w-10 h-10" /></button>)}
+              {(['q', 'r', 'b', 'n'] as const).map(q => <button key={q} onClick={() => { onMove(chessMoveStr({ f: promo.f, to: promo.to, p: q })); setPromo(null); }} className="w-14 h-14 rounded-xl bg-[#faf0e8] flex items-center justify-center active:scale-95"><ChessPiece t={q.toUpperCase()} w className="w-10 h-10" /></button>)}
             </div>
           </div>
         )}
@@ -11380,6 +11403,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [toolsOpen, setToolsOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
   const [limit, setLimit] = useState(60);
+  const [sel, setSel] = useState<string[] | null>(null);
+  const [burst, setBurst] = useState<{ id: string; e: string; k: number } | null>(null);
   const stickerStart = false; // stickers now live only inside the emoji panel (its stickers tab)
   const lastTap = useRef<{ id: string; t: number }>({ id: '', t: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
@@ -11706,6 +11731,23 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     if (msg.media?.path) void kanRemove(CHAT_MEDIA_BUCKET, [msg.media.path]);
   };
 
+  const deleteSelected = async () => {
+    const mine = messages.filter(m => sel?.includes(m.id) && m.senderId === currentUser.id);
+    if (!conversation || mine.length === 0) { setSel(null); return; }
+    if (!(await kanConfirm(`حذف ${mine.length} رسالة للجميع؟`))) return;
+    const convId = conversation.id; const ids = mine.map(m => m.id);
+    setSel(null);
+    setConversations(prev => prev.map(c => (c.id === convId ? { ...c, messages: c.messages.filter(m => !ids.includes(m.id)) } : c)));
+    const { error: delErr } = await supabase.from('messages').delete().in('id', ids);
+    if (delErr) {
+      setConversations(prev => prev.map(c => (c.id === convId ? { ...c, messages: [...c.messages, ...mine].sort((x, y) => x.timestamp - y.timestamp) } : c)));
+      setError('تعذّر حذف الرسائل، حاول مرة أخرى');
+      return;
+    }
+    const paths = mine.map(m => m.media?.path).filter((x): x is string => !!x);
+    if (paths.length) void kanRemove(CHAT_MEDIA_BUCKET, paths);
+  };
+
   // Files sent together (same sender, within two minutes, no text) are shown as one album bubble.
   const albumMap = (() => {
     const first = new Map<string, Message[]>();
@@ -11803,6 +11845,15 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
             <p className="text-gray-400">ابدأ المحادثة مع {chatUser.displayName}</p>
           </div>
         )}
+        <style>{'@keyframes kanReactBurst{0%{opacity:0;transform:translateY(12px) scale(.4)}25%{opacity:1;transform:translateY(-8px) scale(1.8)}100%{opacity:0;transform:translateY(-56px) scale(1.1)}}@keyframes kanReactChip{0%{transform:scale(.3)}60%{transform:scale(1.4)}100%{transform:scale(1)}}'}</style>
+        {sel && createPortal(
+          <div dir={DIR} className="kan-theme-text fixed top-0 inset-x-0 z-[85] flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-white/10">
+            <button onClick={() => setSel(null)} className="p-1.5 text-white" aria-label="إلغاء"><X size={20} /></button>
+            <span className="text-sm font-bold text-white">{sel.length} محددة</span>
+            <button onClick={() => void deleteSelected()} disabled={sel.length === 0} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500 text-white text-sm font-bold disabled:opacity-40"><Trash2 size={15} /> حذف</button>
+          </div>,
+          document.body,
+        )}
         {messages.length > limit && <button onClick={() => setLimit(l => l + 60)} className="mx-auto block my-2 px-4 py-1.5 rounded-full bg-white/10 text-xs text-white">عرض رسائل أقدم</button>}
         {messages.map((msg, idx) => {
           if (parseVote(msg.text)) return null;
@@ -11831,8 +11882,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                     () => { setReplyingTo(msg); window.setTimeout(() => inputRef.current?.focus(), 30); },
                     () => { setActiveMsgId(msg.id); setReactingTo(msg.id); },
                   )}
-                  onClick={() => handleBubbleTap(msg)}
-                  className={`relative select-none touch-pan-y max-w-full [overflow-wrap:anywhere] px-4 py-2.5 rounded-2xl cursor-pointer transition-shadow ${highlightId === msg.id ? 'ring-2 ring-cyan-400' : ''} ${
+                  onClick={() => (sel ? setSel(x => ((x ?? []).includes(msg.id) ? (x ?? []).filter(y => y !== msg.id) : [...(x ?? []), msg.id])) : handleBubbleTap(msg))}
+                  className={`relative select-none touch-pan-y max-w-full [overflow-wrap:anywhere] px-4 py-2.5 rounded-2xl cursor-pointer transition-shadow ${highlightId === msg.id ? 'ring-2 ring-cyan-400' : ''} ${sel?.includes(msg.id) ? 'ring-2 ring-white brightness-110' : ''} ${
                     isStickerName(msg.media?.name) && !msg.text ? 'bg-transparent !p-0'
                     : isMine
                       ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded-bl-sm'
@@ -11952,6 +12003,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                       {[...groups.entries()].map(([emoji, ids]) => (
                         <button
                           key={emoji}
+                          style={{ animation: 'kanReactChip .35s ease-out' }}
                           onClick={() => { void setReaction(msg, emoji); }}
                           className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 border ${ids.includes(currentUser.id) ? 'bg-violet-600/30 border-violet-500/50 text-white' : 'bg-gray-800 border-gray-700 text-gray-300'}`}
                         >
@@ -11962,12 +12014,13 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                     </div>
                   );
                 })()}
+                {burst?.id === msg.id && <div className="relative h-0 w-full flex justify-center z-10 pointer-events-none"><span key={burst.k} className="absolute -top-4 text-4xl" style={{ animation: 'kanReactBurst 1s ease-out forwards' }}>{burst.e}</span></div>}
                 {activeMsgId === msg.id && reactingTo === msg.id && (
                   <div className={`kan-pop flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full shadow-lg ${isMine ? 'flex-row-reverse' : ''}`}>
                     {QUICK_REACTIONS.map(e => (
                       <button
                         key={e}
-                        onClick={() => { void setReaction(msg, e); setReactingTo(null); setActiveMsgId(null); }}
+                        onClick={() => { void setReaction(msg, e); setBurst({ id: msg.id, e, k: Date.now() }); window.setTimeout(() => setBurst(b => (b && b.id === msg.id ? null : b)), 1000); setReactingTo(null); setActiveMsgId(null); }}
                         className="w-9 h-9 text-xl rounded-full hover:bg-gray-700 active:scale-125 transition-transform"
                       >
                         {e}
@@ -12006,6 +12059,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                         <Pencil size={12} /> تعديل
                       </button>
                     )}
+                    <button onClick={() => { setSel([msg.id]); setActiveMsgId(null); setReactingTo(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Check size={12} /> تحديد</button>
                     {isMine && (
                       <button
                         onClick={() => (albumMap.first.has(msg.id) ? void deleteAlbum(albumMap.first.get(msg.id)!) : deleteMessage(msg))}
