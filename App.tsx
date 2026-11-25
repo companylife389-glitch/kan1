@@ -1190,7 +1190,7 @@ const B2_PARALLEL = 16;
 
 // Background publishing: uploads keep running while you move around; the progress shows inside the publish box.
 type PubExtra = { type: 'image' | 'video' | 'file'; url: string; name: string; size: number; start?: number; end?: number; vv?: number; mv?: number };
-type PubJob = { id: string; label: string; pct: number; status: 'run' | 'done' | 'fail'; postId?: string; extra: PubExtra[]; music: PubExtra | null };
+type PubJob = { id: string; label: string; pct: number; size?: number; status: 'run' | 'done' | 'fail'; postId?: string; extra: PubExtra[]; music: PubExtra | null };
 let pubList: PubJob[] = [];
 const pubSubs = new Set<() => void>();
 const pubSet = (fn: (l: PubJob[]) => PubJob[]) => { pubList = fn(pubList); pubSubs.forEach(f => f()); };
@@ -1204,6 +1204,9 @@ const trackJob = (id: string, pct: number, label = '') => pubSet(l => {
 const endJob = (id: string, ok: boolean, patch: Partial<PubJob> = {}) =>
   pubSet(l => l.map(j => (j.id === id ? { ...j, ...patch, pct: ok ? 100 : j.pct, status: ok ? 'done' : 'fail' } : j)));
 const dropJob = (id: string) => pubSet(l => l.filter(j => j.id !== id));
+// Cancel an upload that is still running: stops the transfer and removes it from the list.
+const jobCtl = new Map<string, AbortController>();
+const cancelJob = (id: string) => { jobCtl.get(id)?.abort(); jobCtl.delete(id); dropJob(id); };
 const pathOfUrl = (u: string): string | null => {
   const m = /post-media\/([^?#]+)/.exec(u);
   if (!m) return null;
@@ -1282,9 +1285,10 @@ async function signStories(list: StoryItem[]): Promise<StoryItem[]> {
   return list.map(s => ({ ...s, url: m.get(s.url) ?? s.url, extra: s.extra?.m ? { ...s.extra, m: { ...s.extra.m, url: m.get(s.extra.m.url) ?? s.extra.m.url } } : s.extra }));
 }
 
-function putBlob(url: string, blob: Blob, headers: Record<string, string>, onBytes: (n: number) => void): Promise<string> {
+function putBlob(url: string, blob: Blob, headers: Record<string, string>, onBytes: (n: number) => void, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    if (signal) { if (signal.aborted) { reject(new Error('upload aborted')); return; } signal.addEventListener('abort', () => xhr.abort(), { once: true }); }
     xhr.open('PUT', url);
     for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     xhr.upload.onprogress = e => { if (e.lengthComputable) onBytes(e.loaded); };
@@ -1297,7 +1301,7 @@ function putBlob(url: string, blob: Blob, headers: Record<string, string>, onByt
 
 async function uploadToB2(
   bucket: string, path: string, file: Blob, contentType: string, cacheControl: string,
-  onProgress?: (pct: number) => void,
+  onProgress?: (pct: number) => void, signal?: AbortSignal,
 ): Promise<{ error: Error | null }> {
   const cc = `max-age=${cacheControl}`;
   const report = (loaded: number) => onProgress?.(Math.min(99, Math.round((loaded / Math.max(1, file.size)) * 100)));
@@ -1305,7 +1309,7 @@ async function uploadToB2(
   try {
     if (file.size <= 10 * 1024 * 1024) {
       const r = await b2Call<{ url: string }>({ action: 'put', bucket, path });
-      await putBlob(r.url, file, { 'Content-Type': contentType, 'Cache-Control': cc }, report);
+      await putBlob(r.url, file, { 'Content-Type': contentType, 'Cache-Control': cc }, report, signal);
     } else {
       const init = await b2Call<{ uploadId: string }>({ action: 'mp_init', bucket, path, contentType, cacheControl: cc });
       uploadId = init.uploadId;
@@ -1320,16 +1324,16 @@ async function uploadToB2(
         if (Array.isArray(r.urls) && r.urls.length === count) allUrls = r.urls;
       } catch { /* fall back to one signature per part */ }
       const worker = async () => {
-        while (next < count) {
+        while (next < count && !signal?.aborted) {
           const i = next++;
           const n = i + 1;
           const chunk = file.slice(i * partSize, Math.min(file.size, (i + 1) * partSize));
           let lastErr: unknown = null;
-          for (let attempt = 0; attempt < 4; attempt++) {
+          for (let attempt = 0; attempt < 4 && !signal?.aborted; attempt++) {
             try {
               const partUrl = allUrls?.[i] ?? (await b2Call<{ urls: string[] }>({ action: 'mp_parts', bucket, path, uploadId, parts: [n] })).urls[0];
               loaded[i] = 0;
-              const etag = await putBlob(partUrl, chunk, {}, b => { loaded[i] = b; report(loaded.reduce((x, y) => x + y, 0)); });
+              const etag = await putBlob(partUrl, chunk, {}, b => { loaded[i] = b; report(loaded.reduce((x, y) => x + y, 0)); }, signal);
               loaded[i] = chunk.size;
               etags.push({ n, etag });
               lastErr = null;
@@ -1338,6 +1342,7 @@ async function uploadToB2(
           }
           if (lastErr) throw lastErr;
         }
+        if (signal?.aborted) throw new Error('upload aborted');
       };
       await Promise.all(Array.from({ length: Math.min(B2_PARALLEL, count) }, () => worker()));
       await b2Call({ action: 'mp_complete', bucket, path, uploadId, parts: etags });
@@ -1352,15 +1357,16 @@ async function uploadToB2(
 
 async function uploadWithProgress(
   bucket: string, path: string, file: Blob, contentType: string, cacheControl: string,
-  onProgress?: (pct: number) => void,
+  onProgress?: (pct: number) => void, signal?: AbortSignal,
 ): Promise<{ error: Error | null }> {
-  if (isB2(path)) return uploadToB2(bucket, path, file, contentType, cacheControl, onProgress);
+  if (isB2(path)) return uploadToB2(bucket, path, file, contentType, cacheControl, onProgress, signal);
   if (file.size > 50 * 1024 * 1024) return { error: new Error('file too large for direct storage') };
   const { data: { session } } = await supabase.auth.getSession();
   const supaUrl = import.meta.env.VITE_SUPABASE_URL as string;
   const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
   return new Promise(resolve => {
     const xhr = new XMLHttpRequest();
+    if (signal) { if (signal.aborted) { resolve({ error: new Error('upload aborted') }); return; } signal.addEventListener('abort', () => xhr.abort(), { once: true }); }
     xhr.open('POST', `${supaUrl}/storage/v1/object/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`);
     xhr.setRequestHeader('Authorization', `Bearer ${session?.access_token ?? anon}`);
     xhr.setRequestHeader('apikey', anon);
@@ -3472,7 +3478,7 @@ const bakeFilter = async (f: File, css: string): Promise<File | null> => {
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
 };
-type StoryExtra = { d?: number; items?: { k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string }[]; bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string; o?: string[] }; pp?: { x: number; y: number; s?: number; r?: number }; ap?: { x: number; y: number; s?: number; r?: number }; ask?: string };
+type StoryExtra = { d?: number; items?: { k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string }[]; bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'lyrics'; lyr?: LyricLine[]; lp?: { x: number; y: number } }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string; o?: string[] }; pp?: { x: number; y: number; s?: number; r?: number }; ap?: { x: number; y: number; s?: number; r?: number }; ask?: string };
 
 type StoryItemEdit = { id: string; k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string; file?: File };
 const STORY_FONTS = ['inherit', 'Georgia, "Times New Roman", serif', '"Courier New", monospace', '"Segoe Script", "Comic Sans MS", cursive'];
@@ -3860,7 +3866,18 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [mEnd, setMEnd] = useState(0);
   const musicPick = useRef<HTMLInputElement>(null);
   const [remoteM, setRemoteM] = useState<{ url: string; name: string; cover?: string } | null>(null);
-  const [mStyle, setMStyle] = useState<'cover' | 'text'>('text');
+  const [mStyle, setMStyle] = useState<'cover' | 'text' | 'lyrics'>('text');
+  const [lyr, setLyr] = useState<LyricLine[] | null>(null);
+  const [lyrBusy, setLyrBusy] = useState<'' | 'load' | 'none'>('');
+  const [lp, setLp] = useState({ x: 50, y: 62 });
+  useEffect(() => { setLyr(null); setLyrBusy(''); }, [remoteM?.url]);
+  const chooseStyle = async (k: 'cover' | 'text' | 'lyrics') => {
+    setMStyle(k);
+    if (k !== 'lyrics' || lyr || !remoteM) return;
+    setLyrBusy('load');
+    const l = await fetchLyrics(remoteM.name);
+    if (l.length) { setLyr(l); setLyrBusy(''); } else setLyrBusy('none');
+  };
   const [bgc, setBgc] = useState('#000000');
   const [rot, setRot] = useState(0);
   const [libOpen, setLibOpen] = useState(false);
@@ -4007,7 +4024,9 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
         if (mErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); setErr(`تعذّر رفع الموسيقى: ${(mErr as { message?: string }).message ?? ''}`); setBusy(false); return; }
         mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, style: 'text' };
       } else if (remoteM) {
-        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, cover: remoteM.cover, style: mStyle };
+        const mEndAt = mEnd > mStart ? mEnd : mStart + 30;
+        const withLyr = mStyle === 'lyrics' && !!lyr && lyr.length > 0;
+        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEndAt, cover: remoteM.cover, style: mStyle === 'lyrics' && !withLyr ? 'text' : mStyle, ...(withLyr ? { lyr: lyr!.filter(x => x.t >= mStart - 6 && x.t <= mEndAt + 1).slice(0, 80), lp } : {}) };
       }
       const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj, items: uploadedItems }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
       if (insErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); throw insErr; }
@@ -4088,6 +4107,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent pointer-events-none z-[5]" />
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
           {(music || remoteM) && <StoryMusicTag m={{ name: music ? music.name.replace(/\.[^.]+$/, '').slice(0, 60) : (remoteM?.name ?? ''), cover: remoteM?.cover, style: music ? 'text' : mStyle }} />}
+          {remoteM && !music && mStyle === 'lyrics' && lyr && <LyricsOverlay lines={lyr} time={mStart + 0.5} pos={lp} onMove={setLp} />}
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
           <div className="absolute top-12 end-3 z-20 flex flex-col gap-2 max-h-[calc(100%-4rem)] overflow-y-auto no-scrollbar">
             {([['text', TypeIcon, 'نص', items.some(i => i.k === 't')], ['sticker', Smile, 'ملصق', items.length > 0], ['music', Music, 'موسيقى', !!music || !!remoteM], ['filter', Wand2, 'فلتر', flt > 0], ...(isVideo ? [] : [['frame', ImageIcon, 'الخلفية والتدوير', bgc !== '#000000' || rot !== 0] as const]), ['draw', Pencil, 'رسم', strokes.current.length > 0], ['tags', MapPin, 'موقع ومنشن', !!(loc.trim() || men.trim() || lnk.trim())], ['poll', BarChart3, 'استطلاع', !!extra.poll], ['ask', HelpCircle, 'سؤال', !!extra.ask], ['count', Clock, 'عدّاد', items.some(i => i.k === 'c')], ['dur', Play, 'مدة العرض', dur !== 5], ['aud', Users, 'مقربين', aud === 'close'], ['sched', Calendar, 'جدولة', !!sched]] as const).map(([k, Ic, label, on]) => (
@@ -4149,7 +4169,8 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
           : <div className="space-y-2">
               {remoteM && <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2">
                 <div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{remoteM.name}</span><button onClick={() => { setRemoteM(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div>
-                <div className="flex gap-2 px-2 mt-2">{([['cover', '🖼 صورة الغلاف'], ['text', 'Aa اسم الأغنية']] as const).filter(([k]) => k === 'text' || !!remoteM.cover).map(([k, l]) => <button key={k} onClick={() => setMStyle(k)} className={`flex-1 py-1.5 rounded-full text-xs font-semibold ${mStyle === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}</div>
+                <div className="flex gap-2 px-2 mt-2">{([['cover', '🖼 الغلاف'], ['text', 'Aa الاسم'], ['lyrics', '🎤 الكلمات']] as const).filter(([k]) => k !== 'cover' || !!remoteM.cover).map(([k, l]) => <button key={k} onClick={() => void chooseStyle(k)} className={`flex-1 py-1.5 rounded-full text-xs font-semibold ${mStyle === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}</div>
+                {mStyle === 'lyrics' && <p className="px-2 mt-1.5 text-[11px] text-gray-300">{lyrBusy === 'load' ? 'جاري تحميل كلمات الأغنية...' : lyrBusy === 'none' ? 'مفيش كلمات متاحة للأغنية دي، هتظهر باسمها بس' : lyr ? 'اسحب الكلمات على الشاشة لتحريكها، وبتتحرك مع الأغنية للمقطع اللي اخترته' : ''}</p>}
                 <div className="mt-2"><MusicTrimmer key={remoteM.url} src={remoteM.url} name={remoteM.name} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div>
               </div>}
               {remoteM && !libOpen
@@ -4212,7 +4233,53 @@ async function shrinkImageFile(f: File): Promise<File> {
   } catch { return f; }
 }
 
-function StoryMusicTag({ m }: { m: { name: string; cover?: string; style?: 'cover' | 'text' } }) {
+// ---- Synced lyrics on a story (like Instagram): the current line shows on screen and can be dragged in the editor. ----
+type LyricLine = { t: number; l: string };
+function parseLrc(src: string): LyricLine[] {
+  const out: LyricLine[] = [];
+  for (const row of src.split('\n')) {
+    const m = /^\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)$/.exec(row.trim());
+    if (m && m[3].trim()) out.push({ t: Number(m[1]) * 60 + Number(m[2]), l: m[3].trim() });
+  }
+  return out;
+}
+async function fetchLyrics(name: string): Promise<LyricLine[]> {
+  try {
+    const q = name.replace(/\s*[([].*?[)\]]/g, '').slice(0, 100);
+    const r = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`);
+    if (!r.ok) return [];
+    const j = (await r.json()) as { syncedLyrics?: string | null }[];
+    const hit = Array.isArray(j) ? j.find(x => x && x.syncedLyrics) : undefined;
+    return hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
+  } catch { return []; }
+}
+function LyricsOverlay({ lines, time, pos, onMove }: { lines: LyricLine[]; time: number; pos: { x: number; y: number }; onMove?: (p: { x: number; y: number }) => void }) {
+  let i = -1;
+  for (let k = 0; k < lines.length; k++) { if (lines[k].t <= time) i = k; else break; }
+  const cur = i >= 0 ? lines[i].l : '';
+  const nxt = lines[i + 1]?.l ?? '';
+  const down = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!onMove) return;
+    e.stopPropagation();
+    const el = e.currentTarget;
+    const box = el.parentElement?.getBoundingClientRect();
+    if (!box) return;
+    el.setPointerCapture(e.pointerId);
+    const mv = (ev: PointerEvent) => onMove({ x: Math.max(12, Math.min(88, ((ev.clientX - box.left) / box.width) * 100)), y: Math.max(8, Math.min(92, ((ev.clientY - box.top) / box.height) * 100)) });
+    const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
+    el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  };
+  if (!cur && !onMove) return null;
+  return (
+    <div onPointerDown={down} style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: 'translate(-50%,-50%)', touchAction: 'none' }}
+      className={`absolute z-20 w-[84%] text-center kan-always-white select-none ${onMove ? 'cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-xl p-1.5' : 'pointer-events-none'}`}>
+      <div className="text-white text-2xl font-extrabold leading-snug [text-shadow:0_2px_10px_rgba(0,0,0,.75)]" dir="auto">{cur || '♪'}</div>
+      {nxt && <div className="mt-1 text-white/55 text-base font-bold [text-shadow:0_2px_8px_rgba(0,0,0,.7)]" dir="auto">{nxt}</div>}
+    </div>
+  );
+}
+
+function StoryMusicTag({ m }: { m: { name: string; cover?: string; style?: 'cover' | 'text' | 'lyrics' } }) {
   if (m.style === 'cover' && m.cover) return (
     <div className="absolute top-[58%] inset-x-0 mx-auto w-fit max-w-[78%] z-10 pointer-events-none kan-always-white flex items-center gap-3 p-2 pe-4 rounded-2xl bg-white/20 backdrop-blur-xl ring-1 ring-white/30 shadow-xl">
       <img src={m.cover} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" />
@@ -4222,14 +4289,16 @@ function StoryMusicTag({ m }: { m: { name: string; cover?: string; style?: 'cove
   return <div className="absolute top-16 inset-x-0 mx-auto w-fit max-w-[80%] px-3.5 py-1.5 rounded-full bg-black/50 text-white text-sm font-semibold flex items-center gap-1.5 z-10 pointer-events-none kan-always-white"><Music size={13} /><span className="truncate" dir="auto">{m.name}</span></div>;
 }
 
-function StoryMusic({ m }: { m: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' } }) {
+function StoryMusic({ m }: { m: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'lyrics'; lyr?: LyricLine[]; lp?: { x: number; y: number } } }) {
   const ref = useRef<HTMLAudioElement>(null);
+  const [time, setTime] = useState(m.start);
   const [mute, setMute] = useState(false);
   useEffect(() => { const a = ref.current; if (!a) return; a.currentTime = m.start; void a.play().catch(() => undefined); return () => a.pause(); }, [m.url, m.start]);
   return (
     <>
-      <audio ref={ref} src={m.url} muted={mute} preload="auto" onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= m.end) { a.currentTime = m.start; void a.play().catch(() => undefined); } }} />
+      <audio ref={ref} src={m.url} muted={mute} preload="auto" onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= m.end) { a.currentTime = m.start; void a.play().catch(() => undefined); } setTime(a.currentTime); }} />
       <StoryMusicTag m={m} />
+      {m.style === 'lyrics' && m.lyr && m.lyr.length > 0 && <LyricsOverlay lines={m.lyr} time={time} pos={m.lp ?? { x: 50, y: 62 }} />}
       <button onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setMute(v => !v); }} aria-label={mute ? 'تشغيل الصوت' : 'كتم الصوت'} className="absolute top-16 end-3 z-20 w-8 h-8 rounded-full bg-black/45 backdrop-blur ring-1 ring-white/30 flex items-center justify-center">{mute ? <VolumeX size={16} color="#fff" /> : <Volume2 size={16} color="#fff" />}</button>
     </>
   );
@@ -7860,7 +7929,7 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
               {job.status === 'run' ? t('جارٍ النشر...') : job.status === 'done' ? t('تم النشر') : t('تعذّر النشر، حاول مرة أخرى')}{job.label ? ` · ${job.label}` : ''}
             </span>
             {job.status === 'run'
-              ? <span className="tabular-nums font-bold text-cyan-300">{job.pct}%</span>
+              ? <span className="flex items-center gap-2"><span className="tabular-nums font-bold text-cyan-300">{job.pct}%</span><button onClick={() => cancelJob(job.id)} aria-label="إلغاء الرفع" className="p-1 text-red-400 hover:text-red-300"><X size={14} /></button></span>
               : <button onClick={() => dropJob(job.id)} aria-label="إغلاق" className="p-1 text-gray-400 hover:text-white"><X size={14} /></button>}
           </div>
           {job.status === 'run' && (
@@ -8092,11 +8161,24 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
     onStart(ns); onEnd(round(ns + L));
     if (on) play(ns);
   };
+  // Drag the left handle (start), the right handle (end), or the middle (move the whole clip).
   const dragWin = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dur) return;
-    const box = e.currentTarget; const len = winLen;
+    const box = e.currentTarget;
     box.setPointerCapture(e.pointerId);
-    const mv = (x: number) => { const r = box.getBoundingClientRect(); const c = ((x - r.left) / r.width) * total; place(c - len / 2, len); };
+    const r = box.getBoundingClientRect();
+    const toT = (x: number) => Math.max(0, Math.min(total, ((x - r.left) / r.width) * total));
+    const px = (t: number) => r.left + (t / total) * r.width;
+    const dl = Math.abs(e.clientX - px(start)); const dr = Math.abs(e.clientX - px(eff));
+    const grab = 24;
+    const mode: 'l' | 'r' | 'm' = dl <= grab && dl <= dr ? 'l' : dr <= grab ? 'r' : 'm';
+    const s0 = start; const e0 = eff; const len = winLen;
+    const mv = (x: number) => {
+      const c = toT(x);
+      if (mode === 'l') { const ns = round(Math.min(c, e0 - 1)); onStart(ns); onEnd(round(e0)); if (on) play(ns); }
+      else if (mode === 'r') { onStart(round(s0)); onEnd(round(Math.max(c, s0 + 1))); }
+      else place(c - len / 2, len);
+    };
     mv(e.clientX);
     const move = (ev: PointerEvent) => mv(ev.clientX);
     const up = () => { box.removeEventListener('pointermove', move); box.removeEventListener('pointerup', up); box.removeEventListener('pointercancel', up); };
@@ -8114,7 +8196,7 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 text-sm font-bold text-white truncate"><Music size={14} className="shrink-0 text-violet-300" /><span className="truncate">{(file?.name ?? name ?? 'موسيقى').replace(/\.[^.]+$/, '')}</span></div>
-          <div className="text-[11px] text-gray-400">اسحب الإطار على الموجة لاختيار الجزء · {fmt(start)} – {fmt(eff)}</div>
+          <div className="text-[11px] text-gray-400">اسحب المقبض الأيسر للبداية والأيمن للنهاية، أو الإطار كله لنقله</div>
         </div>
         <div className="px-2.5 py-1 rounded-full bg-white/10 text-white text-xs tabular-nums shrink-0">{Math.round(winLen)} ث</div>
       </div>
@@ -8125,10 +8207,19 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
             return <span key={i} className={`flex-1 rounded-full ${t >= start && t <= eff ? 'bg-white' : 'bg-white/30'}`} style={{ height: `${Math.round(h * 100)}%` }} />;
           })}
         </div>
-        <div className="absolute inset-y-0 rounded-lg ring-2 ring-white bg-white/10 pointer-events-none" style={{ left: `${(start / total) * 100}%`, width: `${(winLen / total) * 100}%` }} />
+        <div className="absolute inset-y-0 left-0 bg-black/55 pointer-events-none" style={{ width: `${(start / total) * 100}%` }} />
+        <div className="absolute inset-y-0 right-0 bg-black/55 pointer-events-none" style={{ width: `${Math.max(0, 100 - (eff / total) * 100)}%` }} />
+        <div className="absolute inset-y-0 border-y-2 border-white pointer-events-none" style={{ left: `${(start / total) * 100}%`, width: `${(winLen / total) * 100}%` }}>
+          <span className="absolute inset-y-0 -left-0 w-3 rounded-s-lg bg-white flex items-center justify-center"><span className="w-0.5 h-5 rounded bg-gray-500" /></span>
+          <span className="absolute inset-y-0 -right-0 w-3 rounded-e-lg bg-white flex items-center justify-center"><span className="w-0.5 h-5 rounded bg-gray-500" /></span>
+        </div>
         {on && <div className="absolute inset-y-0 w-0.5 bg-violet-400 pointer-events-none" style={{ left: `${(cur / total) * 100}%` }} />}
       </div>
-      <div dir="ltr" className="flex justify-between text-[10px] text-gray-500 tabular-nums"><span>0:00</span><span>{dur ? fmt(total) : '--:--'}</span></div>
+      <div dir="ltr" className="flex items-center justify-between gap-2 text-[11px] tabular-nums">
+        <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">▶ بداية {fmt(start)}</span>
+        <span className="text-gray-500">{Math.round(winLen)} ث من {dur ? fmt(total) : '--:--'}</span>
+        <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 font-semibold">■ نهاية {fmt(eff)}</span>
+      </div>
       <div dir="ltr" className="flex items-center gap-2">
         <button onClick={() => place(start - 1, winLen)} disabled={!dur} className={nudge} aria-label="ثانية للخلف">‹</button>
         <div className="flex-1 flex items-center justify-center gap-1.5">
@@ -8237,6 +8328,10 @@ function CreatePost({ currentUser, setPosts }: {
     if (!text.trim() && !media && !music && !remoteMusic) { setError('اكتب شيئاً أو أضف صورة أو فيديو أو ملف'); return; }
     const jobId = crypto.randomUUID();
     trackJob(jobId, 0, (text.trim() || title.trim() || media?.file.name || music?.name || '').slice(0, 40));
+    const ctl = new AbortController();
+    jobCtl.set(jobId, ctl);
+    const totalBytes = (media?.file.size ?? 0) + extra.reduce((n, f) => n + f.size, 0) + (music?.size ?? 0);
+    pubSet(l => l.map(j => (j.id === jobId ? { ...j, size: totalBytes } : j)));
     setError('');
     // Publishing continues in the background: the form is free right away and you can post something else.
     setText(''); setTitle(''); setMedia(null); setExtra([]); setMusic(null); setRemoteMusic(null); clearCover();
@@ -8257,7 +8352,7 @@ function CreatePost({ currentUser, setPosts }: {
           const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, p, f, f.type || 'application/octet-stream', '31536000', pct => {
             pcts[i] = pct;
             trackJob(jobId, Math.round(pcts.reduce((x, y) => x + y, 0) / files.length));
-          });
+          }, ctl.signal);
           if (upErr) throw upErr;
           uploaded.push(p);
           results[i] = kanPublicUrl(POST_MEDIA_BUCKET, p);
@@ -8271,7 +8366,7 @@ function CreatePost({ currentUser, setPosts }: {
       let musicItem: { type: 'file'; url: string; name: string; size: number; start?: number; end?: number } | null = null;
       if (music) {
         const mp = musicPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
-        const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
+        const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000', undefined, ctl.signal);
         if (mErr) throw mErr;
         uploaded.push(mp);
         musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size, start: musicStart, end: musicEnd > musicStart ? musicEnd : undefined, ...(media?.type === 'video' ? { vv: videoVol, mv: musicVol } : {}) };
@@ -8287,6 +8382,7 @@ function CreatePost({ currentUser, setPosts }: {
         uploaded.push(coverPath);
         coverUrl = kanPublicUrl(POST_MEDIA_BUCKET, coverPath);
       }
+      if (ctl.signal.aborted) throw new Error('cancelled');
       const id = crypto.randomUUID();
       const { error: insErr } = await supabase.from('posts').insert({
         id,
@@ -8322,7 +8418,9 @@ function CreatePost({ currentUser, setPosts }: {
     } catch (e) {
       console.error(e);
       if (uploaded.length > 0) void kanRemove(POST_MEDIA_BUCKET, uploaded);
-      endJob(jobId, false);
+      if (ctl.signal.aborted) dropJob(jobId); else endJob(jobId, false);
+    } finally {
+      jobCtl.delete(jobId);
     }
   };
 
@@ -8656,85 +8754,34 @@ function SearchTab({ users, posts, currentUser, setUsers, onStartChat, onOpenPro
 }
 
 // ============ Profile Tab ============
-// ============ "ملفاتي": everything the user uploaded (any size) ============
-type MyFile = { type: 'image' | 'video' | 'file' | 'audio'; url: string; name: string; size?: number; ts: number };
-
-function fileNameOf(url: string, name?: string): string {
-  if (name) return name;
-  try { return decodeURIComponent(new URL(url, 'http://x').pathname.split('/').pop() || 'ملف'); } catch { return 'ملف'; }
-}
-
-// Library tracks (KIX music) are not the user's uploads; only files in our own storage count.
-const isOwnUpload = (u: string) => u.startsWith('kanb2://') || /\/post-media\//.test(u);
-
-function collectFiles(posts: Post[]): MyFile[] {
-  const out: MyFile[] = [];
-  const seen = new Set<string>();
-  const add = (f: MyFile) => { if (!f.url || seen.has(f.url)) return; seen.add(f.url); out.push(f); };
-  for (const p of posts) {
-    for (const m of [p.media, ...(p.extraMedia ?? [])]) {
-      if (!m?.url) continue;
-      if (!isOwnUpload(m.url)) continue;
-      if (m.name?.startsWith('kan-music|')) { add({ type: 'audio', url: m.url, name: m.name.slice('kan-music|'.length) || 'موسيقى', size: m.size, ts: p.timestamp }); continue; }
-      add({ type: m.type, url: m.url, name: fileNameOf(m.url, m.name), size: m.size, ts: p.timestamp });
-    }
-    if (p.music?.url && isOwnUpload(p.music.url)) add({ type: 'audio', url: p.music.url, name: p.music.name || 'موسيقى', ts: p.timestamp });
-  }
-  return out;
-}
-
-function MyFilesPanel({ files }: { files: MyFile[] }) {
+// ============ "تحميلاتي": uploads in progress (and just finished), with % and cancel ============
+function MyFilesPanel() {
   const jobs = useSyncExternalStore(pubSubscribe, pubSnapshot);
-  const active = jobs.filter(j => j.status !== 'done');
-  const [f, setF] = useState<'all' | MyFile['type']>('all');
-  const count = (t: MyFile['type']) => files.filter(x => x.type === t).length;
-  const shown = f === 'all' ? files : files.filter(x => x.type === f);
-  const totalSize = files.reduce((n, x) => n + (x.size ?? 0), 0);
-  const chips: { key: 'all' | MyFile['type']; label: string; n: number }[] = [
-    { key: 'all', label: 'الكل', n: files.length }, { key: 'image', label: 'صور', n: count('image') }, { key: 'video', label: 'فيديو', n: count('video') },
-    { key: 'audio', label: 'صوت', n: count('audio') }, { key: 'file', label: 'ملفات', n: count('file') },
-  ];
-  const kindLabel: Record<MyFile['type'], string> = { image: 'صورة', video: 'فيديو', audio: 'صوت', file: 'ملف' };
-  const bars = active.map(j => {
-    const fail = j.status === 'fail';
-    return (
-      <div key={j.id} className="mb-3 rounded-2xl bg-gray-900 border border-gray-800 px-4 py-3">
-        <div className="flex items-center justify-between gap-3 text-sm text-white mb-2">
-          <span className="truncate" dir="auto">{j.label || 'جاري الرفع...'}</span>
-          <span className={`tabular-nums text-xs shrink-0 ${fail ? 'text-red-400' : 'text-cyan-300'}`}>{fail ? 'فشل الرفع' : `${Math.round(j.pct)}%`}{fail && <button onClick={() => dropJob(j.id)} className="mr-2 text-gray-400 underline">إخفاء</button>}</span>
-        </div>
-        <div className="h-2 rounded-full bg-gray-800 overflow-hidden"><div className={`h-full rounded-full transition-all duration-300 ${fail ? 'bg-red-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`} style={{ width: `${Math.max(3, Math.min(100, j.pct))}%` }} /></div>
-      </div>
-    );
-  });
-  if (files.length === 0) return <div>{bars}{active.length === 0 && <div className="text-center py-8"><p className="text-gray-500">لسه ما حمّلتش أي ملفات</p></div>}</div>;
+  if (jobs.length === 0) return <div className="text-center py-10"><Download size={28} className="mx-auto text-gray-700 mb-2" /><p className="text-gray-500 text-sm">مفيش حاجة بتتحمل دلوقتي</p><p className="text-gray-600 text-xs mt-1">أي ملف ترفعه هيظهر هنا بنسبة التحميل وتقدر تلغيه</p></div>;
   return (
-    <div>
-      {bars}
-      <div className="mb-3 flex items-center justify-between rounded-2xl bg-gray-900 border border-gray-800 px-4 py-3">
-        <div className="flex items-center gap-2 text-white font-bold"><Download size={16} className="text-violet-300" />اللي حمّلته</div>
-        <div className="text-xs text-gray-500">{totalSize > 0 ? `الحجم المعروف: ${formatBytes(totalSize)}` : ''}</div>
-      </div>
-      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
-        {chips.filter(c => c.key === 'all' || c.n > 0).map(c => (
-          <button key={c.key} onClick={() => setF(c.key)} className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium ${f === c.key ? 'bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/30' : 'bg-white/5 text-gray-400'}`}>{c.label} <span className="tabular-nums opacity-70">{c.n}</span></button>
-        ))}
-      </div>
-      <div className="space-y-2">
-        {shown.map(x => (
-          <a key={x.url} href={x.url} target="_blank" rel="noreferrer" download className="flex items-center gap-3 rounded-2xl bg-gray-900 border border-gray-800 p-2 hover:bg-gray-800/70">
-            <div className="w-12 h-12 shrink-0 rounded-xl overflow-hidden bg-gray-800 flex items-center justify-center text-violet-300">
-              {x.type === 'image' ? <img src={x.url} alt="" loading="lazy" className="w-full h-full object-cover" />
-                : x.type === 'video' ? <Film size={20} /> : x.type === 'audio' ? <Music size={20} /> : <FileText size={20} />}
+    <div className="space-y-3">
+      {[...jobs].reverse().map(j => {
+        const fail = j.status === 'fail';
+        const done = j.status === 'done';
+        const pct = Math.max(0, Math.min(100, Math.round(j.pct)));
+        return (
+          <div key={j.id} className="rounded-2xl bg-gray-900 border border-gray-800 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-white truncate" dir="auto">{j.label || 'ملف'}</div>
+                <div className="text-[11px] text-gray-500">{j.size ? `${formatBytes(j.size)} · ` : ''}{fail ? 'فشل الرفع' : done ? 'تم الرفع ✓' : 'جاري الرفع...'}</div>
+              </div>
+              <span className={`tabular-nums text-sm font-bold shrink-0 ${fail ? 'text-red-400' : done ? 'text-emerald-400' : 'text-cyan-300'}`}>{fail ? '!' : `${pct}%`}</span>
+              {j.status === 'run'
+                ? <button onClick={() => cancelJob(j.id)} className="shrink-0 px-3 py-1.5 rounded-full bg-red-500/15 text-red-300 text-xs font-semibold ring-1 ring-red-400/25 active:scale-95">إلغاء</button>
+                : <button onClick={() => dropJob(j.id)} aria-label="إخفاء" className="shrink-0 p-1.5 text-gray-500 hover:text-white"><X size={15} /></button>}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm text-white truncate">{x.name}</div>
-              <div className="text-[11px] text-gray-500">{kindLabel[x.type]}{x.size ? ` · ${formatBytes(x.size)}` : ''} · {new Date(x.ts).toLocaleDateString('ar-EG')}</div>
+            <div className="mt-2 h-2 rounded-full bg-gray-800 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+              <div className={`h-full rounded-full transition-all duration-300 ${fail ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`} style={{ width: `${Math.max(3, pct)}%` }} />
             </div>
-            <Download size={16} className="text-gray-500 shrink-0 ml-1" />
-          </a>
-        ))}
-      </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -8753,8 +8800,9 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
   useEffect(() => {
     void (async () => {
       try {
-        if (tab === 'posts' || tab === 'files') {
-          await onLoadPage({ userId: currentUser.id, limit: tab === 'files' ? 100 : 40 });
+        if (tab === 'files') return;
+        if (tab === 'posts') {
+          await onLoadPage({ userId: currentUser.id, limit: 40 });
           return;
         }
         const table = tab === 'likes' ? 'post_likes' : 'bookmarks';
@@ -8770,7 +8818,6 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
   const likedPosts = posts.filter(p => p.likes.includes(currentUser.id)).sort((a, b) => b.timestamp - a.timestamp);
   const bookmarkedPosts = posts.filter(p => p.bookmarks.includes(currentUser.id)).sort((a, b) => b.timestamp - a.timestamp);
   const displayPosts = tab === 'posts' ? myPosts : tab === 'likes' ? likedPosts : bookmarkedPosts;
-  const myFiles = collectFiles(myPosts);
   const activeUploads = useSyncExternalStore(pubSubscribe, pubSnapshot).filter(j => j.status !== 'done').length;
 
   return (
@@ -8799,7 +8846,7 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
         </div>
       </div>
       <div className="seg flex gap-1 mb-4 bg-gray-900/70 rounded-2xl p-1 border border-white/5">
-        {[{ key: 'posts' as const, label: 'منشوراتي', Icon: FileText, n: myPosts.length }, { key: 'likes' as const, label: 'إعجاباتي', Icon: Heart, n: likedPosts.length }, { key: 'bookmarks' as const, label: 'محفوظاتي', Icon: Bookmark, n: bookmarkedPosts.length }, { key: 'files' as const, label: 'تحميلاتي', Icon: Download, n: myFiles.length + activeUploads }].map(t => (
+        {[{ key: 'posts' as const, label: 'منشوراتي', Icon: FileText, n: myPosts.length }, { key: 'likes' as const, label: 'إعجاباتي', Icon: Heart, n: likedPosts.length }, { key: 'bookmarks' as const, label: 'محفوظاتي', Icon: Bookmark, n: bookmarkedPosts.length }, { key: 'files' as const, label: 'تحميلاتي', Icon: Download, n: activeUploads }].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} className={`seg-btn relative flex-1 basis-0 px-1 py-2 rounded-xl text-sm font-medium transition-colors ${tab === t.key ? 'seg-on text-violet-100' : 'text-gray-500 hover:text-gray-300'}`}>
             {tab === t.key && <span className="seg-pill absolute inset-0 rounded-xl bg-violet-500/15 ring-1 ring-violet-400/25" />}
             <span className="relative flex items-center justify-center gap-1.5 whitespace-nowrap text-[13px] min-[400px]:text-sm">
@@ -8810,7 +8857,7 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
           </button>
         ))}
       </div>
-      {tab === 'files' ? <MyFilesPanel files={myFiles} /> : (
+      {tab === 'files' ? <MyFilesPanel /> : (
       <div className="space-y-4">
         {displayPosts.length === 0 ? (
           <div className="text-center py-8"><p className="text-gray-500">لا توجد منشورات</p></div>
