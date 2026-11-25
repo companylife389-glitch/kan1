@@ -11328,17 +11328,17 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
     );
   };
   return createPortal(
-    <div className="fixed inset-0 z-[90] flex flex-col items-center overflow-y-auto" style={{ background: 'linear-gradient(180deg,#272a62 0%,#5a3c82 60%,#9a4f96 100%)' }} dir="rtl">
-      <div className="w-full max-w-xl px-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between">
+    <div className="fixed inset-0 z-[90] flex flex-col items-center overflow-y-auto overflow-x-hidden" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', background: 'linear-gradient(180deg,#272a62 0%,#5a3c82 60%,#9a4f96 100%)' }} dir="rtl">
+      <div className="shrink-0 w-full max-w-xl px-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white" aria-label="إغلاق"><X size={18} /></button>
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 text-sm">
           <span className="text-gray-400">أنت</span><b className="text-white text-base tabular-nums">{sc.me}</b><span className="text-gray-600">–</span><b className="text-white text-base tabular-nums">{sc.them}</b><span className="text-gray-400 truncate max-w-[5rem]">{other.displayName}</span>{sc.draw ? <span className="text-gray-500 text-xs">· {sc.draw} تعادل</span> : null}
         </div>
         <span className="w-9" />
       </div>
-      <div className="w-full max-w-xl px-3 mt-3"><Bar u={other} c={oppColor} mineBar={false} /></div>
-      <div className="w-full max-w-xl px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
-      <div dir="ltr" className="relative mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `min(${bsize}%, calc((100dvh - 17rem) * ${bsize / 100}))`, minWidth: '14rem' }}>
+      <div className="shrink-0 w-full max-w-xl px-3 mt-3"><Bar u={other} c={oppColor} mineBar={false} /></div>
+      <div className="shrink-0 w-full max-w-xl px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
+      <div dir="ltr" className="relative shrink-0 mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `min(${bsize}%, calc((100dvh - 17rem) * ${bsize / 100}))`, minWidth: 'min(14rem, 100%)', flexShrink: 0 }}>
         <div className="grid w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(20,10,60,.7)]" style={{ aspectRatio: '1 / 1', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gridTemplateRows: 'repeat(8, minmax(0, 1fr))', touchAction: 'none' }}>
           {order.map((i, k) => {
             const r = Math.floor(i / 8), f = i % 8;
@@ -11370,7 +11370,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
           </div>
         )}
       </div>
-      <div className="w-full max-w-xl px-3 mt-2 flex flex-wrap items-center justify-center gap-1.5" dir="ltr">
+      <div className="shrink-0 w-full max-w-xl px-3 mt-2 flex flex-wrap items-center justify-center gap-1.5" dir="ltr">
         <button onClick={() => stepTo(0)} disabled={vIdx === 0} aria-label="البداية" className="w-10 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronsLeft size={18} /></button>
         <button onClick={() => stepTo(vIdx - 1)} disabled={vIdx === 0} aria-label="النقلة السابقة" className="w-12 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronLeft size={20} /></button>
         <button onClick={() => resize(bsize - 10)} disabled={bsize <= 50} aria-label="تصغير البورد" className="w-9 h-9 rounded-xl bg-white/10 text-white text-xl font-bold disabled:opacity-30 active:scale-95">−</button>
@@ -11379,9 +11379,9 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
         <button onClick={() => stepTo(vIdx + 1)} disabled={!reviewing} aria-label="النقلة التالية" className="w-12 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronRight size={20} /></button>
         <button onClick={() => stepTo(hist.length - 1)} disabled={!reviewing} aria-label="الأخيرة" className="w-10 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronsRight size={18} /></button>
       </div>
-      {(reviewing || canPre) && <div className="w-full max-w-xl px-3 mt-1.5 text-center text-[11px] text-gray-400">{reviewing ? 'بتشوف نقلة قديمة، اضغط ⏭ للرجوع للمباراة' : pre ? 'نقلتك المسبقة جاهزة وهتتنفذ أول ما يجي دورك (اضغط أي مربع لإلغائها)' : 'دور الخصم: تقدر تختار نقلتك مقدمًا (بريموف)'}</div>}
-      <div className="w-full max-w-xl px-3 mt-3"><Bar u={me} c={myColor} mineBar /></div>
-      <div className="w-full max-w-xl px-3 mt-3">
+      {(reviewing || canPre) && <div className="shrink-0 w-full max-w-xl px-3 mt-1.5 text-center text-[11px] text-gray-400">{reviewing ? 'بتشوف نقلة قديمة، اضغط ⏭ للرجوع للمباراة' : pre ? 'نقلتك المسبقة جاهزة وهتتنفذ أول ما يجي دورك (اضغط أي مربع لإلغائها)' : 'دور الخصم: تقدر تختار نقلتك مقدمًا (بريموف)'}</div>}
+      <div className="shrink-0 w-full max-w-xl px-3 mt-3"><Bar u={me} c={myColor} mineBar /></div>
+      <div className="shrink-0 w-full max-w-xl px-3 mt-3">
         {over ? (
           <button onClick={onNew} className="w-full py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold active:scale-[0.98]">لعبة جديدة</button>
         ) : game.drawBy && game.drawBy !== meId ? (
@@ -11393,7 +11393,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
           </div>
         )}
       </div>
-      <div className="w-full max-w-xl px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <div className="shrink-0 w-full max-w-xl px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {chat.length > 0 && (
           <div className="mb-2 space-y-1">
             {chat.slice(-3).map(m => (
