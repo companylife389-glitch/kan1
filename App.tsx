@@ -3478,7 +3478,7 @@ const bakeFilter = async (f: File, css: string): Promise<File | null> => {
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
 };
-type StoryExtra = { d?: number; items?: { k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string }[]; bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'lyrics'; lyr?: LyricLine[]; lp?: { x: number; y: number } }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string; o?: string[] }; pp?: { x: number; y: number; s?: number; r?: number }; ap?: { x: number; y: number; s?: number; r?: number }; ask?: string };
+type StoryExtra = { d?: number; items?: { k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string }[]; bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'lyrics'; lyr?: LyricLine[]; lp?: { x: number; y: number }; tp?: { x: number; y: number }; tc?: string }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string; o?: string[] }; pp?: { x: number; y: number; s?: number; r?: number }; ap?: { x: number; y: number; s?: number; r?: number }; ask?: string };
 
 type StoryItemEdit = { id: string; k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string; file?: File };
 const STORY_FONTS = ['inherit', 'Georgia, "Times New Roman", serif', '"Courier New", monospace', '"Segoe Script", "Comic Sans MS", cursive'];
@@ -3870,6 +3870,8 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [lyr, setLyr] = useState<LyricLine[] | null>(null);
   const [lyrBusy, setLyrBusy] = useState<'' | 'load' | 'none'>('');
   const [lp, setLp] = useState({ x: 50, y: 62 });
+  const [tp, setTp] = useState<Pct | undefined>(undefined);
+  const [mColor, setMColor] = useState('#ffffff');
   useEffect(() => { setLyr(null); setLyrBusy(''); }, [remoteM?.url]);
   const chooseStyle = async (k: 'cover' | 'text' | 'lyrics') => {
     setMStyle(k);
@@ -4022,11 +4024,11 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
         const mp = musicPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
         if (mErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); setErr(`تعذّر رفع الموسيقى: ${(mErr as { message?: string }).message ?? ''}`); setBusy(false); return; }
-        mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, style: 'text' };
+        mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, style: 'text', ...(tp ? { tp } : {}), ...(mColor !== '#ffffff' ? { tc: mColor } : {}) };
       } else if (remoteM) {
         const mEndAt = mEnd > mStart ? mEnd : mStart + 30;
         const withLyr = mStyle === 'lyrics' && !!lyr && lyr.length > 0;
-        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEndAt, cover: remoteM.cover, style: mStyle === 'lyrics' && !withLyr ? 'text' : mStyle, ...(withLyr ? { lyr: lyr!.filter(x => x.t >= mStart - 6 && x.t <= mEndAt + 1).slice(0, 80), lp } : {}) };
+        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEndAt, cover: remoteM.cover, style: mStyle === 'lyrics' && !withLyr ? 'text' : mStyle, ...(withLyr ? { lyr: lyr!.filter(x => x.t >= mStart - 6 && x.t <= mEndAt + 1).slice(0, 80), lp } : {}), ...(tp ? { tp } : {}), ...(mColor !== '#ffffff' ? { tc: mColor } : {}) };
       }
       const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj, items: uploadedItems }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
       if (insErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); throw insErr; }
@@ -4106,8 +4108,8 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
           <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 to-transparent pointer-events-none z-[5]" />
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent pointer-events-none z-[5]" />
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
-          {(music || remoteM) && <StoryMusicTag m={{ name: music ? music.name.replace(/\.[^.]+$/, '').slice(0, 60) : (remoteM?.name ?? ''), cover: remoteM?.cover, style: music ? 'text' : mStyle }} />}
-          {remoteM && !music && mStyle === 'lyrics' && lyr && <LyricsOverlay lines={lyr} time={mStart + 0.5} pos={lp} onMove={setLp} />}
+          {(music || remoteM) && <StoryMusicTag m={{ name: music ? music.name.replace(/\.[^.]+$/, '').slice(0, 60) : (remoteM?.name ?? ''), cover: remoteM?.cover, style: music ? 'text' : mStyle }} pos={tp} color={mColor} onMove={setTp} />}
+          {remoteM && !music && mStyle === 'lyrics' && lyr && <LyricsLive lines={lyr} start={mStart} end={mEnd > mStart ? mEnd : mStart + 30} pos={lp} color={mColor} onMove={setLp} />}
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
           <div className="absolute top-12 end-3 z-20 flex flex-col gap-2 max-h-[calc(100%-4rem)] overflow-y-auto no-scrollbar">
             {([['text', TypeIcon, 'نص', items.some(i => i.k === 't')], ['sticker', Smile, 'ملصق', items.length > 0], ['music', Music, 'موسيقى', !!music || !!remoteM], ['filter', Wand2, 'فلتر', flt > 0], ...(isVideo ? [] : [['frame', ImageIcon, 'الخلفية والتدوير', bgc !== '#000000' || rot !== 0] as const]), ['draw', Pencil, 'رسم', strokes.current.length > 0], ['tags', MapPin, 'موقع ومنشن', !!(loc.trim() || men.trim() || lnk.trim())], ['poll', BarChart3, 'استطلاع', !!extra.poll], ['ask', HelpCircle, 'سؤال', !!extra.ask], ['count', Clock, 'عدّاد', items.some(i => i.k === 'c')], ['dur', Play, 'مدة العرض', dur !== 5], ['aud', Users, 'مقربين', aud === 'close'], ['sched', Calendar, 'جدولة', !!sched]] as const).map(([k, Ic, label, on]) => (
@@ -4170,6 +4172,8 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
               {remoteM && <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2">
                 <div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{remoteM.name}</span><button onClick={() => { setRemoteM(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div>
                 <div className="flex gap-2 px-2 mt-2">{([['cover', '🖼 الغلاف'], ['text', 'Aa الاسم'], ['lyrics', '🎤 الكلمات']] as const).filter(([k]) => k !== 'cover' || !!remoteM.cover).map(([k, l]) => <button key={k} onClick={() => void chooseStyle(k)} className={`flex-1 py-1.5 rounded-full text-xs font-semibold ${mStyle === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}</div>
+                <div className="flex items-center gap-2 px-2 mt-2"><span className="text-[11px] text-gray-300 shrink-0">لون النص</span>{TAG_COLORS.map(c => <button key={c} onClick={() => setMColor(c)} aria-label={c} className={`w-6 h-6 rounded-full ring-2 ${mColor === c ? 'ring-white scale-110' : 'ring-white/20'}`} style={{ background: c }} />)}</div>
+                <p className="px-2 mt-1.5 text-[11px] text-gray-400">اسحب الغلاف أو الاسم على الشاشة لتحريكه</p>
                 {mStyle === 'lyrics' && <p className="px-2 mt-1.5 text-[11px] text-gray-300">{lyrBusy === 'load' ? 'جاري تحميل كلمات الأغنية...' : lyrBusy === 'none' ? 'مفيش كلمات متاحة للأغنية دي، هتظهر باسمها بس' : lyr ? 'اسحب الكلمات على الشاشة لتحريكها، وبتتحرك مع الأغنية للمقطع اللي اخترته' : ''}</p>}
                 <div className="mt-2"><MusicTrimmer key={remoteM.url} src={remoteM.url} name={remoteM.name} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div>
               </div>}
@@ -4253,52 +4257,88 @@ async function fetchLyrics(name: string): Promise<LyricLine[]> {
     return hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
   } catch { return []; }
 }
-function LyricsOverlay({ lines, time, pos, onMove }: { lines: LyricLine[]; time: number; pos: { x: number; y: number }; onMove?: (p: { x: number; y: number }) => void }) {
-  let i = -1;
-  for (let k = 0; k < lines.length; k++) { if (lines[k].t <= time) i = k; else break; }
-  const cur = i >= 0 ? lines[i].l : '';
-  const nxt = lines[i + 1]?.l ?? '';
-  const down = (e: React.PointerEvent<HTMLDivElement>) => {
+type Pct = { x: number; y: number };
+const TAG_COLORS = ['#ffffff', '#facc15', '#22d3ee', '#f472b6', '#a3e635', '#fb923c', '#a78bfa', '#000000'];
+// Drag an absolutely-positioned child around its parent; reports the position in % of the parent.
+function pctDrag(onMove?: (p: Pct) => void) {
+  return (e: React.PointerEvent<HTMLDivElement>) => {
     if (!onMove) return;
     e.stopPropagation();
     const el = e.currentTarget;
     const box = el.parentElement?.getBoundingClientRect();
     if (!box) return;
     el.setPointerCapture(e.pointerId);
-    const mv = (ev: PointerEvent) => onMove({ x: Math.max(12, Math.min(88, ((ev.clientX - box.left) / box.width) * 100)), y: Math.max(8, Math.min(92, ((ev.clientY - box.top) / box.height) * 100)) });
+    const mv = (ev: PointerEvent) => onMove({ x: Math.max(12, Math.min(88, ((ev.clientX - box.left) / box.width) * 100)), y: Math.max(6, Math.min(94, ((ev.clientY - box.top) / box.height) * 100)) });
     const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
     el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
   };
+}
+
+function LyricsOverlay({ lines, time, pos, color, onMove }: { lines: LyricLine[]; time: number; pos: Pct; color?: string; onMove?: (p: Pct) => void }) {
+  let i = -1;
+  for (let k = 0; k < lines.length; k++) { if (lines[k].t <= time) i = k; else break; }
+  const cur = i >= 0 ? lines[i].l : '';
+  const nxt = lines[i + 1]?.l ?? '';
   if (!cur && !onMove) return null;
   return (
-    <div onPointerDown={down} style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: 'translate(-50%,-50%)', touchAction: 'none' }}
+    <div onPointerDown={pctDrag(onMove)} style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: 'translate(-50%,-50%)', touchAction: 'none', color: color ?? '#fff' }}
       className={`absolute z-20 w-[84%] text-center kan-always-white select-none ${onMove ? 'cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-xl p-1.5' : 'pointer-events-none'}`}>
-      <div className="text-white text-2xl font-extrabold leading-snug [text-shadow:0_2px_10px_rgba(0,0,0,.75)]" dir="auto">{cur || '♪'}</div>
-      {nxt && <div className="mt-1 text-white/55 text-base font-bold [text-shadow:0_2px_8px_rgba(0,0,0,.7)]" dir="auto">{nxt}</div>}
+      <div className="text-2xl font-extrabold leading-snug [text-shadow:0_2px_10px_rgba(0,0,0,.75)]" dir="auto">{cur || '♪'}</div>
+      {nxt && <div className="mt-1 text-base font-bold opacity-60 [text-shadow:0_2px_8px_rgba(0,0,0,.7)]" dir="auto">{nxt}</div>}
     </div>
   );
 }
 
-function StoryMusicTag({ m }: { m: { name: string; cover?: string; style?: 'cover' | 'text' | 'lyrics' } }) {
-  if (m.style === 'cover' && m.cover) return (
-    <div className="absolute top-[58%] inset-x-0 mx-auto w-fit max-w-[78%] z-10 pointer-events-none kan-always-white flex items-center gap-3 p-2 pe-4 rounded-2xl bg-white/20 backdrop-blur-xl ring-1 ring-white/30 shadow-xl">
-      <img src={m.cover} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" />
-      <div className="min-w-0"><div className="flex items-center gap-1 text-[10px] text-white/80"><Music size={11} /> موسيقى</div><div className="text-sm font-bold text-white truncate" dir="auto">{m.name}</div></div>
-    </div>
-  );
-  return <div className="absolute top-16 inset-x-0 mx-auto w-fit max-w-[80%] px-3.5 py-1.5 rounded-full bg-black/50 text-white text-sm font-semibold flex items-center gap-1.5 z-10 pointer-events-none kan-always-white"><Music size={13} /><span className="truncate" dir="auto">{m.name}</span></div>;
+// Editor preview: the lyrics advance by themselves over the chosen clip, so you see what viewers will see.
+function LyricsLive({ lines, start, end, pos, color, onMove }: { lines: LyricLine[]; start: number; end: number; pos: Pct; color?: string; onMove?: (p: Pct) => void }) {
+  const [t, setT] = useState(start);
+  useEffect(() => {
+    const len = Math.max(1, end - start);
+    const t0 = performance.now();
+    setT(start);
+    const id = window.setInterval(() => setT(start + (((performance.now() - t0) / 1000) % len)), 200);
+    return () => window.clearInterval(id);
+  }, [start, end]);
+  return <LyricsOverlay lines={lines} time={t} pos={pos} color={color} onMove={onMove} />;
 }
 
-function StoryMusic({ m }: { m: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'lyrics'; lyr?: LyricLine[]; lp?: { x: number; y: number } } }) {
+function StoryMusicTag({ m, pos, color, onMove }: { m: { name: string; cover?: string; style?: 'cover' | 'text' | 'lyrics' }; pos?: Pct; color?: string; onMove?: (p: Pct) => void }) {
+  const cover = m.style === 'cover' && !!m.cover;
+  const p = pos ?? (cover ? { x: 50, y: 62 } : { x: 50, y: 13 });
+  return (
+    <div onPointerDown={pctDrag(onMove)} style={{ left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', touchAction: onMove ? 'none' : undefined, color: color ?? '#fff' }}
+      className={`absolute z-10 w-fit max-w-[80%] kan-always-white ${onMove ? 'cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-2xl' : 'pointer-events-none'}`}>
+      {cover ? (
+        <div className="flex items-center gap-3 p-2 pe-4 rounded-2xl bg-white/20 backdrop-blur-xl ring-1 ring-white/30 shadow-xl">
+          <img src={m.cover} alt="" draggable={false} className="w-14 h-14 rounded-xl object-cover shrink-0" />
+          <div className="min-w-0"><div className="flex items-center gap-1 text-[10px] opacity-80"><Music size={11} /> موسيقى</div><div className="text-sm font-bold truncate" dir="auto">{m.name}</div></div>
+        </div>
+      ) : (
+        <div className="px-3.5 py-1.5 rounded-full bg-black/50 text-sm font-semibold flex items-center gap-1.5"><Music size={13} /><span className="truncate" dir="auto">{m.name}</span></div>
+      )}
+    </div>
+  );
+}
+
+function StoryMusic({ m }: { m: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'lyrics'; lyr?: LyricLine[]; lp?: Pct; tp?: Pct; tc?: string } }) {
   const ref = useRef<HTMLAudioElement>(null);
-  const [time, setTime] = useState(m.start);
   const [mute, setMute] = useState(false);
-  useEffect(() => { const a = ref.current; if (!a) return; a.currentTime = m.start; void a.play().catch(() => undefined); return () => a.pause(); }, [m.url, m.start]);
+  const [time, setTime] = useState(m.start);
+  const end = m.end > m.start ? m.end : m.start + 30;
+  // Stay inside the chosen clip: start exactly at its beginning (even before metadata has loaded) and loop at its end.
+  useEffect(() => {
+    const a = ref.current; if (!a) return;
+    const go = () => { a.currentTime = m.start; void a.play().catch(() => undefined); };
+    if (a.readyState >= 1) go(); else a.addEventListener('loadedmetadata', go, { once: true });
+    return () => { a.removeEventListener('loadedmetadata', go); a.pause(); };
+  }, [m.url, m.start]);
   return (
     <>
-      <audio ref={ref} src={m.url} muted={mute} preload="auto" onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= m.end) { a.currentTime = m.start; void a.play().catch(() => undefined); } setTime(a.currentTime); }} />
-      <StoryMusicTag m={m} />
-      {m.style === 'lyrics' && m.lyr && m.lyr.length > 0 && <LyricsOverlay lines={m.lyr} time={time} pos={m.lp ?? { x: 50, y: 62 }} />}
+      <audio ref={ref} src={m.url} muted={mute} preload="auto"
+        onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= end || a.currentTime < m.start - 0.3) { a.currentTime = m.start; if (a.paused) void a.play().catch(() => undefined); } setTime(a.currentTime); }}
+        onEnded={e => { const a = e.currentTarget; a.currentTime = m.start; void a.play().catch(() => undefined); }} />
+      <StoryMusicTag m={m} pos={m.tp} color={m.tc} />
+      {m.style === 'lyrics' && m.lyr && m.lyr.length > 0 && <LyricsOverlay lines={m.lyr} time={time} pos={m.lp ?? { x: 50, y: 62 }} color={m.tc} />}
       <button onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setMute(v => !v); }} aria-label={mute ? 'تشغيل الصوت' : 'كتم الصوت'} className="absolute top-16 end-3 z-20 w-8 h-8 rounded-full bg-black/45 backdrop-blur ring-1 ring-white/30 flex items-center justify-center">{mute ? <VolumeX size={16} color="#fff" /> : <Volume2 size={16} color="#fff" />}</button>
     </>
   );
@@ -4324,6 +4364,9 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
   const [pinned, setPinned] = useState<Record<string, boolean>>({});
   const [sentNote, setSentNote] = useState('');
   const [burst, setBurst] = useState(0);
+  // Portrait/square media fills the whole screen; wide media keeps its full width (no cropping of landscape shots).
+  const [coverFit, setCoverFit] = useState<Record<string, boolean>>({});
+  const markFit = (id: string, w: number, h: number) => { if (w > 0 && h > 0) setCoverFit(c => (c[id] === (h >= w * 0.9) ? c : { ...c, [id]: h >= w * 0.9 })); };
   const group = groups[gi];
   const story = group?.items[si];
   const author = users.find(u => u.id === group?.userId);
@@ -4543,7 +4586,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
             </div>
           )
           : story.type === 'image'
-          ? <><img src={story.url} alt="" draggable={false} onContextMenu={e => e.preventDefault()} style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f, WebkitTouchCallout: 'none' } as React.CSSProperties} className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none" />{story.extra?.m && <StoryMusic key={story.id} m={story.extra.m} />}</>
+          ? <><img src={story.url} alt="" draggable={false} onContextMenu={e => e.preventDefault()} style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f, WebkitTouchCallout: 'none' } as React.CSSProperties} onLoad={e => markFit(story.id, e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)} className={`absolute inset-0 w-full h-full ${coverFit[story.id] ? 'object-cover' : 'object-contain'} pointer-events-none select-none`} />{story.extra?.m && <StoryMusic key={story.id} m={story.extra.m} />}</>
           : (
             <video
               key={story.id}
@@ -4552,11 +4595,11 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
               autoPlay
               playsInline
               style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f }}
-              className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+              className={`absolute inset-0 w-full h-full ${coverFit[story.id] ? 'object-cover' : 'object-contain'} pointer-events-none select-none`}
               controlsList="nodownload noremoteplayback"
               disablePictureInPicture
               onContextMenu={e => e.preventDefault()}
-              onLoadedMetadata={e => setDuration((e.currentTarget.duration || 5) * 1000)}
+              onLoadedMetadata={e => { setDuration((e.currentTarget.duration || 5) * 1000); markFit(story.id, e.currentTarget.videoWidth, e.currentTarget.videoHeight); }}
               onTimeUpdate={e => { const d = e.currentTarget.duration; if (d > 0) setProgress(e.currentTarget.currentTime / d); }}
               onEnded={() => setProgress(1)}
               onError={() => setProgress(1)}
@@ -5051,6 +5094,51 @@ function StatusScreen({ text, actions }: { text: string; actions?: { label: stri
 }
 
 // ============ Main App ============
+// Always-visible upload indicator (every screen): % while uploading, cancel, and a confirmation when it finishes.
+let openFilesTab = false;
+function GlobalUploadBar({ onOpen }: { onOpen: () => void }) {
+  const jobs = useSyncExternalStore(pubSubscribe, pubSnapshot);
+  const running = jobs.some(j => j.status === 'run');
+  useEffect(() => {
+    if (!running) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [running]);
+  useEffect(() => {
+    const ids = jobs.filter(j => j.status === 'done').map(j => j.id);
+    if (ids.length === 0) return;
+    const h = window.setTimeout(() => ids.forEach(dropJob), 5000);
+    return () => window.clearTimeout(h);
+  }, [jobs]);
+  if (jobs.length === 0) return null;
+  return (
+    <div className="fixed top-14 inset-x-0 z-50 px-3 pt-2 space-y-2 pointer-events-none">
+      {jobs.map(j => {
+        const fail = j.status === 'fail'; const done = j.status === 'done';
+        const pct = Math.max(0, Math.min(100, Math.round(j.pct)));
+        return (
+          <div key={j.id} className="pointer-events-auto mx-auto max-w-md rounded-2xl bg-gray-900/95 backdrop-blur border border-white/10 shadow-xl px-3.5 py-2.5">
+            <div className="flex items-center gap-2.5">
+              <button onClick={onOpen} className="min-w-0 flex-1 text-right">
+                <div className="text-[13px] text-white truncate" dir="auto">{fail ? 'فشل الرفع' : done ? 'تم النشر ✓' : 'جاري رفع الملف... لا تقفل التطبيق'}{j.label ? ` · ${j.label}` : ''}</div>
+                {j.size ? <div className="text-[11px] text-gray-500">{formatBytes(j.size)}</div> : null}
+              </button>
+              <span className={`tabular-nums text-sm font-bold shrink-0 ${fail ? 'text-red-400' : done ? 'text-emerald-400' : 'text-cyan-300'}`}>{fail ? '!' : `${pct}%`}</span>
+              {j.status === 'run'
+                ? <button onClick={() => cancelJob(j.id)} className="shrink-0 px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 text-xs font-semibold">إلغاء</button>
+                : <button onClick={() => dropJob(j.id)} aria-label="إغلاق" className="shrink-0 p-1 text-gray-500"><X size={14} /></button>}
+            </div>
+            <div className="mt-2 h-1.5 rounded-full bg-white/10 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+              <div className={`h-full rounded-full transition-all duration-300 ${fail ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`} style={{ width: `${Math.max(4, pct)}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -5709,6 +5797,8 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      <GlobalUploadBar onOpen={() => { openFilesTab = true; window.dispatchEvent(new Event('kan-open-files')); goTab('profile'); }} />
 
       {storageError && (
         <div
@@ -8119,6 +8209,7 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
   const [on, setOn] = useState(false);
   const [cur, setCur] = useState(0);
   const [bars, setBars] = useState<number[]>([]);
+  const [locked, setLocked] = useState(false);
   // Real waveform for normal-size files, a decorative one otherwise.
   useEffect(() => {
     let dead = false;
@@ -8186,6 +8277,13 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
   };
   const lens = [15, 30, 60].filter(o => o < total);
   const nudge = 'w-8 h-8 shrink-0 rounded-full bg-white/10 text-white text-base leading-none disabled:opacity-40';
+  if (locked) return (
+    <div className="mb-4 -mt-2 flex items-center gap-3 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-400/30">
+      <span className="w-8 h-8 shrink-0 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm">✓</span>
+      <div className="min-w-0 flex-1 text-sm text-white" dir="ltr"><span className="font-bold">{fmt(start)} – {fmt(eff)}</span> <span className="text-emerald-300 text-xs">({Math.round(winLen)} ث) تم تأكيد المقطع</span></div>
+      <button onClick={() => setLocked(false)} className="shrink-0 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold">تعديل</button>
+    </div>
+  );
   return (
     <div className="mb-4 -mt-2 p-3 rounded-2xl bg-gradient-to-b from-gray-800/80 to-gray-900/80 border border-white/10 space-y-3">
       <audio ref={ref} src={url} preload="metadata" onLoadedMetadata={e => setDur(e.currentTarget.duration || 0)} onPlay={() => setOn(true)} onPause={() => setOn(false)}
@@ -8229,6 +8327,7 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
         </div>
         <button onClick={() => place(start + 1, winLen)} disabled={!dur} className={nudge} aria-label="ثانية للأمام">›</button>
       </div>
+      <button onClick={() => { ref.current?.pause(); onStart(round(start)); onEnd(round(eff)); setLocked(true); }} disabled={!dur} className="w-full py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold disabled:opacity-40 active:scale-[0.98]">✓ تأكيد المقطع</button>
     </div>
   );
 }
@@ -8794,7 +8893,8 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
   onLoadPage: (opts: FetchPostsOptions) => Promise<Post[]>;
 }) {
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
-  const [tab, setTab] = useState<'posts' | 'likes' | 'bookmarks' | 'files'>('posts');
+  const [tab, setTab] = useState<'posts' | 'likes' | 'bookmarks' | 'files'>(() => { const f = openFilesTab; openFilesTab = false; return f ? 'files' : 'posts'; });
+  useEffect(() => { const h = () => { openFilesTab = false; setTab('files'); }; window.addEventListener('kan-open-files', h); return () => window.removeEventListener('kan-open-files', h); }, []);
 
   // The feed only holds the newest posts, so fetch what this profile needs.
   useEffect(() => {
