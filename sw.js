@@ -14,23 +14,13 @@ self.addEventListener('push', (event) => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       // The app is open and in front: it plays its own sound, so no system notification.
       if (windows.some((w) => w.visibilityState === 'visible' && w.focused)) return;
-      // Try the sender's picture briefly (a slow icon must never delay the notification), else the app icon.
-      let icon = 'icon-192.png';
-      if (data.icon) {
-        try {
-          const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), 2000);
-          const res = await fetch(data.icon, { signal: ctrl.signal });
-          clearTimeout(timer);
-          if (res.ok) icon = data.icon;
-        } catch (e) { /* keep the app icon */ }
-      }
-      await self.registration.showNotification(data.title || 'KIX', {
+      // Show it at once with the app icon: nothing may wait for a network request.
+      const show = (icon, quiet) => self.registration.showNotification(data.title || 'KIX', {
         body: data.body || '',
         tag: data.tag || 'kan-message',
-        renotify: true,
-        silent: false,
-        vibrate: [200, 100, 200],
+        renotify: !quiet,
+        silent: !!quiet,
+        vibrate: quiet ? undefined : [200, 100, 200],
         timestamp: Date.now(),
         icon,
         badge: 'badge-96.png',
@@ -38,6 +28,17 @@ self.addEventListener('push', (event) => {
         lang: 'ar',
         data: { url: data.url || self.registration.scope },
       });
+      await show('icon-192.png', false);
+      // Then swap in the sender's picture quietly if it loads fast (same tag, no second sound).
+      if (data.icon) {
+        try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 2500);
+          const res = await fetch(data.icon, { signal: ctrl.signal });
+          clearTimeout(timer);
+          if (res.ok) await show(data.icon, true);
+        } catch (e) { /* keep the app icon */ }
+      }
     })()
   );
 });

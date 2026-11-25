@@ -2075,7 +2075,7 @@ function ShareSheet({ post, author, users, currentUser, comment, onClose }: {
     setBusy(null);
   };
   const actions: { key: string; label: string; Icon: typeof Copy; cls: string; run: () => void }[] = [
-    { key: 'story', label: 'قصتك', Icon: Plus, cls: 'from-violet-600 via-fuchsia-500 to-cyan-400', run: () => { void openStoryPreview(); } },
+    { key: 'story', label: 'قصتك', Icon: Plus, cls: 'from-violet-600 via-fuchsia-500 to-cyan-400', run: () => { if (post.media?.type === 'video' || post.isVideo) setStoryAsk(true); else void openStoryPreview(); } },
     { key: 'link', label: 'نسخ الرابط', Icon: Copy, cls: 'from-violet-600 to-fuchsia-500', run: () => void copyLink() },
     { key: 'wa', label: 'واتساب', Icon: MessageCircle, cls: 'from-emerald-500 to-green-600', run: () => openExternal(`https://wa.me/?text=${encodeURIComponent(text)}`) },
     { key: 'tg', label: 'تيليجرام', Icon: Send, cls: 'from-sky-500 to-cyan-500', run: () => openExternal(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text.replace(`\n${link}`, '').slice(0, 300))}`) },
@@ -4175,6 +4175,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const [mStart, setMStart] = useState(0);
   const [mEnd, setMEnd] = useState(0);
   const musicPick = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (!music) return; const len = mEnd > mStart ? mEnd - mStart : 30; setDur(Math.max(3, Math.min(60, Math.round(len)))); }, [music, mStart, mEnd]);
   const [remoteM, setRemoteM] = useState<{ url: string; name: string; cover?: string } | null>(null);
   const [mStyle, setMStyle] = useState<'cover' | 'text' | 'none'>('none');
   const [tp, setTp] = useState<Pct | undefined>(undefined);
@@ -4463,7 +4464,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <div className="flex gap-2"><input type="datetime-local" value={cWhen} onChange={e => setCWhen(e.target.value)} style={{ colorScheme: 'dark' }} className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white focus:outline-none" /><button onClick={() => { const t = new Date(cWhen); if (!cWhen || t.getTime() < Date.now()) { setErr('اختر موعداً في المستقبل'); return; } addItem('c', t.toISOString(), undefined, { l: cTitle.trim() || undefined }); setCTitle(''); setCWhen(''); }} className="shrink-0 w-10 h-10 rounded-full bg-white text-black flex items-center justify-center active:scale-90" aria-label="إضافة"><Plus size={20} /></button></div>
           {selControls}
         </div>}
-        {tool === 'dur' && <div className="space-y-2 mb-1"><p className="text-white/80 text-xs">مدة ظهور الصورة في القصة{isVideo ? ' (الفيديو بياخد مدته الأصلية)' : ''}</p><div className="flex gap-2">{[5, 10, 15, 20].map(n => <button key={n} onClick={() => setDur(n)} disabled={isVideo} className={`flex-1 py-2 rounded-full text-sm font-semibold disabled:opacity-40 ${dur === n ? 'bg-white text-black' : 'bg-white/15 text-white'}`}>{n} ث</button>)}</div></div>}
+        {tool === 'dur' && <div className="space-y-2 mb-1"><p className="text-white/80 text-xs">مدة ظهور الصورة في القصة: {dur} ث{music ? ' (محسوبة من المقطع)' : ''}{isVideo ? ' (الفيديو بياخد مدته الأصلية)' : ''}</p><div className="flex gap-2">{[5, 10, 15, 20].map(n => <button key={n} onClick={() => setDur(n)} disabled={isVideo} className={`flex-1 py-2 rounded-full text-sm font-semibold disabled:opacity-40 ${dur === n ? 'bg-white text-black' : 'bg-white/15 text-white'}`}>{n} ث</button>)}</div></div>}
         {tool === 'draw' && <div className="space-y-2 mb-1">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             {TXT_COLORS.map(c => <button key={c} onClick={() => setPen(c)} aria-label="لون القلم" className={`shrink-0 w-8 h-8 rounded-full border-2 ${pen === c ? 'border-white scale-110' : 'border-white/30'}`} style={{ background: c }} />)}
@@ -5823,7 +5824,18 @@ export default function App() {
         setNotifications(prev => (prev.some(x => x.id === n.id) ? prev : [n, ...prev].slice(0, 100)));
       })
       .subscribe();
-    return () => { cancelled = true; void supabase.removeChannel(channel); };
+    // Phones drop the live connection while asleep and never replay what was missed: catch up the moment the app wakes or the network returns.
+    const catchUp = () => { if (document.visibilityState === 'visible') void loadNotifications().then(list => { if (!cancelled) setNotifications(list); }).catch(() => undefined); };
+    document.addEventListener('visibilitychange', catchUp);
+    window.addEventListener('online', catchUp);
+    window.addEventListener('focus', catchUp);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', catchUp);
+      window.removeEventListener('online', catchUp);
+      window.removeEventListener('focus', catchUp);
+      void supabase.removeChannel(channel);
+    };
   }, [currentUserId]);
   const notifUnread = notifications.filter(n => !n.read).length;
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
@@ -11146,8 +11158,8 @@ function GamePicker({ onClose, onInvite }: { onClose: () => void; onInvite: (at:
 }
 
 let chessAudio: AudioContext | null = null;
-function ChessPiece({ t, w, className = '' }: { t: string; w: boolean; className?: string }) {
-  const fill = w ? '#ffc2c4' : '#33407f';
+function ChessPiece({ t, w, className = '', style }: { t: string; w: boolean; className?: string; style?: React.CSSProperties }) {
+  const fill = w ? 'url(#kp-w)' : 'url(#kp-b)';
   const line = w ? '#7b4aa8' : '#f0b6e8';
   const accent = w ? '#7b4aa8' : '#f0b6e8';
   const body: Record<string, React.ReactNode> = {
@@ -11159,7 +11171,8 @@ function ChessPiece({ t, w, className = '' }: { t: string; w: boolean; className
     K: <><path d="M22.500 4.500v8M18.500 8.500h8" fill="none" /><path d="M16 22c0-5 2.800-8.500 6.500-8.500S29 17 29 22z" /><path d="M12.500 36c-1.500-8 2-14 10-14s11.500 6 10 14z" /></>,
   };
   return (
-    <svg viewBox="0 0 45 45" className={className} aria-hidden="true">
+    <svg viewBox="0 0 45 45" className={className} style={style} aria-hidden="true">
+      <defs><linearGradient id="kp-w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ffe0e2" /><stop offset="1" stopColor="#e59ac8" /></linearGradient><linearGradient id="kp-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4a58a8" /><stop offset="1" stopColor="#222a62" /></linearGradient></defs>
       <g fill={fill} stroke={line} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
         {body[t]}
         <rect x="9" y="36" width="27" height="4" rx="2" />
@@ -11270,6 +11283,33 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
     const pc = game.st.b[i];
     setSel(pc && pc[0] === myColor && legal.some(m => m.f === i) ? i : null);
   };
+  // Drag & drop (mouse or finger): pick a piece up, drop it on a square. Works with premoves too.
+  const [drag, setDrag] = useState<{ from: number; x: number; y: number; px: number } | null>(null);
+  const dragRef = useRef<{ from: number; sx: number; sy: number; on: boolean; px: number } | null>(null);
+  const suppressClick = useRef(false);
+  const tapRef = useRef(tap);
+  tapRef.current = tap;
+  const dragStart = (e: React.PointerEvent<HTMLElement>, i: number) => {
+    const pc = vst.b[i];
+    if (reviewing || promo || !pc || pc[0] !== myColor || e.button > 0) return;
+    const px = e.currentTarget.getBoundingClientRect().width;
+    dragRef.current = { from: i, sx: e.clientX, sy: e.clientY, on: false, px };
+    const move = (ev: PointerEvent) => {
+      const d = dragRef.current; if (!d) return;
+      if (!d.on) { if (Math.hypot(ev.clientX - d.sx, ev.clientY - d.sy) < 8) return; d.on = true; tapRef.current(d.from); }
+      setDrag({ from: d.from, x: ev.clientX, y: ev.clientY, px: d.px });
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      const d = dragRef.current; dragRef.current = null;
+      if (!d || !d.on) return;
+      setDrag(null); suppressClick.current = true; window.setTimeout(() => { suppressClick.current = false; }, 60);
+      const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-sq]') as HTMLElement | null;
+      const to = el ? Number(el.dataset.sq) : -1;
+      if (to >= 0 && to !== d.from) tapRef.current(to);
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  };
   const reason = game.status === 'mate' ? 'كش مات' : game.status === 'stalemate' ? 'لا توجد حركات' : game.status === 'draw' ? 'تعادل' : game.agreed ? 'بالاتفاق' : game.timeout ? 'انتهى الوقت' : game.resignedBy ? 'استسلام' : '';
   const headline = !over ? (myTurn ? 'دورك' : `دور ${other.displayName}`) : game.winner === 'draw' ? '🤝 تعادل' : game.winner === meId ? '🏆 فزت!' : `🏆 فاز ${other.displayName}`;
   const Bar = ({ u, c, mineBar }: { u: User; c: 'w' | 'b'; mineBar: boolean }) => {
@@ -11299,7 +11339,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
       <div className="w-full max-w-xl px-3 mt-3"><Bar u={other} c={oppColor} mineBar={false} /></div>
       <div className="w-full max-w-xl px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
       <div dir="ltr" className="relative mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `min(${bsize}%, calc((100dvh - 17rem) * ${bsize / 100}))`, minWidth: '14rem' }}>
-        <div className="grid w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(20,10,60,.7)]" style={{ aspectRatio: '1 / 1', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gridTemplateRows: 'repeat(8, minmax(0, 1fr))' }}>
+        <div className="grid w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(20,10,60,.7)]" style={{ aspectRatio: '1 / 1', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gridTemplateRows: 'repeat(8, minmax(0, 1fr))', touchAction: 'none' }}>
           {order.map((i, k) => {
             const r = Math.floor(i / 8), f = i % 8;
             const dark = (r + f) % 2 === 1;
@@ -11309,18 +11349,19 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
             const rankLbl = k % 8 === 0 ? String(8 - r) : '';
             const fileLbl = k >= 56 ? 'abcdefgh'[f] : '';
             return (
-              <button key={i} onClick={() => tap(i)} className={`relative flex items-center justify-center min-w-0 min-h-0 overflow-hidden p-0 ${dark ? 'bg-[#4b8eab]' : 'bg-[#faf0e8]'} ${i === kingSq ? '!bg-red-500' : ''}`}>
+              <button key={i} data-sq={i} onPointerDown={e => dragStart(e, i)} onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } tap(i); }} className={`relative flex items-center justify-center min-w-0 min-h-0 overflow-hidden p-0 ${dark ? 'bg-[#4b8eab]' : 'bg-[#faf0e8]'} ${i === kingSq ? '!bg-red-500' : ''}`}>
                 {isLast && <span className="absolute inset-0 bg-[#56c4b4]/85 pointer-events-none" />}
                 {sel === i && <span className="absolute inset-0 bg-white/45 pointer-events-none" />}
                 {pre && (pre.f === i || pre.to === i) && <span className="absolute inset-0 bg-orange-500/55 pointer-events-none" />}
                 {rankLbl && <span className={`absolute top-0.5 left-1 text-[9px] font-bold ${dark ? 'text-[#faf0e8]' : 'text-[#4b8eab]'}`}>{rankLbl}</span>}
                 {fileLbl && <span className={`absolute bottom-0 right-1 text-[9px] font-bold ${dark ? 'text-[#faf0e8]' : 'text-[#4b8eab]'}`}>{fileLbl}</span>}
-                {pc && <ChessPiece t={pc[1]} w={pc[0] === 'w'} className={`relative w-[88%] h-[88%] pointer-events-none select-none drop-shadow-[0_2px_2px_rgba(20,10,50,.45)] transition-transform ${sel === i ? 'scale-110' : ''}`} />}
+                {pc && !(drag && drag.from === i) && <ChessPiece t={pc[1]} w={pc[0] === 'w'} className={`relative w-[88%] h-[88%] pointer-events-none select-none drop-shadow-[0_2px_2px_rgba(20,10,50,.45)] transition-transform ${sel === i ? 'scale-110' : ''}`} />}
                 {tgt && <span className={`absolute rounded-full pointer-events-none ${pc ? 'inset-1 ring-[5px] ring-black/25' : 'w-[30%] h-[30%] bg-black/25'}`} />}
               </button>
             );
           })}
         </div>
+        {drag && vst.b[drag.from] && <ChessPiece t={vst.b[drag.from]![1]} w={vst.b[drag.from]![0] === 'w'} className="fixed z-[200] pointer-events-none drop-shadow-[0_8px_8px_rgba(0,0,0,.45)]" style={{ left: drag.x - drag.px * 0.6, top: drag.y - drag.px * 0.75, width: drag.px * 1.2, height: drag.px * 1.2 }} />}
         {promo && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-xl">
             <div className="flex gap-2 rounded-2xl bg-gray-900 p-3 ring-1 ring-white/20">
@@ -11880,9 +11921,9 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                 <div
                   {...messageGestures(
                     () => { setReplyingTo(msg); window.setTimeout(() => inputRef.current?.focus(), 30); },
-                    () => { setActiveMsgId(msg.id); setReactingTo(msg.id); },
+                    () => { setActiveMsgId(null); setReactingTo(msg.id); },
                   )}
-                  onClick={() => (sel ? setSel(x => ((x ?? []).includes(msg.id) ? (x ?? []).filter(y => y !== msg.id) : [...(x ?? []), msg.id])) : handleBubbleTap(msg))}
+                  onClick={() => (sel ? setSel(x => ((x ?? []).includes(msg.id) ? (x ?? []).filter(y => y !== msg.id) : [...(x ?? []), msg.id])) : reactingTo && reactingTo !== msg.id ? (setReactingTo(null), setActiveMsgId(null), setSel([msg.id])) : handleBubbleTap(msg))}
                   className={`relative select-none touch-pan-y max-w-full [overflow-wrap:anywhere] px-4 py-2.5 rounded-2xl cursor-pointer transition-shadow ${highlightId === msg.id ? 'ring-2 ring-cyan-400' : ''} ${sel?.includes(msg.id) ? 'ring-2 ring-white brightness-110' : ''} ${
                     isStickerName(msg.media?.name) && !msg.text ? 'bg-transparent !p-0'
                     : isMine
@@ -12015,7 +12056,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   );
                 })()}
                 {burst?.id === msg.id && <div className="relative h-0 w-full flex justify-center z-10 pointer-events-none"><span key={burst.k} className="absolute -top-4 text-4xl" style={{ animation: 'kanReactBurst 1s ease-out forwards' }}>{burst.e}</span></div>}
-                {activeMsgId === msg.id && reactingTo === msg.id && (
+                {reactingTo === msg.id && (
                   <div className={`kan-pop flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full shadow-lg ${isMine ? 'flex-row-reverse' : ''}`}>
                     {QUICK_REACTIONS.map(e => (
                       <button
