@@ -10,7 +10,7 @@ import {
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
   Gamepad2, Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon, ChevronDown, Repeat, PictureInPicture2, BarChart3, HelpCircle, Clock, AtSign, Type as TypeIcon, Wand2,
-  AlertTriangle, Info,
+  AlertTriangle, Info, AlarmClock,
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -1465,6 +1465,7 @@ let openPostHandler: (postId: string, commentId?: string) => void = () => undefi
 function openPost(postId: string, commentId?: string) { stopPostMusic(); openPostHandler(postId, commentId); }
 
 // Any screen can open a profile; the App draws it on top of the screen stack.
+let kanUsers: User[] = [];
 let openProfileHandler: (userId: string) => void = () => undefined;
 function openUserProfile(userId: string) { stopPostMusic(); openProfileHandler(userId); }
 
@@ -3062,7 +3063,7 @@ function PlannerReminders({ userId }: { userId: string }) {
       {live.slice(0, 3).map(t => (
         <div key={t.id} className="pointer-events-auto mx-auto max-w-md rounded-2xl bg-gradient-to-br from-violet-700/95 to-fuchsia-700/90 backdrop-blur border border-white/20 shadow-2xl px-3.5 py-3 text-white" style={{ boxShadow: `0 10px 40px -10px ${t.color}` }}>
           <div className="flex items-start gap-3">
-            <span className="text-2xl animate-bounce">⏰</span>
+            <span className="animate-bounce"><AlarmClock size={26} className="text-white" /></span>
             <div className="min-w-0 flex-1"><div className="font-bold text-sm truncate" dir="auto">{t.title}</div><div className="text-[11px] opacity-80">{t.note || 'حان وقت المهمة'}{t.repeat ? ` · هفكّرك كل ${t.repeat} د` : ''}</div></div>
             <button onClick={() => setRing(r => r.filter(x => x !== t.id))} aria-label="إغلاق" className="p-1 opacity-70"><X size={16} /></button>
           </div>
@@ -3093,7 +3094,7 @@ function PlanSheet({ task, onClose, onSave }: { task: PlanTask | null; onClose: 
         <div className="flex items-center justify-between mb-3"><h3 className="text-white font-bold">{task ? 'تعديل المهمة' : 'مهمة جديدة'}</h3><button onClick={onClose} className="p-1.5 text-gray-400" aria-label="إغلاق"><X size={18} /></button></div>
         <input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="إيه المهمة؟" maxLength={120} className="w-full rounded-2xl bg-gray-800 border border-gray-700 px-4 py-3 text-white text-[16px] placeholder-gray-500 focus:outline-none focus:border-violet-500" />
         <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="ملاحظات (اختياري)" rows={2} maxLength={300} className="w-full mt-2 rounded-2xl bg-gray-800 border border-gray-700 px-4 py-2.5 text-white text-[16px] placeholder-gray-500 focus:outline-none focus:border-violet-500 resize-none" />
-        <p className="text-xs text-gray-400 mt-3 mb-2">⏰ امتى أفكّرك؟</p>
+        <p className="text-xs text-gray-400 mt-3 mb-2 flex items-center gap-1"><AlarmClock size={13} className="text-white" /> امتى أفكّرك؟</p>
         <div className="flex flex-wrap gap-2">
           {([['بدون وقت', undefined], ['بعد 15 د', Date.now() + 15 * 60000], ['بعد ساعة', Date.now() + 3600000], ['الليلة 9 م', tonight], ['بكرة 9 ص', at(9, 1)]] as [string, number | undefined][]).map(([l, v]) => <button key={l} onClick={() => { setDue(v); setCustom(false); }} className={chip(!custom && (v === undefined ? due === undefined : !!due && Math.abs(due - v) < 60000))}>{l}</button>)}
           <button onClick={() => setCustom(true)} className={chip(custom)}>وقت محدد</button>
@@ -3141,7 +3142,7 @@ function PlannerPane({ userId }: { userId: string }) {
           <div className={`text-[15px] font-semibold ${t.done ? 'line-through text-gray-500' : 'text-white'}`} dir="auto">{t.title}</div>
           {t.note && <div className="text-xs text-gray-400 mt-0.5 line-clamp-2" dir="auto">{t.note}</div>}
           {(t.due || t.repeat > 0) && <div className="flex flex-wrap gap-1.5 mt-1.5">
-            {t.due && <span className={`px-2 py-0.5 rounded-full text-[11px] ${late ? 'bg-red-500/25 text-red-200' : 'bg-white/10 text-gray-300'}`}>⏰ {fmtDue(t.due)}</span>}
+            {t.due && <span className={`px-2 py-0.5 rounded-full text-[11px] ${late ? 'bg-red-500/25 text-red-200' : 'bg-white/10 text-gray-300'}`}><AlarmClock size={11} className="inline -mt-0.5 me-1 text-white" />{fmtDue(t.due)}</span>}
             {t.due && t.repeat > 0 && !t.done && <span className="px-2 py-0.5 rounded-full text-[11px] bg-white/10 text-gray-300">🔁 كل {t.repeat} د</span>}
           </div>}
         </button>
@@ -3202,7 +3203,7 @@ function PlannerDueCard({ userId, onOpen }: { userId: string; onOpen: () => void
   if (late.length === 0) return null;
   return (
     <div className="mb-4 rounded-2xl bg-gradient-to-br from-violet-600/25 to-fuchsia-600/20 border border-violet-400/30 p-3 space-y-2" dir="rtl">
-      <div className="flex items-center justify-between"><span className="text-sm font-bold text-white">⏰ مهام جه وقتها · {late.length}</span><button onClick={onOpen} className="text-xs text-violet-200 underline">فتح مفكرتي</button></div>
+      <div className="flex items-center justify-between"><span className="text-sm font-bold text-white flex items-center gap-1.5"><AlarmClock size={16} className="text-white" /> مهام جه وقتها · {late.length}</span><button onClick={onOpen} className="text-xs text-violet-200 underline">فتح مفكرتي</button></div>
       {late.slice(0, 3).map(t => (
         <div key={t.id} className="flex items-center gap-2.5 rounded-xl bg-black/25 px-3 py-2">
           <span className="w-1.5 self-stretch rounded-full" style={{ background: t.color }} />
@@ -4185,7 +4186,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone }: { file: Fi
   const [zoom, setZoom] = useState(1);
   const [off, setOff] = useState({ x: 0, y: 0 });
   const bp = useRef(new Map<number, { x: number; y: number }>());
-  const bz = useRef<{ d: number; z: number } | null>(null);
+  const bz = useRef<{ d: number; z: number; a: number; r: number } | null>(null);
   const cvs = useRef<HTMLCanvasElement>(null);
   const strokes = useRef<{ c: string; w: number; pts: { x: number; y: number }[] }[]>([]);
   const [pen, setPen] = useState('#ffffff');
@@ -4389,11 +4390,11 @@ function StoryComposer({ file, currentUser, users, onClose, onDone }: { file: Fi
             ? <video src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay />
             : <>{blurBg && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}<img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="relative w-full h-full object-contain select-none pointer-events-none" /></>}
           {!isVideo && tool !== 'draw' && <div className="absolute inset-0 z-[4] touch-none cursor-grab"
-            onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); setSel(-1); setXsel(''); if (bp.current.size === 2) { const [p, q] = [...bp.current.values()]; bz.current = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom }; } }}
+            onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); setSel(-1); setXsel(''); if (bp.current.size === 2) { const [p, q] = [...bp.current.values()]; bz.current = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI, r: rot }; } }}
             onPointerMove={e => {
               const prev = bp.current.get(e.pointerId); if (!prev) return;
               bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-              if (bp.current.size >= 2 && bz.current) { const [p, q] = [...bp.current.values()]; setZoom(Math.max(0.5, Math.min(4, (bz.current.z * Math.hypot(p.x - q.x, p.y - q.y)) / bz.current.d))); return; }
+              if (bp.current.size >= 2 && bz.current) { const [p, q] = [...bp.current.values()]; setZoom(Math.max(0.5, Math.min(4, (bz.current.z * Math.hypot(p.x - q.x, p.y - q.y)) / bz.current.d))); setRot(snapAng(bz.current.r + (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI - bz.current.a)); return; }
               if (bp.current.size === 1) { const r = e.currentTarget.getBoundingClientRect(); const dx = ((e.clientX - prev.x) / r.width) * 100; const dy = ((e.clientY - prev.y) / r.height) * 100; setOff(o => ({ x: Math.max(-150, Math.min(150, o.x + dx)), y: Math.max(-150, Math.min(150, o.y + dy)) })); }
             }}
             onPointerUp={e => { bp.current.delete(e.pointerId); if (bp.current.size < 2) bz.current = null; }}
@@ -4585,7 +4586,7 @@ function StoryMusicTag({ m, pos, onMove }: { m: { name: string; cover?: string; 
   );
 }
 
-function StoryMusic({ m }: { m: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'none'; tp?: Pct } }) {
+function StoryMusic({ m, paused = false }: { paused?: boolean; m: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'none'; tp?: Pct } }) {
   const ref = useRef<HTMLAudioElement>(null);
   const [mute, setMute] = useState(false);
   const end = m.end > m.start ? m.end : m.start + 30;
@@ -4596,6 +4597,10 @@ function StoryMusic({ m }: { m: { url: string; name: string; start: number; end:
     if (a.readyState >= 1) go(); else a.addEventListener('loadedmetadata', go, { once: true });
     return () => { a.removeEventListener('loadedmetadata', go); a.pause(); };
   }, [m.url, m.start]);
+  useEffect(() => {
+    const a = ref.current; if (!a) return;
+    if (paused) a.pause(); else if (a.readyState >= 1) void a.play().catch(() => undefined);
+  }, [paused]);
   return (
     <>
       <audio ref={ref} src={m.url} muted={mute} preload="auto"
@@ -4815,6 +4820,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
       onDragStart={e => e.preventDefault()}
       onTouchStart={e => { downY.current = e.touches[0].clientY; downX.current = e.touches[0].clientX; }}
       onTouchEnd={e => {
+        if (held.current) { held.current = false; window.clearTimeout(holdTimer.current); setPaused(false); return; } // phones: release after a long press
         const dy = e.changedTouches[0].clientY - downY.current;
         const dx = e.changedTouches[0].clientX - downX.current;
         if (dy > 110 && Math.abs(dy) > Math.abs(dx)) { onClose(); return; }
@@ -4839,7 +4845,8 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
         const rect = e.currentTarget.getBoundingClientRect();
         if (rect.right - e.clientX < rect.width / 3) prev(); else next();
       }}
-      onPointerCancel={() => { window.clearTimeout(holdTimer.current); setPaused(false); }}
+      onPointerCancel={() => { window.clearTimeout(holdTimer.current); }}
+      onTouchCancel={() => { window.clearTimeout(holdTimer.current); if (held.current) { held.current = false; setPaused(false); } }}
     >
       <div className="relative w-full h-full bg-black overflow-hidden">
         {!story.url
@@ -4849,7 +4856,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
             </div>
           )
           : story.type === 'image'
-          ? <><img src={story.url} alt="" draggable={false} onContextMenu={e => e.preventDefault()} style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f, WebkitTouchCallout: 'none' } as React.CSSProperties} onLoad={e => markFit(story.id, e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)} className={`absolute inset-0 w-full h-full ${coverFit[story.id] ? 'object-cover' : 'object-contain'} pointer-events-none select-none`} />{story.extra?.m && <StoryMusic key={story.id} m={story.extra.m} />}</>
+          ? <><img src={story.url} alt="" draggable={false} onContextMenu={e => e.preventDefault()} style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f, WebkitTouchCallout: 'none' } as React.CSSProperties} onLoad={e => markFit(story.id, e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)} className={`absolute inset-0 w-full h-full ${coverFit[story.id] ? 'object-cover' : 'object-contain'} pointer-events-none select-none`} />{story.extra?.m && <StoryMusic key={story.id} m={story.extra.m} paused={paused || showViewers || replyFocus} />}</>
           : (
             <video
               key={story.id}
@@ -5958,18 +5965,26 @@ export default function App() {
     }
     swipeRef.current = ok ? { x: t.clientX, y: t.clientY, t: Date.now() } : null;
   };
+  // Like Instagram: drag your finger to the right = the tab on the left of the current one (reels is left of home), drag left = the one on the right.
+  const swipeTabs = (dx: number) => {
+    const btns = Array.from(document.querySelectorAll<HTMLElement>('nav [data-tab]')).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+    const i = btns.findIndex(b => b.dataset.tab === activeTab);
+    const next = i < 0 ? undefined : btns[i + (dx > 0 ? -1 : 1)]?.dataset.tab;
+    if (next) goTab(next as Parameters<typeof goTab>[0]);
+  };
   const swipeEnd = (e: React.TouchEvent<HTMLElement>) => {
     const s0 = swipeRef.current; swipeRef.current = null;
     if (!s0) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - s0.x, dy = t.clientY - s0.y;
     if (Math.abs(dx) < 90 || Math.abs(dx) < Math.abs(dy) * 2 || Date.now() - s0.t > 700) return;
-    // Swipe left = the tab on the LEFT of the current one in the bottom bar, swipe right = the one on the right (any language / direction).
-    const btns = Array.from(document.querySelectorAll<HTMLElement>('nav [data-tab]')).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-    const i = btns.findIndex(b => b.dataset.tab === activeTab);
-    const next = i < 0 ? undefined : btns[i + (dx < 0 ? -1 : 1)]?.dataset.tab;
-    if (next) goTab(next as Parameters<typeof goTab>[0]);
+    swipeTabs(dx);
   };
+  useEffect(() => {
+    const h = (e: Event) => swipeTabs((e as CustomEvent<number>).detail);
+    window.addEventListener('kan-swipe-tab', h);
+    return () => window.removeEventListener('kan-swipe-tab', h);
+  });
   // Home button: already on the feed -> one tap scrolls to the top, a quick second tap refreshes it.
   const lastHomeTap = useRef(0);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
@@ -6028,6 +6043,7 @@ export default function App() {
     }
   };
   openProfileHandler = openProfile;
+  kanUsers = users;
   // A profile always opens from its first line (the page below it may have been scrolled).
   useEffect(() => {
     if (!viewedUserId) return;
@@ -6233,7 +6249,7 @@ export default function App() {
           )}
           {!viewedUserId && activeTab === 'create' && (
             <motion.div key="create" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
-              <CreatePost currentUser={currentUser} setPosts={setPosts} setActiveTab={goTab} />
+              <CreatePost currentUser={currentUser} setPosts={setPosts} users={users} setActiveTab={goTab} />
             </motion.div>
           )}
           {!viewedUserId && activeTab === 'profile' && (
@@ -6877,11 +6893,14 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
     const a = ref.current;
     const box = (holder.current?.closest('.post-card') as HTMLElement | null) ?? holder.current;
     if (!a || !box || typeof IntersectionObserver === 'undefined') return;
+    let vis = false;
     const io = new IntersectionObserver(([en]) => {
+      vis = en.isIntersecting && en.intersectionRatio >= 0.5;
       if (en.isIntersecting && en.intersectionRatio >= 0.5) {
         if (playingAudio && playingAudio !== a) playingAudio.pause();
         playingAudio = a;
-        const go = () => { if (a.currentTime < start || a.currentTime >= start + win) a.currentTime = start; void a.play().catch(() => undefined); };
+        // Browsers can refuse sound before a tap: retry on the first touch while the post is on screen.
+        const go = () => { if (a.currentTime < start || a.currentTime >= start + win) a.currentTime = start; void a.play().catch(() => { const r = () => { if (vis && a.paused) void a.play().catch(() => undefined); }; window.addEventListener('pointerdown', r, { once: true }); window.addEventListener('touchend', r, { once: true }); }); };
         if (a.readyState >= 1) go(); else { a.addEventListener('loadedmetadata', go, { once: true }); a.load(); }
       } else { a.pause(); }
     }, { threshold: [0, 0.5, 1] });
@@ -7119,7 +7138,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         {post.music && <MusicBar music={post.music} auto={post.media?.type === 'image'} />}
         {post.text && (
           <div className="px-4 pb-3">
-            <p className="text-white text-[16px] leading-7 whitespace-pre-wrap">{post.text}</p>
+            <PostText text={post.text} className="text-white text-[16px] leading-7 whitespace-pre-wrap" />
           </div>
         )}
 
@@ -7719,14 +7738,14 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
             </button>
           )}
         </div>
-        {post.text && <p className="text-white text-sm leading-snug line-clamp-2 whitespace-pre-wrap" dir="auto">{post.text}</p>}
+        {post.text && parseGeo(post.text).body && <p className="text-white text-sm leading-snug line-clamp-2 whitespace-pre-wrap" dir="auto"><MentionText text={parseGeo(post.text).body} /></p>}
         <div className="mt-1.5 flex items-center gap-1.5 text-white/80 text-xs max-w-full"><Music size={12} className="shrink-0" /><span className="truncate" dir="auto">{audioName}</span>{(post.music?.url ?? post.media?.url) && <SaveClipButton clip={{ url: post.music?.url ?? post.media!.url, name: audioName.slice(0, 80), start: post.music?.start, end: post.music?.end }} className="w-6 h-6" />}</div>
       </div>
 
       {/* Bottom bar: thin line while playing, full seek bar while paused */}
       <div dir="ltr" className={`absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))] ${paused ? '' : 'hidden'}`} onClick={stop} onPointerDown={stop}>
         {paused && <div className="flex justify-between text-[11px] text-white/80 font-medium mb-0.5 px-0.5"><span>{fmt(prog * dur)}</span><span>{fmt(dur)}</span></div>}
-        <div ref={barRef} className={`relative flex items-center touch-none h-6 cursor-pointer`}
+        <div ref={barRef} data-noswipe className={`relative flex items-center touch-none h-6 cursor-pointer`}
           onPointerDown={e => { (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId); setScrub(true); seekTo(e.clientX); }}
           onPointerMove={e => { if (scrub) seekTo(e.clientX); }}
           onPointerUp={() => setScrub(false)} onPointerCancel={() => setScrub(false)}>
@@ -7913,6 +7932,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   const [muted, setMuted] = useState(true);
   const autoNext = true;
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
+  const swReel = useRef<{ x: number; y: number; t: number } | null>(null);
   const [lockH, setLockH] = useState<number | null>(null); // keyboard must not resize the reels list (that scrolled to the next reel)
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const reelsByTime = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
@@ -7963,7 +7983,9 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   }
 
   return createPortal(
-    <div dir={DIR} className="fixed inset-0 z-[60] bg-black">
+    <div dir={DIR} className="fixed inset-0 z-[60] bg-black"
+      onTouchStart={e => { const t = e.touches[0]; const tg = e.target as HTMLElement; swReel.current = e.touches.length === 1 && !commentsFor && !listModal && !tg.closest('input,textarea,[data-noswipe]') ? { x: t.clientX, y: t.clientY, t: Date.now() } : null; }}
+      onTouchEnd={e => { const s0 = swReel.current; swReel.current = null; if (!s0) return; const t = e.changedTouches[0]; const dx = t.clientX - s0.x, dy = t.clientY - s0.y; if (Math.abs(dx) < 90 || Math.abs(dx) < Math.abs(dy) * 2 || Date.now() - s0.t > 700) return; window.dispatchEvent(new CustomEvent('kan-swipe-tab', { detail: dx })); }}>
       <div
         className={`${lockH ? '' : 'h-full'} ${commentsFor ? 'overflow-y-hidden' : 'overflow-y-scroll'} overscroll-contain snap-y snap-mandatory no-scrollbar`}
         style={lockH ? { height: lockH } : undefined}
@@ -8135,7 +8157,7 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
             </button>
           </div>
           {post.text && (
-            <div className="mt-3 bg-gray-900 border border-gray-800 rounded-xl p-3 text-sm text-gray-200 whitespace-pre-wrap">{post.text}</div>
+            <div className="mt-3 bg-gray-900 border border-gray-800 rounded-xl p-3 text-sm text-gray-200 whitespace-pre-wrap"><PostText text={post.text} className="whitespace-pre-wrap" /></div>
           )}
         </div>
       </div>
@@ -8709,12 +8731,201 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
   );
 }
 
-function CreatePost({ currentUser, setPosts }: {
+// ---- Post text: @mentions + an attached place ( [[loc:lat,lng|name]] lives inside the text, so no database change is needed ) ----
+const GEO_RE = /\[\[loc:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\|?([^\]]*)\]\]/;
+type GeoLoc = { lat: number; lng: number; name: string };
+const parseGeo = (text: string): { body: string; loc: GeoLoc | null } => {
+  const m = GEO_RE.exec(text);
+  return { body: m ? text.replace(GEO_RE, '').trim() : text, loc: m ? { lat: Number(m[1]), lng: Number(m[2]), name: m[3] } : null };
+};
+const geoTag = (l: GeoLoc) => `[[loc:${l.lat.toFixed(6)},${l.lng.toFixed(6)}|${l.name.replace(/[\]\[|]/g, ' ').slice(0, 80)}]]`;
+function MentionText({ text }: { text: string }) {
+  const parts = text.split(/(@[\p{L}\p{N}_.]{2,30})/gu);
+  return (
+    <>
+      {parts.map((p, i) => {
+        if (i % 2 === 0) return p;
+        const name = p.slice(1).replace(/\.+$/, '');
+        const u = kanUsers.find(x => x.username.toLowerCase() === name.toLowerCase());
+        const tail = p.slice(1 + name.length);
+        return u
+          ? <span key={i}><button onClick={e => { e.stopPropagation(); openUserProfile(u.id); }} className="text-cyan-300 font-semibold hover:underline">@{name}</button>{tail}</span>
+          : <span key={i} className="text-cyan-300/80">{p}</span>;
+      })}
+    </>
+  );
+}
+function PostText({ text, className, clamp = false }: { text: string; className?: string; clamp?: boolean }) {
+  const { body, loc } = parseGeo(text);
+  const [map, setMap] = useState(false);
+  return (
+    <>
+      {body && <p className={className} dir="auto"><MentionText text={body} /></p>}
+      {loc && !clamp && (
+        <button onClick={e => { e.stopPropagation(); setMap(true); }} className="mt-2 inline-flex max-w-full items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-sm active:scale-95 transition-transform">
+          <MapPin size={15} className="shrink-0" /><span className="truncate" dir="auto">{loc.name || 'الموقع على الخريطة'}</span>
+        </button>
+      )}
+      {map && loc && <LocationMapModal loc={loc} onClose={() => setMap(false)} />}
+    </>
+  );
+}
+type LeafletLib = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+let leafletP: Promise<LeafletLib> | null = null;
+function loadLeaflet(): Promise<LeafletLib> {
+  const w = window as unknown as { L?: LeafletLib };
+  if (w.L) return Promise.resolve(w.L);
+  if (!leafletP) {
+    leafletP = new Promise((resolve, reject) => {
+      const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'; document.head.appendChild(css);
+      const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      sc.onload = () => (w.L ? resolve(w.L) : reject(new Error('leaflet')));
+      sc.onerror = () => { leafletP = null; reject(new Error('leaflet')); };
+      document.head.appendChild(sc);
+    });
+  }
+  return leafletP;
+}
+function LocationMapModal({ loc, onClose }: { loc: GeoLoc; onClose: () => void }) {
+  useBackLayer(true, onClose);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<LeafletLib>(null);
+  const layers = useRef<LeafletLib[]>([]);
+  const [ask, setAsk] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState('');
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let dead = false;
+    loadLeaflet().then(L => {
+      if (dead || !boxRef.current) return;
+      const map = L.map(boxRef.current, { zoomControl: true }).setView([loc.lat, loc.lng], 15);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+      L.marker([loc.lat, loc.lng], { icon: L.divIcon({ className: '', html: '<div style="font-size:34px;line-height:34px;transform:translate(-50%,-100%)">📍</div>', iconSize: [0, 0] }) }).addTo(map).bindPopup(loc.name || 'الموقع');
+      mapRef.current = map;
+      setTimeout(() => map.invalidateSize(), 100);
+    }).catch(() => setFailed(true));
+    return () => { dead = true; mapRef.current?.remove(); mapRef.current = null; };
+  }, [loc.lat, loc.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  const showRoute = () => {
+    setAsk(false); setBusy(true); setInfo('');
+    if (!navigator.geolocation) { setBusy(false); setInfo('المتصفح لا يدعم تحديد الموقع'); return; }
+    navigator.geolocation.getCurrentPosition(async pos => {
+      try {
+        const L = await loadLeaflet(); const map = mapRef.current; if (!map) return;
+        const u = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        layers.current.forEach(l => map.removeLayer(l)); layers.current = [];
+        layers.current.push(L.circleMarker([u.lat, u.lng], { radius: 9, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }).addTo(map).bindPopup('موقعك'));
+        const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${u.lng},${u.lat};${loc.lng},${loc.lat}?overview=full&geometries=geojson`);
+        const j = await r.json() as { routes?: { distance: number; duration: number; geometry: unknown }[] };
+        const rt = j.routes?.[0];
+        if (!rt) throw new Error('no route');
+        const line = L.geoJSON(rt.geometry, { style: { color: '#7c3aed', weight: 6, opacity: 0.9 } }).addTo(map);
+        layers.current.push(line);
+        map.fitBounds(line.getBounds(), { padding: [40, 40] });
+        const km = rt.distance / 1000;
+        const min = Math.round(rt.duration / 60);
+        setInfo(`المسافة ${km >= 10 ? Math.round(km) : km.toFixed(1)} كم · حوالي ${min >= 60 ? `${Math.floor(min / 60)} س ${min % 60} د` : `${min} د`} بالسيارة`);
+      } catch (e) { console.error(e); setInfo('تعذّر حساب الطريق، الموقع المشار ظاهر على الخريطة'); }
+      finally { setBusy(false); }
+    }, () => { setBusy(false); setInfo('لم يتم السماح بمشاركة موقعك، بنعرض الموقع المشار فقط'); }, { enableHighAccuracy: true, timeout: 15000 });
+  };
+  return createPortal(
+    <div dir={DIR} className="fixed inset-0 z-[150] bg-gray-950 flex flex-col">
+      <div className="flex items-center gap-2 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] bg-gray-900 border-b border-white/10">
+        <button onClick={onClose} aria-label="إغلاق" className="p-2 rounded-full bg-white/10 text-white"><X size={18} /></button>
+        <div className="min-w-0 flex-1 text-white font-semibold text-sm truncate" dir="auto"><MapPin size={14} className="inline -mt-0.5 me-1 text-rose-400" />{loc.name || 'الموقع'}</div>
+      </div>
+      <div className="relative flex-1 min-h-0">
+        <div ref={boxRef} className="absolute inset-0 bg-gray-800" />
+        {failed && <div className="absolute inset-0 flex items-center justify-center text-gray-300 text-sm p-6 text-center">تعذّر تحميل الخريطة، تأكد من الاتصال بالإنترنت</div>}
+      </div>
+      <div className="px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-gray-900 border-t border-white/10 space-y-2">
+        {ask ? (
+          <>
+            <p className="text-sm text-white text-center">اسمح بمشاركة موقعك لعرض أقرب طريق إلى المكان؟</p>
+            <div className="flex gap-2">
+              <button onClick={showRoute} className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold active:scale-95">سماح وعرض الطريق</button>
+              <button onClick={() => setAsk(false)} className="flex-1 py-2.5 rounded-full bg-white/10 text-gray-200 text-sm font-semibold active:scale-95">الموقع فقط</button>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1 text-sm text-gray-200" dir="auto">{busy ? 'بنحدد موقعك ونحسب الطريق...' : info || 'الموقع المشار على الخريطة'}</div>
+            {!busy && <button onClick={() => setAsk(true)} className="shrink-0 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs active:scale-95">الطريق</button>}
+            <a href={`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`} target="_blank" rel="noopener noreferrer" className="shrink-0 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs">فتح في الخرائط</a>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+function LocationPicker({ onPick, onClose }: { onPick: (l: GeoLoc) => void; onClose: () => void }) {
+  const [q, setQ] = useState('');
+  const [res, setRes] = useState<GeoLoc[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const search = async () => {
+    const v = q.trim(); if (v.length < 2) return;
+    setBusy(true); setMsg('');
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=${LANG === 'en' ? 'en' : 'ar'}&q=${encodeURIComponent(v)}`);
+      const j = await r.json() as { lat: string; lon: string; display_name: string }[];
+      setRes(j.map(x => ({ lat: Number(x.lat), lng: Number(x.lon), name: x.display_name.split(',').slice(0, 3).join('،').trim() })));
+      if (j.length === 0) setMsg('مفيش نتايج');
+    } catch { setMsg('تعذّر البحث، حاول مرة أخرى'); }
+    finally { setBusy(false); }
+  };
+  const here = () => {
+    if (!navigator.geolocation) { setMsg('المتصفح لا يدعم تحديد الموقع'); return; }
+    setBusy(true); setMsg('');
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      let name = 'موقعي';
+      try { const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=${LANG === 'en' ? 'en' : 'ar'}&lat=${lat}&lon=${lng}`); const j = await r.json() as { display_name?: string }; if (j.display_name) name = j.display_name.split(',').slice(0, 3).join('،').trim(); } catch { /* keep default name */ }
+      setBusy(false); onPick({ lat, lng, name });
+    }, () => { setBusy(false); setMsg('لم يتم السماح بتحديد موقعك'); }, { enableHighAccuracy: true, timeout: 15000 });
+  };
+  return createPortal(
+    <div dir={DIR} className="fixed inset-0 z-[140] flex items-end sm:items-center justify-center bg-black/65" onClick={onClose}>
+      <div className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-gray-900 border border-white/10 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3"><h3 className="text-white font-bold flex items-center gap-2"><MapPin size={18} className="text-rose-400" /> إضافة موقع</h3><button onClick={onClose} className="p-1.5 text-gray-400"><X size={18} /></button></div>
+        <button onClick={here} disabled={busy} className="w-full py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold active:scale-95 disabled:opacity-60">📍 استخدم موقعي الحالي</button>
+        <div className="flex gap-2 mt-3">
+          <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void search(); }} placeholder="ابحث عن مكان..." className="flex-1 min-w-0 h-10 rounded-full bg-gray-800 border border-gray-700 px-4 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500" />
+          <button onClick={() => void search()} disabled={busy} className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center"><Search size={16} /></button>
+        </div>
+        {msg && <p className="text-xs text-amber-300 mt-2">{msg}</p>}
+        <div className="mt-2 space-y-1.5">
+          {res.map((r, i) => <button key={i} onClick={() => onPick(r)} className="w-full text-right px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm text-white" dir="auto"><MapPin size={13} className="inline -mt-0.5 me-1 text-rose-400" />{r.name}</button>)}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function CreatePost({ currentUser, setPosts, users = [] }: {
+  users?: User[];
   currentUser: User;
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
   setActiveTab: (tab: 'feed' | 'reels' | 'videos' | 'search' | 'create' | 'profile' | 'settings' | 'messages') => void;
 }) {
   const [text, setText] = useState('');
+  const [loc, setLoc] = useState<GeoLoc | null>(null);
+  const [locOpen, setLocOpen] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const [mq, setMq] = useState<string | null>(null); // the @word being typed
+  const mentionHits = mq === null ? [] : users.filter(u => u.id !== currentUser.id && (u.username.toLowerCase().includes(mq.toLowerCase()) || u.displayName.toLowerCase().includes(mq.toLowerCase()))).slice(0, 5);
+  const trackMention = (v: string, caret: number) => { const m = /@([\p{L}\p{N}_.]*)$/u.exec(v.slice(0, caret)); setMq(m ? m[1] : null); };
+  const pickMention = (u: User) => {
+    const el = taRef.current; const caret = el?.selectionStart ?? text.length;
+    const before = text.slice(0, caret).replace(/@([\p{L}\p{N}_.]*)$/u, `@${u.username} `);
+    const next = before + text.slice(caret);
+    setText(next); setMq(null);
+    window.setTimeout(() => { el?.focus(); el?.setSelectionRange(before.length, before.length); }, 0);
+  };
   const [title, setTitle] = useState('');
   const [media, setMedia] = useState<{ type: 'image' | 'video' | 'file'; url: string; file: File } | null>(null);
   const [cover, setCover] = useState<{ blob: Blob; url: string; custom: boolean } | null>(null);
@@ -8810,7 +9021,7 @@ function CreatePost({ currentUser, setPosts }: {
     pubSet(l => l.map(j => (j.id === jobId ? { ...j, size: totalBytes } : j)));
     setError('');
     // Publishing continues in the background: the form is free right away and you can post something else.
-    setText(''); setTitle(''); setMedia(null); setExtra([]); setMusic(null); setRemoteMusic(null); clearCover();
+    setText(''); setLoc(null); setMq(null); setTitle(''); setMedia(null); setExtra([]); setMusic(null); setRemoteMusic(null); clearCover();
     const uploaded: string[] = [];
     try {
       let mediaUrl: string | null = null;
@@ -8863,7 +9074,7 @@ function CreatePost({ currentUser, setPosts }: {
       const { error: insErr } = await supabase.from('posts').insert({
         id,
         user_id: currentUser.id,
-        text: text.trim(),
+        text: (text.trim() + (loc ? `${text.trim() ? '\n' : ''}${geoTag(loc)}` : '')).slice(0, 5000),
         media_url: mediaUrl,
         media_type: media ? media.type : null,
         media_name: media ? media.file.name.slice(0, 200) : null,
@@ -8929,12 +9140,33 @@ function CreatePost({ currentUser, setPosts }: {
         )}
         <div className="flex gap-3 mb-4">
           <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="md" />
+          <div className="relative flex-1 min-w-0">
           <textarea
-            value={text} onChange={e => setText(e.target.value)}
+            ref={taRef}
+            value={text} onChange={e => { setText(e.target.value); trackMention(e.target.value, e.target.selectionStart ?? e.target.value.length); }}
+            onKeyUp={e => trackMention(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
             placeholder={kind === 'reel' ? 'اكتب وصفاً للريل...' : kind === 'video' ? 'وصف الفيديو (اختياري)...' : t('ماذا يدور في ذهنك؟')} rows={4}
-            className="flex-1 bg-transparent text-white placeholder-gray-500 focus:outline-none resize-none text-lg"
+            className="w-full bg-transparent text-white placeholder-gray-500 focus:outline-none resize-none text-lg"
           />
+          {mentionHits.length > 0 && (
+            <div className="absolute inset-x-0 top-full z-20 mt-1 rounded-2xl bg-gray-900 border border-white/10 shadow-2xl overflow-hidden">
+              {mentionHits.map(u => (
+                <button key={u.id} onMouseDown={e => e.preventDefault()} onClick={() => pickMention(u)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/10 text-right">
+                  <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="sm" />
+                  <span className="min-w-0 flex-1"><span className="block text-sm text-white truncate" dir="auto">{u.displayName}</span><span className="block text-[11px] text-gray-400" dir="ltr">@{u.username}</span></span>
+                </button>
+              ))}
+            </div>
+          )}
+          {loc && (
+            <div className="mt-1 inline-flex max-w-full items-center gap-1.5 ps-3 pe-1.5 py-1 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-sm">
+              <MapPin size={14} className="shrink-0" /><span className="truncate" dir="auto">{loc.name}</span>
+              <button onClick={() => setLoc(null)} aria-label="إزالة الموقع" className="p-1 text-rose-200/80"><X size={13} /></button>
+            </div>
+          )}
+          </div>
         </div>
+        {locOpen && <LocationPicker onClose={() => setLocOpen(false)} onPick={l => { setLoc(l); setLocOpen(false); }} />}
         {media && (
           <div className="mb-4 relative">
             {media.type !== 'file' && <span className="absolute top-2 start-2 z-10 px-2 py-0.5 rounded-full bg-black/60 text-white text-[11px] pointer-events-none">معاينة · {kind === 'reel' ? 'ريل 9:16' : kind === 'video' ? 'فيديو 16:9' : 'منشور'} · {(media.file.size / 1048576).toFixed(1)} MB</span>}
@@ -9041,6 +9273,8 @@ function CreatePost({ currentUser, setPosts }: {
               <button onClick={() => setLibOpen(true)} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${music || remoteMusic ? 'text-fuchsia-300 bg-gray-800' : 'text-fuchsia-400'}`} aria-label="موسيقى"><Music size={20} /></button>
             )}
             <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); setMusicStart(0); setMusicEnd(0); }} />
+            <button onClick={() => { const el = taRef.current; const c = el?.selectionStart ?? text.length; const v = text.slice(0, c) + (c > 0 && !/\s$/.test(text.slice(0, c)) ? ' @' : '@') + text.slice(c); setText(v); setMq(''); window.setTimeout(() => el?.focus(), 0); }} className="p-2 text-sky-300 hover:bg-gray-800 rounded-full transition-colors font-bold text-lg leading-none w-9 h-9" aria-label="منشن">@</button>
+            <button onClick={() => setLocOpen(true)} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${loc ? 'text-rose-300 bg-gray-800' : 'text-rose-400'}`} aria-label="موقع"><MapPin size={20} /></button>
             {!videoOnly && (
               <button onClick={() => openPicker('*/*')} className="p-2 text-amber-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="ملف">
                 <Paperclip size={20} />
@@ -11018,7 +11252,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
       </div>
       <div className="w-full max-w-xl px-3 mt-3"><Bar u={other} c={oppColor} mineBar={false} /></div>
       <div className="w-full max-w-xl px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
-      <div dir="ltr" className="relative mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `${bsize}%` }}>
+      <div dir="ltr" className="relative mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `min(${bsize}%, calc((100dvh - 17rem) * ${bsize / 100}))`, minWidth: '14rem' }}>
         <div className="[container-type:inline-size] grid grid-cols-8 aspect-square w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(0,0,0,.8)] ring-4 ring-[#3a3631]">
           {order.map((i, k) => {
             const r = Math.floor(i / 8), f = i % 8;
