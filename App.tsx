@@ -4405,7 +4405,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   ) : null;
   void [setTxt, setTxtC, setTxtS, setTxtB, txtC, txtS, txtB];
   return createPortal(
-    <div dir={DIR} className="fixed inset-0 z-[140] bg-black flex flex-col overscroll-none select-none">
+    <div dir={DIR} className="kan-always-white fixed inset-0 z-[140] bg-black flex flex-col overscroll-none select-none">
       <div className="flex items-center justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
         <button onClick={onClose} disabled={busy} className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl ring-1 ring-white/25 shadow-lg shadow-violet-900/30 text-white active:scale-90 transition-transform" aria-label="إغلاق"><X size={20} /></button>
         <span className="text-white font-semibold text-sm">قصة جديدة</span>
@@ -4841,7 +4841,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
   return createPortal(
     <div
       dir={DIR}
-      className="fixed inset-0 z-[140] bg-black flex items-center justify-center select-none"
+      className="kan-always-white fixed inset-0 z-[140] bg-black flex items-center justify-center select-none"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' } as React.CSSProperties}
       onContextMenu={e => e.preventDefault()}
       onDragStart={e => e.preventDefault()}
@@ -7174,7 +7174,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         {post.music && <MusicBar music={post.music} auto={post.media?.type === 'image'} />}
         {post.text && (
           <div className="px-4 pb-3">
-            <PostText text={post.text} className="text-white text-[16px] leading-7 whitespace-pre-wrap" />
+            <PostText text={post.text} hideLoc={!!post.media} className="text-white text-[16px] leading-7 whitespace-pre-wrap" />
           </div>
         )}
 
@@ -7236,6 +7236,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
             <DownloadAllButton post={post} />
           </div>
         )}
+        {post.media && post.text && <PostLoc text={post.text} />}
       </div>
 
       <div className="px-4 py-3 flex items-center gap-1 border-t border-gray-800/50">
@@ -8645,6 +8646,15 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
   const [cur, setCur] = useState(0);
   const [bars, setBars] = useState<number[]>([]);
   const [locked, setLocked] = useState(false);
+  const exact = useRef(false); // true once the real length came from decoding the file
+  const onMeta = (a: HTMLAudioElement) => {
+    const d = a.duration;
+    if (Number.isFinite(d) && d > 0) { if (!exact.current) setDur(d); return; }
+    if (d === Infinity) { // streamed/VBR file with no length in its header: jump to the end once to learn it
+      const back = () => { a.removeEventListener('timeupdate', back); if (Number.isFinite(a.duration) && a.duration > 0 && !exact.current) setDur(a.duration); a.currentTime = 0; };
+      a.addEventListener('timeupdate', back); a.currentTime = 1e7;
+    }
+  };
   // Real waveform for normal-size files, a decorative one otherwise.
   useEffect(() => {
     let dead = false;
@@ -8658,6 +8668,7 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
         const ctx = new Ctx();
         const buf = await ctx.decodeAudioData(await file.arrayBuffer());
         void ctx.close();
+        if (!dead && Number.isFinite(buf.duration) && buf.duration > 1) { exact.current = true; setDur(buf.duration); }
         const ch = buf.getChannelData(0);
         const step = Math.max(1, Math.floor(ch.length / N));
         const raw = Array.from({ length: N }, (_, i) => {
@@ -8721,7 +8732,7 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
   );
   return (
     <div className="mb-4 -mt-2 p-3 rounded-2xl bg-gradient-to-b from-gray-800/80 to-gray-900/80 border border-white/10 space-y-3">
-      <audio ref={ref} src={url} preload="metadata" onLoadedMetadata={e => setDur(e.currentTarget.duration || 0)} onPlay={() => setOn(true)} onPause={() => setOn(false)}
+      <audio ref={ref} src={url} preload="metadata" onLoadedMetadata={e => onMeta(e.currentTarget)} onDurationChange={e => onMeta(e.currentTarget)} onPlay={() => setOn(true)} onPause={() => setOn(false)}
         onTimeUpdate={e => { const a = e.currentTarget; setCur(a.currentTime); if (a.currentTime >= eff) a.pause(); }} />
       <div className="flex items-center gap-3">
         <button onClick={() => { const a = ref.current; if (!a) return; if (on) a.pause(); else play(start); }} className="w-10 h-10 shrink-0 rounded-full bg-white text-gray-900 flex items-center justify-center shadow" aria-label="تشغيل المقطع">
@@ -8791,14 +8802,28 @@ function MentionText({ text }: { text: string }) {
     </>
   );
 }
-function PostText({ text, className, clamp = false }: { text: string; className?: string; clamp?: boolean }) {
+function PostLoc({ text }: { text: string }) {
+  const { loc } = parseGeo(text);
+  const [map, setMap] = useState(false);
+  if (!loc) return null;
+  const real = !!(loc.lat || loc.lng);
+  return (
+    <div className="px-4 pb-3">
+      <button onClick={e => { e.stopPropagation(); if (real) setMap(true); }} className="inline-flex max-w-full items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-sm active:scale-95 transition-transform">
+        <MapPin size={15} className="shrink-0" /><span className="truncate" dir="auto">{loc.name || 'الموقع على الخريطة'}</span>
+      </button>
+      {map && real && <LocationMapModal loc={loc} onClose={() => setMap(false)} />}
+    </div>
+  );
+}
+function PostText({ text, className, clamp = false, hideLoc = false }: { text: string; className?: string; clamp?: boolean; hideLoc?: boolean }) {
   const { body, loc } = parseGeo(text);
   const [map, setMap] = useState(false);
   return (
     <>
       {body && <p className={className} dir="auto"><MentionText text={body} /></p>}
-      {loc && !clamp && (
-        <button onClick={e => { e.stopPropagation(); setMap(true); }} className="mt-2 inline-flex max-w-full items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-sm active:scale-95 transition-transform">
+      {loc && !clamp && !hideLoc && (
+        <button onClick={e => { e.stopPropagation(); if (loc.lat || loc.lng) setMap(true); }} className="mt-2 inline-flex max-w-full items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-sm active:scale-95 transition-transform">
           <MapPin size={15} className="shrink-0" /><span className="truncate" dir="auto">{loc.name || 'الموقع على الخريطة'}</span>
         </button>
       )}
@@ -8904,6 +8929,8 @@ function LocationPicker({ onPick, onClose }: { onPick: (l: GeoLoc) => void; onCl
   const [msg, setMsg] = useState('');
   const search = async () => {
     const v = q.trim(); if (v.length < 2) return;
+    const c = /(-?\d{1,3}\.\d{3,})\s*[,،\s]\s*(-?\d{1,3}\.\d{3,})/.exec(v); // pasted coordinates or a maps link
+    if (c && Math.abs(Number(c[1])) <= 90 && Math.abs(Number(c[2])) <= 180) { setRes([{ lat: Number(c[1]), lng: Number(c[2]), name: 'موقع محدد على الخريطة' }]); setMsg(''); return; }
     setBusy(true); setMsg('');
     try {
       const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=${LANG === 'en' ? 'en' : 'ar'}&q=${encodeURIComponent(v)}`);
@@ -8929,11 +8956,12 @@ function LocationPicker({ onPick, onClose }: { onPick: (l: GeoLoc) => void; onCl
         <div className="flex items-center justify-between mb-3"><h3 className="text-white font-bold flex items-center gap-2"><MapPin size={18} className="text-rose-400" /> إضافة موقع</h3><button onClick={onClose} className="p-1.5 text-gray-400"><X size={18} /></button></div>
         <button onClick={here} disabled={busy} className="w-full py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold active:scale-95 disabled:opacity-60">📍 استخدم موقعي الحالي</button>
         <div className="flex gap-2 mt-3">
-          <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void search(); }} placeholder="ابحث عن مكان..." className="flex-1 min-w-0 h-10 rounded-full bg-gray-800 border border-gray-700 px-4 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500" />
+          <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void search(); }} placeholder="مكان، أو إحداثيات، أو اكتب أي اسم..." className="flex-1 min-w-0 h-10 rounded-full bg-gray-800 border border-gray-700 px-4 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500" />
           <button onClick={() => void search()} disabled={busy} className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center"><Search size={16} /></button>
         </div>
         {msg && <p className="text-xs text-amber-300 mt-2">{msg}</p>}
         <div className="mt-2 space-y-1.5">
+          {q.trim().length >= 2 && <button onClick={() => onPick({ lat: 0, lng: 0, name: q.trim().slice(0, 80) })} className="w-full text-right px-3 py-2.5 rounded-xl bg-violet-600/20 text-sm text-violet-100" dir="auto">📌 استخدم «{q.trim().slice(0, 40)}» كاسم للموقع</button>}
           {res.map((r, i) => <button key={i} onClick={() => onPick(r)} className="w-full text-right px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm text-white" dir="auto"><MapPin size={13} className="inline -mt-0.5 me-1 text-rose-400" />{r.name}</button>)}
         </div>
       </div>
@@ -9149,67 +9177,103 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
 
   const canMusic = media?.type === 'image' || (media?.type === 'video' && kind === 'reel');
   const heading = kind === 'reel' ? t('ريل جديد') : kind === 'video' ? t('فيديو جديد') : t('منشور جديد');
+  const [tab, setTab] = useState<'studio' | 'publish'>('publish');
+  const [kindMenu, setKindMenu] = useState(false);
+  const extraUrls = useMemo(() => extra.map(f => URL.createObjectURL(f)), [extra]);
+  useEffect(() => () => { extraUrls.forEach(u => URL.revokeObjectURL(u)); }, [extraUrls]);
+  const KINDS = [
+    { key: 'post' as const, icon: '📝', label: 'منشور', hint: 'نص وصور وملفات' },
+    { key: 'video' as const, icon: '▶️', label: 'فيديو', hint: 'فيديو بعنوان وغلاف 16:9' },
+    { key: 'reel' as const, icon: '🎬', label: 'ريل', hint: 'فيديو قصير 9:16 مع موسيقى' },
+  ];
+  const curKind = KINDS.find(k => k.key === kind) ?? KINDS[0];
+  const locChip = loc ? (
+    <div className="mb-3 flex max-w-full">
+      <div className="inline-flex max-w-full items-center gap-1.5 ps-3 pe-1.5 py-1.5 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-sm">
+        <MapPin size={14} className="shrink-0" /><span className="truncate min-w-0" dir="auto">{loc.name}</span>
+        <button onClick={() => setLoc(null)} aria-label="إزالة الموقع" className="p-1 text-rose-200/80 shrink-0"><X size={13} /></button>
+      </div>
+    </div>
+  ) : null;
+  const toolBtn = 'min-w-0 flex flex-col items-center justify-center gap-1 rounded-2xl bg-gray-800/70 border border-white/5 py-2.5 px-1 text-[11px] font-semibold active:scale-95 transition-transform';
+  const addMention = () => { const el = taRef.current; const c = el?.selectionStart ?? text.length; const v = text.slice(0, c) + (c > 0 && !/\s$/.test(text.slice(0, c)) ? ' @' : '@') + text.slice(c); setText(v); setMq(''); window.setTimeout(() => el?.focus(), 0); };
 
   return (
-    <div className="px-4 py-4">
-      <h2 className="text-xl font-bold text-white mb-4">{heading}</h2>
-      <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800 mb-4">
-        {([{ key: 'post' as const, label: 'منشور' }, { key: 'reel' as const, label: 'ريل 🎬' }, { key: 'video' as const, label: 'فيديو ▶️' }]).map(t => (
-          <button
-            key={t.key}
-            onClick={() => switchKind(t.key)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${kind === t.key ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-400 hover:text-white'}`}
-          >
-            {t.label}
-          </button>
+    <div className="w-full max-w-xl mx-auto px-3 min-[400px]:px-4 py-4 overflow-x-hidden">
+      <h2 className="sr-only">{heading}</h2>
+      <div className="grid grid-cols-2 gap-1 bg-gray-900 rounded-2xl p-1 border border-gray-800 mb-4">
+        {([{ k: 'studio' as const, label: '🎨 ستوديو KIX' }, { k: 'publish' as const, label: '🚀 نشر' }]).map(x => (
+          <button key={x.k} onClick={() => setTab(x.k)} className={`min-w-0 truncate py-2.5 rounded-xl text-sm font-bold transition-all ${tab === x.k ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-400 hover:text-white'}`}>{x.label}</button>
         ))}
       </div>
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+      {tab === 'studio' ? (
+        <div className="rounded-3xl bg-gray-900 border border-gray-800 px-5 py-14 text-center">
+          <div className="text-5xl mb-3">🎨</div>
+          <h3 className="text-white font-extrabold text-xl">ستوديو KIX</h3>
+          <span className="inline-block mt-3 px-4 py-1 rounded-full bg-gradient-to-r from-violet-600/30 to-cyan-500/30 ring-1 ring-white/15 text-cyan-200 text-sm font-bold">قريباً</span>
+          <p className="mt-3 text-sm text-gray-400 leading-6">أدوات التصميم والمونتاج هتوصلك هنا في تحديث جاي.</p>
+        </div>
+      ) : (
+      <>
+      <div className="mb-4">
+        <button onClick={() => setKindMenu(o => !o)} aria-expanded={kindMenu} className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-lg active:scale-[0.99] transition-transform">
+          <span className="text-2xl shrink-0">{curKind.icon}</span>
+          <span className="min-w-0 flex-1 text-start"><span className="block font-extrabold text-base">{curKind.label}</span><span className="block text-xs text-white/85 truncate">{curKind.hint}</span></span>
+          <ChevronDown size={22} className={`shrink-0 transition-transform ${kindMenu ? 'rotate-180' : ''}`} />
+        </button>
+        {kindMenu && (
+          <div className="mt-2 rounded-2xl bg-gray-900 border border-white/10 overflow-hidden">
+            {KINDS.map(k => (
+              <button key={k.key} onClick={() => { switchKind(k.key); setKindMenu(false); }} className={`w-full flex items-center gap-3 px-4 py-3 text-start border-b border-white/5 last:border-0 ${kind === k.key ? 'bg-white/10' : 'hover:bg-white/5'}`}>
+                <span className="text-xl shrink-0">{k.icon}</span>
+                <span className="min-w-0 flex-1"><span className="block text-white font-bold text-sm">{k.label}</span><span className="block text-[11px] text-gray-400 truncate">{k.hint}</span></span>
+                {kind === k.key && <CheckCheck size={16} className="shrink-0 text-cyan-300" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 min-[400px]:p-4">
         <PublishQueue setPosts={setPosts} userId={currentUser.id} />
         {kind === 'video' && (
           <input
             value={title}
             onChange={e => setTitle(e.target.value.slice(0, 120))}
             placeholder="عنوان الفيديو"
-            className="w-full px-4 py-3 mb-3 bg-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            className="w-full min-w-0 px-4 py-3 mb-3 bg-gray-800 rounded-xl text-white text-base placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
         )}
-        <div className="flex gap-3 mb-4">
-          <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="md" />
-          <div className="relative flex-1 min-w-0">
-          <textarea
-            ref={taRef}
-            value={text} onChange={e => { setText(e.target.value); trackMention(e.target.value, e.target.selectionStart ?? e.target.value.length); }}
-            onKeyUp={e => trackMention(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
-            placeholder={kind === 'reel' ? 'اكتب وصفاً للريل...' : kind === 'video' ? 'وصف الفيديو (اختياري)...' : t('ماذا يدور في ذهنك؟')} rows={4}
-            className="w-full bg-transparent text-white placeholder-gray-500 focus:outline-none resize-none text-lg"
-          />
-          {mentionHits.length > 0 && (
-            <div className="absolute inset-x-0 top-full z-20 mt-1 rounded-2xl bg-gray-900 border border-white/10 shadow-2xl overflow-hidden">
-              {mentionHits.map(u => (
-                <button key={u.id} onMouseDown={e => e.preventDefault()} onClick={() => pickMention(u)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/10 text-right">
-                  <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="sm" />
-                  <span className="min-w-0 flex-1"><span className="block text-sm text-white truncate" dir="auto">{u.displayName}</span><span className="block text-[11px] text-gray-400" dir="ltr">@{u.username}</span></span>
-                </button>
-              ))}
-            </div>
-          )}
-          {loc && (
-            <div className="mt-1 inline-flex max-w-full items-center gap-1.5 ps-3 pe-1.5 py-1 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-sm">
-              <MapPin size={14} className="shrink-0" /><span className="truncate" dir="auto">{loc.name}</span>
-              <button onClick={() => setLoc(null)} aria-label="إزالة الموقع" className="p-1 text-rose-200/80"><X size={13} /></button>
-            </div>
-          )}
+        <div className="flex gap-3 mb-3">
+          <div className="shrink-0"><Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="md" /></div>
+          <div className="flex-1 min-w-0">
+            <textarea
+              ref={taRef}
+              value={text} onChange={e => { setText(e.target.value); trackMention(e.target.value, e.target.selectionStart ?? e.target.value.length); }}
+              onKeyUp={e => trackMention(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
+              placeholder={kind === 'reel' ? 'اكتب وصفاً للريل...' : kind === 'video' ? 'وصف الفيديو (اختياري)...' : t('ماذا يدور في ذهنك؟')} rows={4}
+              className="block w-full min-w-0 bg-transparent text-white placeholder-gray-500 focus:outline-none resize-none text-base leading-7"
+            />
+            {mentionHits.length > 0 && (
+              <div className="mt-1 rounded-2xl bg-gray-800 border border-white/10 overflow-hidden">
+                {mentionHits.map(u => (
+                  <button key={u.id} onMouseDown={e => e.preventDefault()} onClick={() => pickMention(u)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/10 text-start">
+                    <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="sm" />
+                    <span className="min-w-0 flex-1"><span className="block text-sm text-white truncate" dir="auto">{u.displayName}</span><span className="block text-[11px] text-gray-400 truncate" dir="ltr">@{u.username}</span></span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
+        {loc && !media && locChip}
         {locOpen && <LocationPicker onClose={() => setLocOpen(false)} onPick={l => { setLoc(l); setLocOpen(false); }} />}
         {media && (
           <div className="mb-4 relative">
             {media.type !== 'file' && <span className="absolute top-2 start-2 z-10 px-2 py-0.5 rounded-full bg-black/60 text-white text-[11px] pointer-events-none">معاينة · {kind === 'reel' ? 'ريل 9:16' : kind === 'video' ? 'فيديو 16:9' : 'منشور'} · {(media.file.size / 1048576).toFixed(1)} MB</span>}
             {media.type === 'image' ? (
-              <img src={media.url} alt="" className={`w-full rounded-xl object-cover ${kind === 'reel' ? 'aspect-[9/16] max-h-[26rem]' : kind === 'video' ? 'aspect-video' : 'max-h-72'}`} />
+              <img src={media.url} alt="" className={`w-full rounded-xl object-cover ${kind === 'reel' ? 'aspect-[9/16] max-h-[min(26rem,62svh)] mx-auto w-auto max-w-full' : kind === 'video' ? 'aspect-video' : 'max-h-[min(18rem,50svh)]'}`} />
             ) : media.type === 'video' ? (
-              <video ref={el => { if (el) el.volume = music || remoteMusic ? videoVol : 1; }} src={media.url} controls playsInline className={`w-full rounded-xl bg-black ${kind === 'reel' ? 'aspect-[9/16] max-h-[26rem]' : kind === 'video' ? 'aspect-video' : 'max-h-72'}`} />
+              <video ref={el => { if (el) el.volume = music || remoteMusic ? videoVol : 1; }} src={media.url} controls playsInline className={`w-full rounded-xl bg-black ${kind === 'reel' ? 'aspect-[9/16] max-h-[min(26rem,62svh)] mx-auto w-auto max-w-full' : kind === 'video' ? 'aspect-video' : 'max-h-[min(18rem,50svh)]'}`} />
             ) : (
               <div className="flex items-center gap-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl">
                 <FileText size={32} className="shrink-0 text-cyan-400" />
@@ -9224,6 +9288,7 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
             </button>
           </div>
         )}
+        {loc && media && locChip}
         {canMusic && music && (
           <div className="mb-4">
             <div className="flex items-center gap-2 text-sm text-white mb-2 px-1">
@@ -9251,7 +9316,7 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
                 <button onClick={() => set(v > 0 ? 0 : 1)} className="shrink-0 w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center" aria-label="كتم">{v > 0 ? <Volume2 size={15} /> : <VolumeX size={15} />}</button>
                 <input type="range" min={0} max={1} step={0.05} value={v} onChange={e => set(Number(e.target.value))} className="flex-1 min-w-0 accent-violet-500" />
                 <span className="w-10 text-xs text-gray-300 tabular-nums text-center">{Math.round(v * 100)}%</span>
-                <span className="text-[11px] text-gray-400 w-28 shrink-0 text-right" dir="rtl">{label}</span>
+                <span className="text-[11px] text-gray-400 w-20 min-[400px]:w-28 shrink-0 text-right" dir="rtl">{label}</span>
               </div>
             ))}
             <div className="flex gap-2 pt-1">
@@ -9270,7 +9335,7 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
             <div className="flex gap-2 overflow-x-auto no-scrollbar">
               {extra.map((f, i) => (
                 <div key={`${f.name}-${i}`} className="relative shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-900 flex items-center justify-center">
-                  {detectMediaKind(f) === 'image' ? <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" /> : detectMediaKind(f) === 'video' ? <Play size={20} className="text-white" fill="white" /> : <FileText size={22} className="text-cyan-400" />}
+                  {detectMediaKind(f) === 'image' ? <img src={extraUrls[i]} alt="" className="w-full h-full object-cover" /> : detectMediaKind(f) === 'video' ? <Play size={20} className="text-white" fill="white" /> : <FileText size={22} className="text-cyan-400" />}
                   <button onClick={() => setExtra(prev => prev.filter((_, j) => j !== i))} className="absolute top-0.5 left-0.5 p-0.5 rounded-full bg-black/70 text-white" aria-label="إزالة"><X size={11} /></button>
                 </div>
               ))}
@@ -9294,41 +9359,26 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
           </div>
         )}
         {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-        <div className="flex items-center justify-between border-t border-gray-800 pt-3">
-          <div className="flex items-center gap-2">
-            <input ref={fileRef} type="file" multiple={!videoOnly} accept={videoOnly ? 'video/*' : undefined} onChange={handleFile} className="hidden" />
-            {!videoOnly && (
-              <button onClick={() => openPicker('image/*')} className="p-2 text-cyan-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="صورة">
-                <ImageIcon size={20} />
-              </button>
-            )}
-            <button onClick={() => openPicker('video/*')} className="p-2 text-green-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="فيديو">
-              <Video size={20} />
-            </button>
-            {canMusic && (
-              <button onClick={() => setLibOpen(true)} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${music || remoteMusic ? 'text-fuchsia-300 bg-gray-800' : 'text-fuchsia-400'}`} aria-label="موسيقى"><Music size={20} /></button>
-            )}
-            <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); setMusicStart(0); setMusicEnd(0); }} />
-            <button onClick={() => { const el = taRef.current; const c = el?.selectionStart ?? text.length; const v = text.slice(0, c) + (c > 0 && !/\s$/.test(text.slice(0, c)) ? ' @' : '@') + text.slice(c); setText(v); setMq(''); window.setTimeout(() => el?.focus(), 0); }} className="p-2 text-sky-300 hover:bg-gray-800 rounded-full transition-colors font-bold text-lg leading-none w-9 h-9" aria-label="منشن">@</button>
-            <button onClick={() => setLocOpen(true)} className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${loc ? 'text-rose-300 bg-gray-800' : 'text-rose-400'}`} aria-label="موقع"><MapPin size={20} /></button>
-            {!videoOnly && (
-              <button onClick={() => openPicker('*/*')} className="p-2 text-amber-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="ملف">
-                <Paperclip size={20} />
-              </button>
-            )}
-            
-            <div className="relative">
-              <button onClick={() => setEmojiOpen(o => !o)} className="p-2 text-yellow-400 hover:bg-gray-800 rounded-full transition-colors" aria-label="إيموجي">
-                <Smile size={20} />
-              </button>
-              {emojiOpen && <EmojiPicker onPick={e => setText(t => t + e)} onClose={() => setEmojiOpen(false)} />}
-            </div>
-          </div>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handlePost} className="px-6 py-2 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-medium disabled:opacity-60">
-            {kind === 'reel' ? 'نشر الريل' : kind === 'video' ? 'نشر الفيديو' : 'نشر'}
-          </motion.button>
+        <div className="grid grid-cols-3 min-[480px]:grid-cols-4 gap-2 mt-1">
+          <input ref={fileRef} type="file" multiple={!videoOnly} accept={videoOnly ? 'video/*' : undefined} onChange={handleFile} className="hidden" />
+          {!videoOnly && <button onClick={() => openPicker('image/*')} className={`${toolBtn} text-cyan-300`}><ImageIcon size={20} />صورة</button>}
+          <button onClick={() => openPicker('video/*')} className={`${toolBtn} text-green-300`}><Video size={20} />فيديو</button>
+          {kind !== 'video' && (
+            <button onClick={() => { if (!media) { setError(kind === 'reel' ? 'اختر الفيديو الأول وبعدين ضيف الموسيقى' : 'اختر صورة الأول وبعدين ضيف الموسيقى'); return; } setError(''); setLibOpen(true); }} className={`${toolBtn} ${music || remoteMusic ? 'text-fuchsia-200 !bg-fuchsia-500/20' : 'text-fuchsia-300'}`}><Music size={20} />موسيقى</button>
+          )}
+          <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); setMusicStart(0); setMusicEnd(0); }} />
+          <button onClick={() => setEmojiOpen(o => !o)} className={`${toolBtn} ${emojiOpen ? 'text-yellow-200 !bg-yellow-500/20' : 'text-yellow-300'}`}><Smile size={20} />إيموجي</button>
+          <button onClick={addMention} className={`${toolBtn} text-sky-300`}><AtSign size={20} />منشن</button>
+          <button onClick={() => setLocOpen(true)} className={`${toolBtn} ${loc ? 'text-rose-200 !bg-rose-500/20' : 'text-rose-300'}`}><MapPin size={20} />موقع</button>
+          {!videoOnly && <button onClick={() => openPicker('*/*')} className={`${toolBtn} text-amber-300`}><Paperclip size={20} />ملف</button>}
         </div>
+        {emojiOpen && <EmojiPicker docked onPick={e => setText(t => t + e)} onClose={() => setEmojiOpen(false)} />}
+        <motion.button whileTap={{ scale: 0.97 }} onClick={handlePost} className="mt-4 w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-bold text-base disabled:opacity-60">
+          {kind === 'reel' ? 'نشر الريل' : kind === 'video' ? 'نشر الفيديو' : 'نشر'}
+        </motion.button>
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -11222,11 +11272,14 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
   useEffect(() => {
     if (game.accepted === true && !over && !game.joinedBy.includes(meId) && !joinedRef.current) { joinedRef.current = true; onJoin(); }
   }, [game.accepted, over, game.joinedBy, meId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [compact, setCompact] = useState(() => window.innerHeight < 720 || window.innerWidth < 380);
+  // Stable viewport: the on-screen keyboard / URL bar must not resize the board while playing (only a real width change or growth does).
+  const [vp, setVp] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
   useEffect(() => {
-    const f = () => setCompact(window.innerHeight < 720 || window.innerWidth < 380);
+    const f = () => setVp(p => { const w = window.innerWidth, h = window.innerHeight; return Math.abs(w - p.w) > 40 ? { w, h } : h > p.h ? { w: p.w, h } : p; });
     window.addEventListener('resize', f); return () => window.removeEventListener('resize', f);
   }, []);
+  const compact = vp.h < 720 || vp.w < 380;
+  useEffect(() => { const b = document.body; const prev = b.style.overflow; b.style.overflow = 'hidden'; return () => { b.style.overflow = prev; }; }, []);
   const skipAnim = useRef(-1);
   useEffect(() => {
     if (!running || !timed) return;
@@ -11353,7 +11406,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
     );
   };
   return createPortal(
-    <div className="fixed inset-0 z-[90] flex flex-col items-center overflow-y-auto overscroll-contain" style={{ background: 'linear-gradient(180deg,#272a62 0%,#5a3c82 60%,#9a4f96 100%)' }} dir="rtl">
+    <div className="fixed inset-0 z-[90] flex flex-col items-center overflow-y-auto overflow-x-hidden overscroll-contain" style={{ background: 'linear-gradient(180deg,#272a62 0%,#5a3c82 60%,#9a4f96 100%)' }} dir="rtl">
       <style>{'@keyframes kpSlide{from{transform:translate(calc(var(--dx)*1%),calc(var(--dy)*1%))}to{transform:translate(0,0)}}'}</style>
       <div className="w-full max-w-xl px-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white" aria-label="إغلاق"><X size={18} /></button>
@@ -11364,7 +11417,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
       </div>
       <div className="w-full max-w-xl px-3 mt-3">{Bar({ u: other, c: oppColor, mineBar: false })}</div>
       <div className="w-full max-w-xl px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
-      <div dir="ltr" className="relative mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `min(${bsize}%, calc((100dvh - ${compact ? 15 : 17}rem) * ${bsize / 100}))`, minWidth: 'min(14rem, 100%)' }}>
+      <div dir="ltr" className="relative mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `min(${bsize}%, calc((${vp.h}px - ${compact ? 24 : 27}rem) * ${bsize / 100}))`, minWidth: 'min(14rem, 100%)' }}>
         <div className="grid w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(20,10,60,.7)]" style={{ aspectRatio: '1 / 1', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gridTemplateRows: 'repeat(8, minmax(0, 1fr))', touchAction: 'none' }}>
           {order.map((i, k) => {
             const r = Math.floor(i / 8), f = i % 8;
@@ -11375,7 +11428,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
             const rankLbl = k % 8 === 0 ? String(8 - r) : '';
             const fileLbl = k >= 56 ? 'abcdefgh'[f] : '';
             return (
-              <button key={i} data-sq={i} onPointerDown={e => dragStart(e, i)} onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } tap(i); }} className={`relative flex items-center justify-center min-w-0 min-h-0 overflow-hidden p-0 ${dark ? 'bg-[#4b8eab]' : 'bg-[#faf0e8]'} ${i === kingSq ? '!bg-red-500' : ''}`}>
+              <button key={i} data-sq={i} onPointerDown={e => dragStart(e, i)} onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } tap(i); }} className={`relative flex items-center justify-center min-w-0 min-h-0 p-0 ${dark ? 'bg-[#4b8eab]' : 'bg-[#faf0e8]'} ${i === kingSq ? '!bg-red-500' : ''}`}>
                 {isLast && <span className="absolute inset-0 bg-[#56c4b4]/85 pointer-events-none" />}
                 {sel === i && <span className="absolute inset-0 bg-white/45 pointer-events-none" />}
                 {pre && (pre.f === i || pre.to === i) && <span className="absolute inset-0 bg-orange-500/55 pointer-events-none" />}
@@ -11487,6 +11540,23 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const games = useMemo(() => collectGames(messages, currentUser.id, chatUser.id), [messages, currentUser.id, chatUser.id]);
   const openGame = games.find(x => x.g === openGid) ?? null;
   const sendGame = (d: GameMsg) => { void send({ text: gameText(d) }); };
+  // Open the match by itself when the invite gets accepted (or its scheduled time arrives) while this chat is open.
+  const [gTick, setGTick] = useState(0);
+  useEffect(() => {
+    const waiting = () => games.some(g => g.accepted === true && g.winner === null && g.at > Date.now());
+    if (!waiting()) return;
+    const h = window.setInterval(() => { setGTick(t => t + 1); if (!waiting()) window.clearInterval(h); }, 1000);
+    return () => window.clearInterval(h);
+  }, [games]);
+  const gPrev = useRef<Map<string, string> | null>(null);
+  useEffect(() => {
+    const now = Date.now();
+    const cur = new Map<string, string>();
+    for (const g of games) cur.set(g.g, g.accepted === null ? 'p' : g.accepted === false ? 'x' : g.winner !== null ? 'd' : g.at > now ? 'w' : 'r');
+    const prev = gPrev.current; gPrev.current = cur;
+    if (!prev) return;
+    for (const [id, st] of cur) { const was = prev.get(id); if (st === 'r' && (was === 'p' || was === 'w')) { setOpenGid(o => o ?? id); break; } }
+  }, [games, gTick]);
   const bg = conversation?.background;
   const [bgSrc, setBgSrc] = useState<string | null>(() => (bg?.type === 'image' ? ((bg.key && bgMem.get(bg.key)) || bg.value) : null));
   useEffect(() => {
