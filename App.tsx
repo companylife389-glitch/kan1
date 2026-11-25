@@ -4841,7 +4841,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
       }}
       onPointerCancel={() => { window.clearTimeout(holdTimer.current); setPaused(false); }}
     >
-      <div className="relative w-full h-full max-w-md bg-black overflow-hidden">
+      <div className="relative w-full h-full bg-black overflow-hidden">
         {!story.url
           ? (
             <div className="absolute inset-0 flex items-center justify-center p-8 kan-always-white" style={{ background: STORY_BGS[story.extra?.bg ?? 0] ?? STORY_BGS[0] }}>
@@ -5282,13 +5282,17 @@ const MEMORY_SAVE_MB = 800;   // other browsers: above this, hand the link to th
 
 // Saves a file to the device (works for private signed links too).
 async function downloadFile(url: string, filename: string) {
+  const mobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const id = crypto.randomUUID();
   const ctl = new AbortController();
   downCtl.set(id, ctl);
   downSet(l => [...l, { id, name: filename, pct: 0, got: 0, total: 0, status: 'run' }]);
   let sink: SaveStream | null = null;
   let handoff = false;
+  // Hands the link to the browser's own download manager (no memory limit, works when fetch is blocked by CORS).
+  const viaBrowser = () => { const a = document.createElement('a'); a.href = url; a.download = filename; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); };
   try {
+    if (url.startsWith('kanb2://')) url = (await signMediaUrls([url])).get(url) ?? url;
     const res = await fetch(url, { signal: ctl.signal });
     if (!res.ok) throw new Error(`download failed: ${res.status}`);
     const total = Number(res.headers.get('content-length') || 0);
@@ -5298,9 +5302,9 @@ async function downloadFile(url: string, filename: string) {
       try { sink = await (await picker({ suggestedName: filename })).createWritable(); }
       catch (e) { if ((e as { name?: string })?.name === 'AbortError') { ctl.abort(); dropDown(id); return; } sink = null; }
     }
-    if (!sink && total > MEMORY_SAVE_MB * 1024 * 1024) {
+    if (!sink && total > (mobile ? 120 : MEMORY_SAVE_MB) * 1024 * 1024) {
       handoff = true; ctl.abort();
-      window.open(url, '_blank');
+      viaBrowser();
       downPatch(id, { pct: 100, status: 'done', note: 'اتفتح في تحميلات المتصفح' });
       return;
     }
@@ -5336,8 +5340,13 @@ async function downloadFile(url: string, filename: string) {
     if (sink) void sink.abort().catch(() => undefined);
     if (ctl.signal.aborted && !handoff) return; // cancelled by the user: already removed from the list
     console.error(e);
-    downPatch(id, { status: 'fail', note: 'اتفتح في المتصفح' });
-    window.open(url, '_blank');
+    if (e instanceof TypeError || (e as { name?: string })?.name === 'TypeError') {
+      // Blocked/network error from fetch (CORS, memory...): let the browser download it directly.
+      viaBrowser();
+      downPatch(id, { pct: 100, status: 'done', note: 'اتفتح في تحميلات المتصفح' });
+    } else {
+      downPatch(id, { status: 'fail', note: 'تعذّر التحميل، حاول مرة أخرى' });
+    }
   } finally {
     downCtl.delete(id);
   }
@@ -5449,7 +5458,7 @@ function GlobalUploadBar({ onOpen }: { onOpen: () => void }) {
       {rows.map(r => {
         const fail = r.status === 'fail'; const done = r.status === 'done';
         const pct = r.pct === null ? 0 : Math.max(0, Math.min(100, r.pct));
-        const title = fail ? (r.down ? 'فشل التحميل' : 'فشل الرفع') : done ? (r.down ? 'تم التحميل ✓' : 'تم النشر ✓') : (r.down ? 'جاري تحميل الملف...' : 'جاري رفع الملف... لا تقفل التطبيق');
+        const title = fail ? (r.down ? 'فشل التحميل' : 'فشل الرفع') : done ? (r.down ? 'تم التحميل' : 'تم النشر') : (r.down ? 'جاري تحميل الملف...' : 'جاري رفع الملف... لا تقفل التطبيق');
         return (
           <div key={r.id} className={`pointer-events-auto mx-auto max-w-md rounded-2xl backdrop-blur-xl border shadow-2xl px-3.5 py-2.5 ${fail ? 'bg-red-950/90 border-red-500/40 shadow-red-900/30' : done ? 'bg-gray-900/95 border-emerald-500/40' : 'bg-gray-900/95 border-white/10'}`}>
             <div className="flex items-center gap-2.5">
@@ -5955,10 +5964,11 @@ export default function App() {
     const t = e.changedTouches[0];
     const dx = t.clientX - s0.x, dy = t.clientY - s0.y;
     if (Math.abs(dx) < 90 || Math.abs(dx) < Math.abs(dy) * 2 || Date.now() - s0.t > 700) return;
-    const order = ['feed', 'reels', 'create', 'videos', 'profile'] as const;
-    const i = (order as readonly string[]).indexOf(activeTab);
-    const next = i < 0 ? undefined : order[i + (dx < 0 ? 1 : -1)];
-    if (next) goTab(next);
+    // Swipe left = the tab on the LEFT of the current one in the bottom bar, swipe right = the one on the right (any language / direction).
+    const btns = Array.from(document.querySelectorAll<HTMLElement>('nav [data-tab]')).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+    const i = btns.findIndex(b => b.dataset.tab === activeTab);
+    const next = i < 0 ? undefined : btns[i + (dx < 0 ? -1 : 1)]?.dataset.tab;
+    if (next) goTab(next as Parameters<typeof goTab>[0]);
   };
   // Home button: already on the feed -> one tap scrolls to the top, a quick second tap refreshes it.
   const lastHomeTap = useRef(0);
@@ -6287,6 +6297,7 @@ export default function App() {
               return (
                 <button
                   key={tab}
+                  data-tab={tab}
                   onClick={() => (tab === 'feed' ? onHomeTap() : goTab(tab))}
                   className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-0.5 py-2 rounded-2xl transition-colors active:scale-95 ${active ? 'text-white' : 'text-gray-300 hover:text-white'}`}
                 >
@@ -6303,7 +6314,7 @@ export default function App() {
                   {tabButton('feed')}
                   {tabButton('reels')}
                 </div>
-                <button onClick={() => goTab('create')} className="relative flex flex-col items-center -mt-6 px-2 pb-1.5 active:scale-95" aria-label="نشر">
+                <button data-tab="create" onClick={() => goTab('create')} className="relative flex flex-col items-center -mt-6 px-2 pb-1.5 active:scale-95" aria-label="نشر">
                   <span className={`kan-fab w-12 h-12 min-[400px]:w-14 min-[400px]:h-14 rounded-full flex items-center justify-center ring-4 ring-gray-950 ${createActive ? 'scale-105' : ''}`}>
                     <Plus size={28} strokeWidth={2.6} className="text-white" />
                   </span>
@@ -9234,7 +9245,7 @@ function MyFilesPanel() {
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-white truncate" dir="auto">{j.name}</div>
-                <div className="text-[11px] text-gray-500" dir="auto">{fail ? 'فشل التحميل' : done ? 'تم التحميل ✓' : 'جاري التحميل...'}{known ? ` · ${formatBytes(j.got)} / ${formatBytes(j.total)}` : j.got ? ` · ${formatBytes(j.got)}` : ''}{j.note ? ` · ${j.note}` : ''}</div>
+                <div className="text-[11px] text-gray-500" dir="auto">{fail ? 'فشل التحميل' : done ? 'تم التحميل' : 'جاري التحميل...'}{known ? ` · ${formatBytes(j.got)} / ${formatBytes(j.total)}` : j.got ? ` · ${formatBytes(j.got)}` : ''}{j.note ? ` · ${j.note}` : ''}</div>
               </div>
               {known && <span className={`tabular-nums text-sm font-bold shrink-0 ${fail ? 'text-red-400' : done ? 'text-emerald-400' : 'text-cyan-300'}`}>{fail ? '!' : `${pct}%`}</span>}
               {j.status === 'run'
@@ -10833,7 +10844,7 @@ function GameInviteCard({ game, games, meId, other, onAccept, onDecline, onOpen 
           ? <div className="text-xs text-center"><span className="opacity-80">تبدأ بعد </span><b className="tabular-nums">{fmtCountdown(game.at - now)}</b></div>
           : <button onClick={onOpen} className="w-full py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-xs font-bold active:scale-95">{game.moves.length ? 'كمّل المباراة' : 'ادخل المباراة'}</button>)}
         {game.accepted === true && done && (
-          <div className="flex items-center justify-between gap-2"><span className="text-xs font-bold">{game.winner === 'draw' ? '🤝 تعادل' : game.winner === meId ? '🏆 فزت' : `🏆 فاز ${other.displayName}`}</span><button onClick={onOpen} className="px-3 py-1 rounded-full bg-white/15 text-xs">عرض</button></div>)}
+          <div className="flex items-center justify-between gap-2"><span className="text-xs font-bold">{game.winner === 'draw' ? '🤝 تعادل' : game.winner === meId ? '🏆 فزت' : `🏆 فاز ${other.displayName}`}</span><button onClick={onOpen} className="px-3.5 py-1.5 rounded-full bg-white/20 text-xs font-bold active:scale-95">عرض المباراة</button></div>)}
       </div>
     </div>
   );
@@ -10876,7 +10887,28 @@ function GamePicker({ onClose, onInvite }: { onClose: () => void; onInvite: (at:
   );
 }
 
-function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onTimeout, onNew, onClose }: { game: GameInfo; games: GameInfo[]; meId: string; me: User; other: User; onMove: (mv: string) => void; onResign: () => void; onDraw: (k: 'dr' | 'da' | 'dd') => void; onTimeout: () => void; onNew: () => void; onClose: () => void }) {
+let chessAudio: AudioContext | null = null;
+function chessSound(kind: 'move' | 'capture' | 'check') {
+  try {
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return;
+    chessAudio = chessAudio ?? new AC();
+    const ctx = chessAudio;
+    if (ctx.state === 'suspended') void ctx.resume();
+    const t0 = ctx.currentTime;
+    const tone = (type: OscillatorType, f0: number, f1: number, dur: number, vol: number, at = 0) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t0 + at); o.frequency.exponentialRampToValueAtTime(f1, t0 + at + dur);
+      g.gain.setValueAtTime(vol, t0 + at); g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur);
+      o.connect(g).connect(ctx.destination); o.start(t0 + at); o.stop(t0 + at + dur + 0.02);
+    };
+    tone('triangle', 220, 90, 0.09, 0.5); // wooden "tok"
+    if (kind === 'capture') { tone('square', 140, 60, 0.12, 0.25); tone('triangle', 330, 120, 0.07, 0.3, 0.03); }
+    if (kind === 'check') { tone('sine', 880, 880, 0.12, 0.25, 0.1); tone('sine', 1175, 1175, 0.16, 0.25, 0.2); }
+  } catch { /* no audio */ }
+}
+
+function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onTimeout, onNew, onClose, chat, onChat }: { chat: Message[]; onChat: (t: string) => void; game: GameInfo; games: GameInfo[]; meId: string; me: User; other: User; onMove: (mv: string) => void; onResign: () => void; onDraw: (k: 'dr' | 'da' | 'dd') => void; onTimeout: () => void; onNew: () => void; onClose: () => void }) {
   const myColor: 'w' | 'b' = game.inviter === meId ? 'w' : 'b';
   const oppColor: 'w' | 'b' = myColor === 'w' ? 'b' : 'w';
   const [sel, setSel] = useState<number | null>(null);
@@ -10900,12 +10932,59 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
   const myTurn = running && game.st.t === myColor && (!timed || left(myColor) > 0);
   const legal = useMemo(() => (myTurn ? chessLegal(game.st) : []), [game.st, myTurn]);
   useEffect(() => { setSel(null); setPromo(null); }, [game.moves.length]);
+  // A sound for every move, yours or the opponent's.
+  const prevRef = useRef({ n: game.moves.length, pieces: game.st.b.filter(Boolean).length });
+  useEffect(() => {
+    const n = game.moves.length, pieces = game.st.b.filter(Boolean).length;
+    if (n > prevRef.current.n) chessSound(game.status === 'check' || game.status === 'mate' ? 'check' : pieces < prevRef.current.pieces ? 'capture' : 'move');
+    prevRef.current = { n, pieces };
+  }, [game.moves.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const targets = sel === null ? [] : legal.filter(m => m.f === sel);
   const sc = gameScore(games, meId);
-  const kingSq = game.status === 'check' || game.status === 'mate' ? game.st.b.indexOf(game.st.t + 'K') : -1;
+  // Review: step back through the moves (null = live position).
+  const [view, setView] = useState<number | null>(null);
+  const hist = useMemo(() => {
+    const out: { st: CState; last?: [number, number] }[] = [{ st: chessStart() }];
+    let st = chessStart();
+    for (const mv of game.moves) { const m = chessParse(st, mv); if (!m) break; st = chessApply(st, m); out.push({ st, last: [m.f, m.to] }); }
+    return out;
+  }, [game.moves]);
+  useEffect(() => { setView(null); }, [game.moves.length]);
+  const vIdx = view === null ? hist.length - 1 : Math.min(view, hist.length - 1);
+  const reviewing = view !== null && vIdx < hist.length - 1;
+  const vst = reviewing ? hist[vIdx].st : game.st;
+  const vlast = reviewing ? hist[vIdx].last : game.last;
+  const stepTo = (n: number) => { const c = Math.max(0, Math.min(hist.length - 1, n)); setView(c >= hist.length - 1 ? null : c); setSel(null); };
+  // Premove: pick your next move while the opponent is thinking; it plays by itself when your turn comes (if still legal).
+  const [pre, setPre] = useState<{ f: number; to: number; p?: string } | null>(null);
+  const canPre = running && !myTurn && game.st.t === oppColor && !reviewing;
+  const preTargets = useMemo(() => (canPre && sel !== null ? chessLegal({ ...game.st, t: myColor }, sel) : []), [canPre, sel, game.st, myColor]);
+  useEffect(() => {
+    if (!pre || !myTurn) return;
+    const mv = legal.find(m => m.f === pre.f && m.to === pre.to && (m.p ?? '') === (pre.p ?? ''));
+    setPre(null);
+    if (mv) onMove(chessMoveStr(mv));
+  }, [myTurn, game.moves.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (over) setPre(null); }, [over]);
+  const shownTargets = canPre ? preTargets : targets;
+  const kingSq = !reviewing && (game.status === 'check' || game.status === 'mate') ? game.st.b.indexOf(game.st.t + 'K') : -1;
+  // Board size (50–100% of the width), adjustable and remembered.
+  const [bsize, setBsize] = useState(() => { try { const v = Number(localStorage.getItem('kan_chess_size')); return v >= 50 && v <= 100 ? v : 100; } catch { return 100; } });
+  const resize = (v: number) => { const c = Math.max(50, Math.min(100, v)); setBsize(c); try { localStorage.setItem('kan_chess_size', String(c)); } catch { /* ignore */ } };
+  const [msgTxt, setMsgTxt] = useState('');
+  const sendChat = (t: string) => { const v = t.trim(); if (v) { onChat(v); setMsgTxt(''); } };
   const order = Array.from({ length: 64 }, (_, k) => (myColor === 'w' ? k : 63 - k));
   const tap = (i: number) => {
-    if (!myTurn || promo) return;
+    if (reviewing || promo) return;
+    if (canPre) {
+      const hit = preTargets.filter(m => m.to === i);
+      if (sel !== null && hit.length > 0) { setPre({ f: sel, to: i, p: hit.length > 1 ? 'q' : undefined }); setSel(null); return; }
+      const own = game.st.b[i];
+      setPre(null);
+      setSel(own && own[0] === myColor && chessLegal({ ...game.st, t: myColor }, i).length > 0 ? i : null);
+      return;
+    }
+    if (!myTurn) return;
     const hit = targets.filter(m => m.to === i);
     if (sel !== null && hit.length > 0) { if (hit.length > 1) setPromo({ f: sel, to: i }); else onMove(chessMoveStr(hit[0])); return; }
     const pc = game.st.b[i];
@@ -10930,32 +11009,33 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
   };
   return createPortal(
     <div className="fixed inset-0 z-[90] bg-[#161512] flex flex-col items-center overflow-y-auto" dir="rtl">
-      <div className="w-full max-w-md px-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between">
+      <div className="w-full max-w-xl px-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white" aria-label="إغلاق"><X size={18} /></button>
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 text-sm">
           <span className="text-gray-400">أنت</span><b className="text-white text-base tabular-nums">{sc.me}</b><span className="text-gray-600">–</span><b className="text-white text-base tabular-nums">{sc.them}</b><span className="text-gray-400 truncate max-w-[5rem]">{other.displayName}</span>{sc.draw ? <span className="text-gray-500 text-xs">· {sc.draw} تعادل</span> : null}
         </div>
         <span className="w-9" />
       </div>
-      <div className="w-full max-w-md px-3 mt-3"><Bar u={other} c={oppColor} mineBar={false} /></div>
-      <div className="w-full max-w-md px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
-      <div dir="ltr" className="relative mt-2 w-full max-w-md px-2">
-        <div className="grid grid-cols-8 aspect-square w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(0,0,0,.8)] ring-4 ring-[#3a3631]">
+      <div className="w-full max-w-xl px-3 mt-3"><Bar u={other} c={oppColor} mineBar={false} /></div>
+      <div className="w-full max-w-xl px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
+      <div dir="ltr" className="relative mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `${bsize}%` }}>
+        <div className="[container-type:inline-size] grid grid-cols-8 aspect-square w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(0,0,0,.8)] ring-4 ring-[#3a3631]">
           {order.map((i, k) => {
             const r = Math.floor(i / 8), f = i % 8;
             const dark = (r + f) % 2 === 1;
-            const pc = game.st.b[i];
-            const isLast = game.last && (game.last[0] === i || game.last[1] === i);
-            const tgt = targets.some(m => m.to === i);
+            const pc = vst.b[i];
+            const isLast = vlast && (vlast[0] === i || vlast[1] === i);
+            const tgt = shownTargets.some(m => m.to === i);
             const rankLbl = k % 8 === 0 ? String(8 - r) : '';
             const fileLbl = k >= 56 ? 'abcdefgh'[f] : '';
             return (
               <button key={i} onClick={() => tap(i)} className={`relative flex items-center justify-center ${dark ? 'bg-[#779556]' : 'bg-[#ebecd0]'} ${i === kingSq ? '!bg-red-500' : ''}`}>
                 {isLast && <span className="absolute inset-0 bg-yellow-300/50 pointer-events-none" />}
                 {sel === i && <span className="absolute inset-0 bg-sky-400/50 pointer-events-none" />}
+                {pre && (pre.f === i || pre.to === i) && <span className="absolute inset-0 bg-orange-500/55 pointer-events-none" />}
                 {rankLbl && <span className={`absolute top-0.5 left-1 text-[9px] font-bold ${dark ? 'text-[#ebecd0]' : 'text-[#779556]'}`}>{rankLbl}</span>}
                 {fileLbl && <span className={`absolute bottom-0 right-1 text-[9px] font-bold ${dark ? 'text-[#ebecd0]' : 'text-[#779556]'}`}>{fileLbl}</span>}
-                {pc && <span className={`relative leading-none select-none text-[clamp(28px,10.5vw,56px)] transition-transform ${sel === i ? 'scale-110' : ''} ${pc[0] === 'w' ? 'text-white [text-shadow:0_0_2px_#000,0_0_3px_#000,0_2px_3px_rgba(0,0,0,.6)]' : 'text-[#1b1b1b] [text-shadow:0_0_1.5px_rgba(255,255,255,.55),0_2px_3px_rgba(0,0,0,.35)]'}`}>{PIECE_GLYPH[pc[1]]}</span>}
+                {pc && <span className={`relative leading-none select-none text-[9.8cqw] transition-transform ${sel === i ? 'scale-110' : ''} ${pc[0] === 'w' ? 'text-white [text-shadow:0_0_2px_#000,0_0_3px_#000,0_2px_3px_rgba(0,0,0,.6)]' : 'text-[#1b1b1b] [text-shadow:0_0_1.5px_rgba(255,255,255,.55),0_2px_3px_rgba(0,0,0,.35)]'}`}>{PIECE_GLYPH[pc[1]]}</span>}
                 {tgt && <span className={`absolute rounded-full pointer-events-none ${pc ? 'inset-1 ring-[5px] ring-black/25' : 'w-[30%] h-[30%] bg-black/25'}`} />}
               </button>
             );
@@ -10969,8 +11049,18 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
           </div>
         )}
       </div>
-      <div className="w-full max-w-md px-3 mt-3"><Bar u={me} c={myColor} mineBar /></div>
-      <div className="w-full max-w-md px-3 mt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <div className="w-full max-w-xl px-3 mt-2 flex flex-wrap items-center justify-center gap-1.5" dir="ltr">
+        <button onClick={() => stepTo(0)} disabled={vIdx === 0} aria-label="البداية" className="w-10 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronsLeft size={18} /></button>
+        <button onClick={() => stepTo(vIdx - 1)} disabled={vIdx === 0} aria-label="النقلة السابقة" className="w-12 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronLeft size={20} /></button>
+        <button onClick={() => resize(bsize - 10)} disabled={bsize <= 50} aria-label="تصغير البورد" className="w-9 h-9 rounded-xl bg-white/10 text-white text-xl font-bold disabled:opacity-30 active:scale-95">−</button>
+        <button onClick={() => resize(bsize + 10)} disabled={bsize >= 100} aria-label="تكبير البورد" className="w-9 h-9 rounded-xl bg-white/10 text-white text-xl font-bold disabled:opacity-30 active:scale-95">+</button>
+        <span className="min-w-[4.5rem] text-center text-xs text-gray-400 tabular-nums">{vIdx} / {hist.length - 1}</span>
+        <button onClick={() => stepTo(vIdx + 1)} disabled={!reviewing} aria-label="النقلة التالية" className="w-12 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronRight size={20} /></button>
+        <button onClick={() => stepTo(hist.length - 1)} disabled={!reviewing} aria-label="الأخيرة" className="w-10 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronsRight size={18} /></button>
+      </div>
+      {(reviewing || canPre) && <div className="w-full max-w-xl px-3 mt-1.5 text-center text-[11px] text-gray-400">{reviewing ? 'بتشوف نقلة قديمة، اضغط ⏭ للرجوع للمباراة' : pre ? 'نقلتك المسبقة جاهزة وهتتنفذ أول ما يجي دورك (اضغط أي مربع لإلغائها)' : 'دور الخصم: تقدر تختار نقلتك مقدمًا (بريموف)'}</div>}
+      <div className="w-full max-w-xl px-3 mt-3"><Bar u={me} c={myColor} mineBar /></div>
+      <div className="w-full max-w-xl px-3 mt-3">
         {over ? (
           <button onClick={onNew} className="w-full py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold active:scale-[0.98]">لعبة جديدة</button>
         ) : game.drawBy && game.drawBy !== meId ? (
@@ -10981,6 +11071,24 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
             <button onClick={async () => { if (await kanConfirm('تستسلم في المباراة؟')) onResign(); }} className="flex-1 py-2.5 rounded-full bg-red-500/15 text-red-300 text-sm font-semibold active:scale-[0.98]">🏳️ استسلام</button>
           </div>
         )}
+      </div>
+      <div className="w-full max-w-xl px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        {chat.length > 0 && (
+          <div className="mb-2 space-y-1">
+            {chat.slice(-3).map(m => (
+              <div key={m.id} className={`flex ${m.senderId === meId ? 'justify-start' : 'justify-end'}`}>
+                <span dir="auto" className={`max-w-[80%] px-3 py-1 rounded-2xl text-sm break-words ${m.senderId === meId ? 'bg-violet-600/80 text-white' : 'bg-white/12 text-gray-100'}`}>{m.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-1 mb-2">
+          {['👏', '😂', '😮', '😡', '😢', '🤝', '🔥', '😎', '🤔'].map(e => <button key={e} onClick={() => sendChat(e)} className="flex-1 h-10 rounded-xl bg-white/10 text-xl active:scale-90 transition-transform">{e}</button>)}
+        </div>
+        <div className="flex items-center gap-2">
+          <input value={msgTxt} onChange={e => setMsgTxt(e.target.value.slice(0, 200))} onKeyDown={e => { if (e.key === 'Enter') sendChat(msgTxt); }} placeholder="اكتب رسالة..." className="flex-1 min-w-0 h-10 rounded-full bg-white/10 px-4 text-sm text-white placeholder-gray-500 outline-none focus:ring-1 focus:ring-cyan-400/60" />
+          <button onClick={() => sendChat(msgTxt)} disabled={!msgTxt.trim()} aria-label="إرسال" className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white flex items-center justify-center disabled:opacity-40 active:scale-90"><Send size={17} /></button>
+        </div>
       </div>
     </div>,
     document.body,
@@ -11408,7 +11516,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           </div>
         </button>
         {showGames && <GamePicker onClose={() => setShowGames(false)} onInvite={(at, tc) => { sendGame({ k: 'inv', g: crypto.randomUUID(), at, tc }); setShowGames(false); }} />}
-        {openGame && <ChessGame game={openGame} games={games} meId={currentUser.id} me={currentUser} other={chatUser} onMove={mv => sendGame({ k: 'mv', g: openGame.g, n: openGame.moves.length, m: mv })} onResign={() => sendGame({ k: 'res', g: openGame.g })} onDraw={k => sendGame({ k, g: openGame.g })} onTimeout={() => sendGame({ k: 'to', g: openGame.g })} onNew={() => { sendGame({ k: 'inv', g: crypto.randomUUID(), at: Date.now(), tc: openGame.tc }); setOpenGid(null); }} onClose={() => setOpenGid(null)} />}
+        {openGame && <ChessGame game={openGame} games={games} meId={currentUser.id} me={currentUser} other={chatUser} onMove={mv => sendGame({ k: 'mv', g: openGame.g, n: openGame.moves.length, m: mv })} onResign={() => sendGame({ k: 'res', g: openGame.g })} onDraw={k => sendGame({ k, g: openGame.g })} onTimeout={() => sendGame({ k: 'to', g: openGame.g })} onNew={() => { sendGame({ k: 'inv', g: crypto.randomUUID(), at: Date.now(), tc: openGame.tc }); setOpenGid(null); }} onClose={() => setOpenGid(null)} chat={messages.filter(m => m.text && !parseGame(m.text) && !parseVote(m.text) && !parsePoll(m.text) && m.timestamp >= openGame.ts).slice(-4)} onChat={t => void send({ text: t })} />}
         <div className="relative">
           <button
             onClick={() => setShowBgPicker(!showBgPicker)}
