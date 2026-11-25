@@ -4175,8 +4175,8 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const [mStart, setMStart] = useState(0);
   const [mEnd, setMEnd] = useState(0);
   const musicPick = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (!music) return; const len = mEnd > mStart ? mEnd - mStart : 30; setDur(Math.max(3, Math.min(60, Math.round(len)))); }, [music, mStart, mEnd]);
   const [remoteM, setRemoteM] = useState<{ url: string; name: string; cover?: string } | null>(null);
+  useEffect(() => { if (!music && !remoteM) return; const len = mEnd > mStart ? mEnd - mStart : 30; setDur(Math.max(3, Math.min(60, Math.round(len)))); }, [music, remoteM, mStart, mEnd]);
   const [mStyle, setMStyle] = useState<'cover' | 'text' | 'none'>('none');
   const [tp, setTp] = useState<Pct | undefined>(undefined);
   const [bgc, setBgc] = useState('#000000');
@@ -4438,15 +4438,15 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
           {remoteM && !music && mStyle === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={q => setTp(o => ({ ...q, r: o?.r }))} />}
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
-          <div className="absolute top-12 end-3 z-20 flex flex-col gap-2 max-h-[calc(100%-4rem)] overflow-y-auto no-scrollbar">
-            {([['text', TypeIcon, 'نص', items.some(i => i.k === 't')], ['sticker', Smile, 'ملصق', items.length > 0], ['music', Music, 'موسيقى', !!music || !!remoteM], ['filter', Wand2, 'فلتر', flt > 0], ...(isVideo ? [] : [['frame', ImageIcon, 'الخلفية والتدوير', bgc !== '#000000' || rot !== 0] as const]), ['draw', Pencil, 'رسم', strokes.current.length > 0], ['tags', MapPin, 'موقع ومنشن', !!(loc.trim() || men.trim() || lnk.trim())], ['poll', BarChart3, 'استطلاع', !!extra.poll], ['ask', HelpCircle, 'سؤال', !!extra.ask], ['count', Clock, 'عدّاد', items.some(i => i.k === 'c')], ['dur', Play, 'مدة العرض', dur !== 5], ['aud', Users, 'مقربين', aud === 'close'], ['sched', Calendar, 'جدولة', !!sched]] as const).map(([k, Ic, label, on]) => (
-              <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} aria-label={label} title={label} className={`relative shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-white active:scale-90 transition-transform ${tool === k ? 'bg-white/30 backdrop-blur-xl ring-2 ring-white' : 'bg-black/35 backdrop-blur-xl ring-1 ring-white/30'}`} style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.5))' }}><Ic size={22} strokeWidth={2.3} color="#fff" />{on && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-white ring-2 ring-violet-600" />}</button>
+          <div className="absolute top-12 end-2 min-[400px]:end-3 z-20 flex flex-col gap-1.5 min-[400px]:gap-2 max-h-[calc(100%-4rem)] overflow-y-auto no-scrollbar">
+            {([['text', TypeIcon, 'نص', items.some(i => i.k === 't')], ['sticker', Smile, 'ملصق', items.length > 0], ['music', Music, 'موسيقى', !!music || !!remoteM], ['filter', Wand2, 'فلتر', flt > 0], ...(isVideo ? [] : [['frame', ImageIcon, 'الخلفية والتدوير', bgc !== '#000000' || rot !== 0] as const]), ['draw', Pencil, 'رسم', strokes.current.length > 0], ['poll', BarChart3, 'استطلاع', !!extra.poll], ['ask', HelpCircle, 'سؤال', !!extra.ask], ['count', Clock, 'عدّاد', items.some(i => i.k === 'c')], ['dur', Play, 'مدة العرض', dur !== 5], ['aud', Users, 'مقربين', aud === 'close'], ['sched', Calendar, 'جدولة', !!sched]] as const).map(([k, Ic, label, on]) => (
+              <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} aria-label={label} title={label} className={`relative shrink-0 w-9 h-9 min-[400px]:w-11 min-[400px]:h-11 rounded-full flex items-center justify-center text-white active:scale-90 transition-transform ${tool === k ? 'bg-white/30 backdrop-blur-xl ring-2 ring-white' : 'bg-black/35 backdrop-blur-xl ring-1 ring-white/30'}`} style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.5))' }}><Ic size={22} strokeWidth={2.3} color="#fff" />{on && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-white ring-2 ring-violet-600" />}</button>
             ))}
           </div>
           <StoryOverlays extra={extra} sel={sel} xsel={xsel} onXSelect={k => { setXsel(k); setSel(-1); setTool(k); }} onXf={(k, p) => (k === 'poll' ? setPollPos(o => ({ ...o, ...p })) : setAskPos(o => ({ ...o, ...p })))} onXRemove={k => { if (k === 'poll') { setPq(''); setPa(''); setPb(''); setPxs([]); } else setAsk(''); setXsel(''); }} onSelect={i => { setSel(i); setXsel(''); if (items[i]?.k === 't') setTool('text'); }} onRemove={removeItem} onScale={(i, sz) => setItems(a => a.map((x, k) => (k === i ? { ...x, s: sz } : x)))} onRotate={(i, r) => setItems(a => a.map((x, k) => (k === i ? { ...x, r } : x)))} onMove={(k, x, y, idx) => { if (k === 'text') { const tk = extra.texts?.[idx ?? -1]?.k; if (tk === 'loc') setLocP(o => ({ ...o, x, y })); else if (tk === 'men') setMenP(o => ({ ...o, x, y })); else if (tk === 'lnk') setLnkP(o => ({ ...o, x, y })); } else if (k === 'poll') setPollPos(o => ({ ...o, x, y })); else if (k === 'item' && idx !== undefined) setItems(a => a.map((it, i) => (i === idx ? { ...it, x, y } : it))); else setStkPos({ x, y }); }} />
         </div>
       </div>
-      <div className={`absolute inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 ${tool ? 'rounded-3xl bg-black/70 backdrop-blur-2xl ring-1 ring-white/15 p-3 max-h-[42%] overflow-y-auto shadow-2xl' : 'hidden'}`}>
+      <div className={`absolute inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 ${tool ? 'rounded-3xl bg-black/70 backdrop-blur-2xl ring-1 ring-white/15 p-3 max-h-[48%] overflow-y-auto overscroll-contain shadow-2xl' : 'hidden'}`}>
         {tool === 'text' && <div className="space-y-2 mb-1">
           <div className="flex gap-2"><input value={tNew} onChange={e => setTNew(e.target.value.slice(0, 200))} onKeyDown={e => { if (e.key === 'Enter') addText(tNew); }} placeholder="اكتب نصاً ثم اضغط +" dir="auto" className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><button onClick={() => addText(tNew)} className="shrink-0 w-10 h-10 rounded-full bg-white text-black flex items-center justify-center active:scale-90" aria-label="إضافة"><Plus size={20} /></button></div>
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -4464,7 +4464,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <div className="flex gap-2"><input type="datetime-local" value={cWhen} onChange={e => setCWhen(e.target.value)} style={{ colorScheme: 'dark' }} className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white focus:outline-none" /><button onClick={() => { const t = new Date(cWhen); if (!cWhen || t.getTime() < Date.now()) { setErr('اختر موعداً في المستقبل'); return; } addItem('c', t.toISOString(), undefined, { l: cTitle.trim() || undefined }); setCTitle(''); setCWhen(''); }} className="shrink-0 w-10 h-10 rounded-full bg-white text-black flex items-center justify-center active:scale-90" aria-label="إضافة"><Plus size={20} /></button></div>
           {selControls}
         </div>}
-        {tool === 'dur' && <div className="space-y-2 mb-1"><p className="text-white/80 text-xs">مدة ظهور الصورة في القصة: {dur} ث{music ? ' (محسوبة من المقطع)' : ''}{isVideo ? ' (الفيديو بياخد مدته الأصلية)' : ''}</p><div className="flex gap-2">{[5, 10, 15, 20].map(n => <button key={n} onClick={() => setDur(n)} disabled={isVideo} className={`flex-1 py-2 rounded-full text-sm font-semibold disabled:opacity-40 ${dur === n ? 'bg-white text-black' : 'bg-white/15 text-white'}`}>{n} ث</button>)}</div></div>}
+        {tool === 'dur' && <div className="space-y-2 mb-1"><p className="text-white/80 text-xs">مدة ظهور الصورة في القصة: {dur} ث{music || remoteM ? ' (مدة الكوبليه المختار)' : ''}{isVideo ? ' (الفيديو بياخد مدته الأصلية)' : ''}</p><div className="flex gap-2">{[5, 10, 15, 20].map(n => <button key={n} onClick={() => setDur(n)} disabled={isVideo || !!music || !!remoteM} className={`flex-1 py-2 rounded-full text-sm font-semibold disabled:opacity-40 ${dur === n ? 'bg-white text-black' : 'bg-white/15 text-white'}`}>{n} ث</button>)}</div></div>}
         {tool === 'draw' && <div className="space-y-2 mb-1">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             {TXT_COLORS.map(c => <button key={c} onClick={() => setPen(c)} aria-label="لون القلم" className={`shrink-0 w-8 h-8 rounded-full border-2 ${pen === c ? 'border-white scale-110' : 'border-white/30'}`} style={{ background: c }} />)}
@@ -5858,7 +5858,7 @@ export default function App() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async payload => {
         const row = payload.new as unknown as MessageRow;
         if (row.sender_id !== currentUserId) {
-          playSound('receive');
+          { const gm = parseGame(row.text); if (!gm || gm.k === 'inv') playSound('receive'); } // chess moves make no message sound
           markDelivered(currentUserId);
           const ui = uiRef.current;
           if (document.visibilityState === 'hidden') {
@@ -10885,7 +10885,7 @@ function ScrollDownFab({ fab, onClick }: { fab: ChatFab; onClick: () => void }) 
 // Everything travels as hidden chat messages (same trick as poll votes), so no new tables are needed:
 // invite (with start time) -> accept/decline -> moves -> resign. Results and the win counter are derived from them.
 const GAME_TAG = '⟦g⟧';
-type GameMsg = { k: 'inv' | 'acc' | 'dec' | 'mv' | 'res' | 'dr' | 'da' | 'dd' | 'to'; g: string; at?: number; tc?: number; n?: number; m?: string };
+type GameMsg = { k: 'inv' | 'acc' | 'dec' | 'mv' | 'res' | 'dr' | 'da' | 'dd' | 'to' | 'jn'; g: string; at?: number; tc?: number; n?: number; m?: string };
 function parseGame(t?: string | null): GameMsg | null {
   if (!t || !t.startsWith(GAME_TAG)) return null;
   try { const d = JSON.parse(t.slice(GAME_TAG.length)); return d && typeof d.g === 'string' && typeof d.k === 'string' ? (d as GameMsg) : null; } catch { return null; }
@@ -11001,7 +11001,7 @@ const chessParse = (s: CState, str: string): CMove | undefined => chessLegal(s, 
 type GameInfo = {
   g: string; inviter: string; invitee: string; at: number; ts: number; tc: number; // tc = minutes per player (0 = no clock)
   accepted: boolean | null; moves: string[]; st: CState; status: ChessStatus; last?: [number, number];
-  startTs: number; lastTs: number; spent: { w: number; b: number };
+  startTs: number; lastTs: number; spent: { w: number; b: number }; ready: boolean; joinedBy: string[];
   resignedBy?: string; drawBy?: string; agreed?: boolean; timeout?: 'w' | 'b'; winner: string | null;
 };
 function collectGames(msgs: Message[], meId: string, otherId: string): GameInfo[] {
@@ -11009,11 +11009,12 @@ function collectGames(msgs: Message[], meId: string, otherId: string): GameInfo[
   const acc = new Map<string, number>();
   const mv = new Map<string, Map<number, { m: string; ts: number }>>();
   const claims: { g: string; by: string; ts: number }[] = [];
+  const joins = new Map<string, Map<string, number>>();
   for (const m of [...msgs].sort((a, b) => a.timestamp - b.timestamp)) {
     const d = parseGame(m.text);
     if (!d) continue;
     if (d.k === 'inv') {
-      if (!by.has(d.g)) by.set(d.g, { g: d.g, inviter: m.senderId, invitee: m.senderId === meId ? otherId : meId, at: d.at ?? m.timestamp, ts: m.timestamp, tc: Math.max(0, Math.min(60, d.tc ?? 0)), accepted: null, moves: [], st: chessStart(), status: 'play', startTs: 0, lastTs: 0, spent: { w: 0, b: 0 }, winner: null });
+      if (!by.has(d.g)) by.set(d.g, { g: d.g, inviter: m.senderId, invitee: m.senderId === meId ? otherId : meId, at: d.at ?? m.timestamp, ts: m.timestamp, tc: Math.max(0, Math.min(60, d.tc ?? 0)), accepted: null, moves: [], st: chessStart(), status: 'play', startTs: 0, lastTs: 0, spent: { w: 0, b: 0 }, winner: null, ready: false, joinedBy: [] });
       continue;
     }
     const gi = by.get(d.g);
@@ -11028,13 +11029,18 @@ function collectGames(msgs: Message[], meId: string, otherId: string): GameInfo[
     else if (d.k === 'dr' && gi.accepted) gi.drawBy = m.senderId;
     else if (d.k === 'dd' && gi.drawBy && gi.drawBy !== m.senderId) gi.drawBy = undefined;
     else if (d.k === 'da' && gi.drawBy && gi.drawBy !== m.senderId) gi.agreed = true;
+    else if (d.k === 'jn' && gi.accepted) { let j = joins.get(d.g); if (!j) { j = new Map(); joins.set(d.g, j); } if (!j.has(m.senderId)) j.set(m.senderId, m.timestamp); }
     else if (d.k === 'to' && gi.accepted) claims.push({ g: gi.g, by: m.senderId, ts: m.timestamp });
   }
   for (const gi of by.values()) {
     if (!gi.accepted) continue;
     const mm = mv.get(gi.g);
     const budget = gi.tc * 60000;
-    gi.startTs = Math.max(gi.at, acc.get(gi.g) ?? 0);
+    const jm = joins.get(gi.g);
+    gi.joinedBy = jm ? [...jm.keys()] : [];
+    const bothAt = jm && jm.has(gi.inviter) && jm.has(gi.invitee) ? Math.max(jm.get(gi.inviter)!, jm.get(gi.invitee)!) : 0;
+    gi.ready = bothAt > 0 || (mm?.has(0) ?? false); // games that already have moves (older ones) count as started
+    gi.startTs = Math.max(gi.at, acc.get(gi.g) ?? 0, bothAt);
     gi.lastTs = gi.startTs;
     let s = chessStart();
     for (let n = 0; mm?.has(n); n++) {
@@ -11201,7 +11207,7 @@ function chessSound(kind: 'move' | 'capture' | 'check') {
   } catch { /* no audio */ }
 }
 
-function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onTimeout, onNew, onClose, chat, onChat }: { chat: Message[]; onChat: (t: string) => void; game: GameInfo; games: GameInfo[]; meId: string; me: User; other: User; onMove: (mv: string) => void; onResign: () => void; onDraw: (k: 'dr' | 'da' | 'dd') => void; onTimeout: () => void; onNew: () => void; onClose: () => void }) {
+function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onTimeout, onJoin, onNew, onClose, chat, onChat }: { chat: Message[]; onChat: (t: string) => void; game: GameInfo; games: GameInfo[]; meId: string; me: User; other: User; onMove: (mv: string) => void; onResign: () => void; onDraw: (k: 'dr' | 'da' | 'dd') => void; onTimeout: () => void; onJoin: () => void; onNew: () => void; onClose: () => void }) {
   const myColor: 'w' | 'b' = game.inviter === meId ? 'w' : 'b';
   const oppColor: 'w' | 'b' = myColor === 'w' ? 'b' : 'w';
   const [sel, setSel] = useState<number | null>(null);
@@ -11209,7 +11215,19 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
   const [now, setNow] = useState(Date.now());
   const over = game.winner !== null;
   const timed = game.tc > 0;
-  const running = !over && game.accepted === true;
+  const running = !over && game.accepted === true && game.ready;
+  const waitingOther = !over && game.accepted === true && !game.ready;
+  // The game only starts once both players have opened it: announce that I'm here.
+  const joinedRef = useRef(false);
+  useEffect(() => {
+    if (game.accepted === true && !over && !game.joinedBy.includes(meId) && !joinedRef.current) { joinedRef.current = true; onJoin(); }
+  }, [game.accepted, over, game.joinedBy, meId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [compact, setCompact] = useState(() => window.innerHeight < 720 || window.innerWidth < 380);
+  useEffect(() => {
+    const f = () => setCompact(window.innerHeight < 720 || window.innerWidth < 380);
+    window.addEventListener('resize', f); return () => window.removeEventListener('resize', f);
+  }, []);
+  const skipAnim = useRef(-1);
   useEffect(() => {
     if (!running || !timed) return;
     const h = window.setInterval(() => setNow(Date.now()), 250);
@@ -11267,6 +11285,13 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
   const [msgTxt, setMsgTxt] = useState('');
   const sendChat = (t: string) => { const v = t.trim(); if (v) { onChat(v); setMsgTxt(''); } };
   const order = Array.from({ length: 64 }, (_, k) => (myColor === 'w' ? k : 63 - k));
+  // Smooth move: the piece glides from its old square to the new one.
+  const slideStyle = (i: number): React.CSSProperties | undefined => {
+    if (reviewing || !game.last || game.last[1] !== i || skipAnim.current === game.moves.length - 1) return undefined;
+    const col = (sq: number) => (myColor === 'w' ? sq % 8 : 7 - (sq % 8));
+    const row = (sq: number) => (myColor === 'w' ? Math.floor(sq / 8) : 7 - Math.floor(sq / 8));
+    return { ['--dx' as string]: String((col(game.last[0]) - col(i)) * 113.6), ['--dy' as string]: String((row(game.last[0]) - row(i)) * 113.6), animation: 'kpSlide .22s cubic-bezier(.22,.8,.3,1) both', zIndex: 5 };
+  };
   const tap = (i: number) => {
     if (reviewing || promo) return;
     if (canPre) {
@@ -11306,18 +11331,18 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
       setDrag(null); suppressClick.current = true; window.setTimeout(() => { suppressClick.current = false; }, 60);
       const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-sq]') as HTMLElement | null;
       const to = el ? Number(el.dataset.sq) : -1;
-      if (to >= 0 && to !== d.from) tapRef.current(to);
+      if (to >= 0 && to !== d.from) { skipAnim.current = game.moves.length; tapRef.current(to); }
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   };
   const reason = game.status === 'mate' ? 'كش مات' : game.status === 'stalemate' ? 'لا توجد حركات' : game.status === 'draw' ? 'تعادل' : game.agreed ? 'بالاتفاق' : game.timeout ? 'انتهى الوقت' : game.resignedBy ? 'استسلام' : '';
-  const headline = !over ? (myTurn ? 'دورك' : `دور ${other.displayName}`) : game.winner === 'draw' ? '🤝 تعادل' : game.winner === meId ? '🏆 فزت!' : `🏆 فاز ${other.displayName}`;
+  const headline = waitingOther ? `بانتظار دخول ${other.displayName}...` : !over ? (myTurn ? 'دورك' : `دور ${other.displayName}`) : game.winner === 'draw' ? '🤝 تعادل' : game.winner === meId ? '🏆 فزت!' : `🏆 فاز ${other.displayName}`;
   const Bar = ({ u, c, mineBar }: { u: User; c: 'w' | 'b'; mineBar: boolean }) => {
     const lost = chessLost(game.st.b, c === 'w' ? 'b' : 'w'); // what this player has captured
     const active = running && game.st.t === c;
     const ms = left(c);
     return (
-      <div className={`w-full flex items-center gap-2.5 rounded-2xl px-3 py-2 ${active ? 'bg-white/10 ring-1 ring-emerald-400/50' : 'bg-white/5'}`}>
+      <div className={`w-full flex items-center gap-2.5 rounded-2xl px-3 ${compact ? 'py-1' : 'py-2'} ${active ? 'bg-white/10 ring-1 ring-emerald-400/50' : 'bg-white/5'}`}>
         <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="sm" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-sm text-white font-semibold truncate"><span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c === 'w' ? 'bg-white' : 'bg-gray-700 ring-1 ring-white/40'}`} />{mineBar ? 'أنت' : u.displayName}</div>
@@ -11328,17 +11353,18 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
     );
   };
   return createPortal(
-    <div className="fixed inset-0 z-[90] flex flex-col items-center overflow-y-auto overflow-x-hidden" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', background: 'linear-gradient(180deg,#272a62 0%,#5a3c82 60%,#9a4f96 100%)' }} dir="rtl">
-      <div className="shrink-0 w-full max-w-xl px-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between">
+    <div className="fixed inset-0 z-[90] flex flex-col items-center overflow-y-auto overscroll-contain" style={{ background: 'linear-gradient(180deg,#272a62 0%,#5a3c82 60%,#9a4f96 100%)' }} dir="rtl">
+      <style>{'@keyframes kpSlide{from{transform:translate(calc(var(--dx)*1%),calc(var(--dy)*1%))}to{transform:translate(0,0)}}'}</style>
+      <div className="w-full max-w-xl px-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white" aria-label="إغلاق"><X size={18} /></button>
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 text-sm">
           <span className="text-gray-400">أنت</span><b className="text-white text-base tabular-nums">{sc.me}</b><span className="text-gray-600">–</span><b className="text-white text-base tabular-nums">{sc.them}</b><span className="text-gray-400 truncate max-w-[5rem]">{other.displayName}</span>{sc.draw ? <span className="text-gray-500 text-xs">· {sc.draw} تعادل</span> : null}
         </div>
         <span className="w-9" />
       </div>
-      <div className="shrink-0 w-full max-w-xl px-3 mt-3"><Bar u={other} c={oppColor} mineBar={false} /></div>
-      <div className="shrink-0 w-full max-w-xl px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
-      <div dir="ltr" className="relative shrink-0 mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `min(${bsize}%, calc((100dvh - 17rem) * ${bsize / 100}))`, minWidth: 'min(14rem, 100%)', flexShrink: 0 }}>
+      <div className="w-full max-w-xl px-3 mt-3">{Bar({ u: other, c: oppColor, mineBar: false })}</div>
+      <div className="w-full max-w-xl px-3 mt-2 text-center"><span className={`inline-block px-4 py-1 rounded-full text-xs font-bold ${over ? 'bg-amber-500/20 text-amber-300' : myTurn ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-gray-300'}`}>{headline}{over && reason ? ` · ${reason}` : game.status === 'check' && !over ? ' · كش!' : ''}</span></div>
+      <div dir="ltr" className="relative mt-2 w-full max-w-xl px-1 mx-auto" style={{ width: `min(${bsize}%, calc((100dvh - ${compact ? 15 : 17}rem) * ${bsize / 100}))`, minWidth: 'min(14rem, 100%)' }}>
         <div className="grid w-full rounded-xl overflow-hidden shadow-[0_10px_40px_-8px_rgba(20,10,60,.7)]" style={{ aspectRatio: '1 / 1', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gridTemplateRows: 'repeat(8, minmax(0, 1fr))', touchAction: 'none' }}>
           {order.map((i, k) => {
             const r = Math.floor(i / 8), f = i % 8;
@@ -11355,7 +11381,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
                 {pre && (pre.f === i || pre.to === i) && <span className="absolute inset-0 bg-orange-500/55 pointer-events-none" />}
                 {rankLbl && <span className={`absolute top-0.5 left-1 text-[9px] font-bold ${dark ? 'text-[#faf0e8]' : 'text-[#4b8eab]'}`}>{rankLbl}</span>}
                 {fileLbl && <span className={`absolute bottom-0 right-1 text-[9px] font-bold ${dark ? 'text-[#faf0e8]' : 'text-[#4b8eab]'}`}>{fileLbl}</span>}
-                {pc && !(drag && drag.from === i) && <ChessPiece t={pc[1]} w={pc[0] === 'w'} className={`relative w-[88%] h-[88%] pointer-events-none select-none drop-shadow-[0_2px_2px_rgba(20,10,50,.45)] transition-transform ${sel === i ? 'scale-110' : ''}`} />}
+                {pc && !(drag && drag.from === i) && <ChessPiece t={pc[1]} w={pc[0] === 'w'} className={`relative w-[88%] h-[88%] pointer-events-none select-none drop-shadow-[0_2px_2px_rgba(20,10,50,.45)] transition-transform ${sel === i ? 'scale-110' : ''}`} style={slideStyle(i)} />}
                 {tgt && <span className={`absolute rounded-full pointer-events-none ${pc ? 'inset-1 ring-[5px] ring-black/25' : 'w-[30%] h-[30%] bg-black/25'}`} />}
               </button>
             );
@@ -11370,7 +11396,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
           </div>
         )}
       </div>
-      <div className="shrink-0 w-full max-w-xl px-3 mt-2 flex flex-wrap items-center justify-center gap-1.5" dir="ltr">
+      <div className="w-full max-w-xl px-3 mt-2 flex flex-wrap items-center justify-center gap-1.5" dir="ltr">
         <button onClick={() => stepTo(0)} disabled={vIdx === 0} aria-label="البداية" className="w-10 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronsLeft size={18} /></button>
         <button onClick={() => stepTo(vIdx - 1)} disabled={vIdx === 0} aria-label="النقلة السابقة" className="w-12 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronLeft size={20} /></button>
         <button onClick={() => resize(bsize - 10)} disabled={bsize <= 50} aria-label="تصغير البورد" className="w-9 h-9 rounded-xl bg-white/10 text-white text-xl font-bold disabled:opacity-30 active:scale-95">−</button>
@@ -11379,9 +11405,9 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
         <button onClick={() => stepTo(vIdx + 1)} disabled={!reviewing} aria-label="النقلة التالية" className="w-12 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronRight size={20} /></button>
         <button onClick={() => stepTo(hist.length - 1)} disabled={!reviewing} aria-label="الأخيرة" className="w-10 h-9 rounded-xl bg-white/10 text-white disabled:opacity-30 active:scale-95 flex items-center justify-center"><ChevronsRight size={18} /></button>
       </div>
-      {(reviewing || canPre) && <div className="shrink-0 w-full max-w-xl px-3 mt-1.5 text-center text-[11px] text-gray-400">{reviewing ? 'بتشوف نقلة قديمة، اضغط ⏭ للرجوع للمباراة' : pre ? 'نقلتك المسبقة جاهزة وهتتنفذ أول ما يجي دورك (اضغط أي مربع لإلغائها)' : 'دور الخصم: تقدر تختار نقلتك مقدمًا (بريموف)'}</div>}
-      <div className="shrink-0 w-full max-w-xl px-3 mt-3"><Bar u={me} c={myColor} mineBar /></div>
-      <div className="shrink-0 w-full max-w-xl px-3 mt-3">
+      {(reviewing || canPre) && <div className="w-full max-w-xl px-3 mt-1.5 text-center text-[11px] text-gray-400">{reviewing ? 'بتشوف نقلة قديمة، اضغط ⏭ للرجوع للمباراة' : pre ? 'نقلتك المسبقة جاهزة وهتتنفذ أول ما يجي دورك (اضغط أي مربع لإلغائها)' : 'دور الخصم: تقدر تختار نقلتك مقدمًا (بريموف)'}</div>}
+      <div className="w-full max-w-xl px-3 mt-3">{Bar({ u: me, c: myColor, mineBar: true })}</div>
+      <div className="w-full max-w-xl px-3 mt-3">
         {over ? (
           <button onClick={onNew} className="w-full py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold active:scale-[0.98]">لعبة جديدة</button>
         ) : game.drawBy && game.drawBy !== meId ? (
@@ -11393,7 +11419,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
           </div>
         )}
       </div>
-      <div className="shrink-0 w-full max-w-xl px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <div className="w-full max-w-xl px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {chat.length > 0 && (
           <div className="mb-2 space-y-1">
             {chat.slice(-3).map(m => (
@@ -11403,8 +11429,8 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
             ))}
           </div>
         )}
-        <div className="flex items-center justify-between gap-1 mb-2">
-          {['👏', '😂', '😮', '😡', '😢', '🤝', '🔥', '😎', '🤔'].map(e => <button key={e} onClick={() => sendChat(e)} className="flex-1 h-10 rounded-xl bg-white/10 text-xl active:scale-90 transition-transform">{e}</button>)}
+        <div className="flex items-center gap-1 mb-2 overflow-x-auto">
+          {['👏', '😂', '😮', '😡', '😢', '🤝', '🔥', '😎', '🤔'].map(e => <button key={e} onClick={() => sendChat(e)} className="flex-1 min-w-[2.5rem] h-10 rounded-xl bg-white/10 text-xl active:scale-90 transition-transform">{e}</button>)}
         </div>
         <div className="flex items-center gap-2">
           <input value={msgTxt} onChange={e => setMsgTxt(e.target.value.slice(0, 200))} onKeyDown={e => { if (e.key === 'Enter') sendChat(msgTxt); }} placeholder="اكتب رسالة..." className="flex-1 min-w-0 h-10 rounded-full bg-white/10 px-4 text-sm text-white placeholder-gray-500 outline-none focus:ring-1 focus:ring-cyan-400/60" />
@@ -11580,7 +11606,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     setConversations(prev => prev.map(c =>
       c.id !== convId ? c : { ...c, messages: c.messages.some(m => m.id === id) ? c.messages : [...c.messages, msg], lastActivity: msg.timestamp }
     ));
-    playSound('send');
+    { const gm = parseGame(body); if (!gm || gm.k === 'inv') playSound('send'); }
     void (async () => {
       try {
         if (opts.file && path) {
@@ -11857,7 +11883,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           </div>
         </button>
         {showGames && <GamePicker onClose={() => setShowGames(false)} onInvite={(at, tc) => { sendGame({ k: 'inv', g: crypto.randomUUID(), at, tc }); setShowGames(false); }} />}
-        {openGame && <ChessGame game={openGame} games={games} meId={currentUser.id} me={currentUser} other={chatUser} onMove={mv => sendGame({ k: 'mv', g: openGame.g, n: openGame.moves.length, m: mv })} onResign={() => sendGame({ k: 'res', g: openGame.g })} onDraw={k => sendGame({ k, g: openGame.g })} onTimeout={() => sendGame({ k: 'to', g: openGame.g })} onNew={() => { sendGame({ k: 'inv', g: crypto.randomUUID(), at: Date.now(), tc: openGame.tc }); setOpenGid(null); }} onClose={() => setOpenGid(null)} chat={messages.filter(m => m.text && !parseGame(m.text) && !parseVote(m.text) && !parsePoll(m.text) && m.timestamp >= openGame.ts).slice(-4)} onChat={t => void send({ text: t })} />}
+        {openGame && <ChessGame game={openGame} games={games} meId={currentUser.id} me={currentUser} other={chatUser} onMove={mv => sendGame({ k: 'mv', g: openGame.g, n: openGame.moves.length, m: mv })} onResign={() => sendGame({ k: 'res', g: openGame.g })} onDraw={k => sendGame({ k, g: openGame.g })} onTimeout={() => sendGame({ k: 'to', g: openGame.g })} onJoin={() => sendGame({ k: 'jn', g: openGame.g })} onNew={() => { sendGame({ k: 'inv', g: crypto.randomUUID(), at: Date.now(), tc: openGame.tc }); setOpenGid(null); }} onClose={() => setOpenGid(null)} chat={messages.filter(m => m.text && !parseGame(m.text) && !parseVote(m.text) && !parsePoll(m.text) && m.timestamp >= openGame.ts).slice(-4)} onChat={t => void send({ text: t })} />}
         <div className="relative">
           <button
             onClick={() => setShowBgPicker(!showBgPicker)}
