@@ -3478,7 +3478,7 @@ const bakeFilter = async (f: File, css: string): Promise<File | null> => {
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
 };
-type StoryExtra = { d?: number; items?: { k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string }[]; bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'lyrics'; lyr?: LyricLine[]; lp?: { x: number; y: number }; tp?: { x: number; y: number }; tc?: string }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string; o?: string[] }; pp?: { x: number; y: number; s?: number; r?: number }; ap?: { x: number; y: number; s?: number; r?: number }; ask?: string };
+type StoryExtra = { d?: number; items?: { k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string }[]; bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'none'; tp?: { x: number; y: number } }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean }[]; stickers?: string[]; poll?: { q: string; a: string; b: string; o?: string[] }; pp?: { x: number; y: number; s?: number; r?: number }; ap?: { x: number; y: number; s?: number; r?: number }; ask?: string };
 
 type StoryItemEdit = { id: string; k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string; file?: File };
 const STORY_FONTS = ['inherit', 'Georgia, "Times New Roman", serif', '"Courier New", monospace', '"Segoe Script", "Comic Sans MS", cursive'];
@@ -3866,20 +3866,8 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
   const [mEnd, setMEnd] = useState(0);
   const musicPick = useRef<HTMLInputElement>(null);
   const [remoteM, setRemoteM] = useState<{ url: string; name: string; cover?: string } | null>(null);
-  const [mStyle, setMStyle] = useState<'cover' | 'text' | 'lyrics'>('text');
-  const [lyr, setLyr] = useState<LyricLine[] | null>(null);
-  const [lyrBusy, setLyrBusy] = useState<'' | 'load' | 'none'>('');
-  const [lp, setLp] = useState({ x: 50, y: 62 });
+  const [mStyle, setMStyle] = useState<'cover' | 'text' | 'none'>('none');
   const [tp, setTp] = useState<Pct | undefined>(undefined);
-  const [mColor, setMColor] = useState('#ffffff');
-  useEffect(() => { setLyr(null); setLyrBusy(''); }, [remoteM?.url]);
-  const chooseStyle = async (k: 'cover' | 'text' | 'lyrics') => {
-    setMStyle(k);
-    if (k !== 'lyrics' || lyr || !remoteM) return;
-    setLyrBusy('load');
-    const l = await fetchLyrics(remoteM.name);
-    if (l.length) { setLyr(l); setLyrBusy(''); } else setLyrBusy('none');
-  };
   const [bgc, setBgc] = useState('#000000');
   const [rot, setRot] = useState(0);
   const [libOpen, setLibOpen] = useState(false);
@@ -3993,8 +3981,15 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
     if (!isVideo && flt > 0) { const b = await bakeFilter(baseFile, STORY_FILTERS[flt].f); if (b) { upFile = b; baked = true; } }
     if (!isVideo) upFile = await shrinkImageFile(upFile);
     const path = kanPath(`${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[upFile.type] ?? safeExt(upFile.name)}`, upFile.size);
+    // Show this upload in the always-visible upload bar (with cancel), like posts do.
+    const jobId = crypto.randomUUID();
+    const ctl = new AbortController();
+    jobCtl.set(jobId, ctl);
+    trackJob(jobId, 0, 'قصة');
+    pubSet(l => l.map(j => (j.id === jobId ? { ...j, size: upFile.size } : j)));
+    let storyOk = false;
     try {
-      const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, upFile, upFile.type || 'application/octet-stream', '31536000', setPct);
+      const { error: upErr } = await uploadWithProgress(POST_MEDIA_BUCKET, path, upFile, upFile.type || 'application/octet-stream', '31536000', pc => { setPct(pc); trackJob(jobId, pc); }, ctl.signal);
       if (upErr) throw upErr;
       const url = kanPublicUrl(POST_MEDIA_BUCKET, path);
       let uploadedItems: StoryExtra['items'];
@@ -4024,20 +4019,22 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
         const mp = musicPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
         if (mErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); setErr(`تعذّر رفع الموسيقى: ${(mErr as { message?: string }).message ?? ''}`); setBusy(false); return; }
-        mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, style: 'text', ...(tp ? { tp } : {}), ...(mColor !== '#ffffff' ? { tc: mColor } : {}) };
+        mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, style: 'none' };
       } else if (remoteM) {
-        const mEndAt = mEnd > mStart ? mEnd : mStart + 30;
-        const withLyr = mStyle === 'lyrics' && !!lyr && lyr.length > 0;
-        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEndAt, cover: remoteM.cover, style: mStyle === 'lyrics' && !withLyr ? 'text' : mStyle, ...(withLyr ? { lyr: lyr!.filter(x => x.t >= mStart - 6 && x.t <= mEndAt + 1).slice(0, 80), lp } : {}), ...(tp ? { tp } : {}), ...(mColor !== '#ffffff' ? { tc: mColor } : {}) };
+        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, cover: remoteM.cover, style: mStyle === 'cover' && remoteM.cover ? 'cover' : 'none', ...(tp && mStyle === 'cover' ? { tp } : {}) };
       }
       const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj, items: uploadedItems }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
       if (insErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); throw insErr; }
       notifyStoriesChanged();
+      storyOk = true;
       onDone();
     } catch (e) {
       console.error(e);
-      setErr(`تعذّر نشر القصة: ${(e as { message?: string })?.message ?? 'حاول مرة أخرى'}`);
+      if (!ctl.signal.aborted) setErr(`تعذّر نشر القصة: ${(e as { message?: string })?.message ?? 'حاول مرة أخرى'}`);
       setBusy(false);
+    } finally {
+      jobCtl.delete(jobId);
+      if (ctl.signal.aborted) dropJob(jobId); else endJob(jobId, storyOk);
     }
   };
   const selItem = sel >= 0 ? items[sel] : undefined;
@@ -4108,8 +4105,7 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
           <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 to-transparent pointer-events-none z-[5]" />
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent pointer-events-none z-[5]" />
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
-          {(music || remoteM) && <StoryMusicTag m={{ name: music ? music.name.replace(/\.[^.]+$/, '').slice(0, 60) : (remoteM?.name ?? ''), cover: remoteM?.cover, style: music ? 'text' : mStyle }} pos={tp} color={mColor} onMove={setTp} />}
-          {remoteM && !music && mStyle === 'lyrics' && lyr && <LyricsLive lines={lyr} start={mStart} end={mEnd > mStart ? mEnd : mStart + 30} pos={lp} color={mColor} onMove={setLp} />}
+          {remoteM && !music && mStyle === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={setTp} />}
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
           <div className="absolute top-12 end-3 z-20 flex flex-col gap-2 max-h-[calc(100%-4rem)] overflow-y-auto no-scrollbar">
             {([['text', TypeIcon, 'نص', items.some(i => i.k === 't')], ['sticker', Smile, 'ملصق', items.length > 0], ['music', Music, 'موسيقى', !!music || !!remoteM], ['filter', Wand2, 'فلتر', flt > 0], ...(isVideo ? [] : [['frame', ImageIcon, 'الخلفية والتدوير', bgc !== '#000000' || rot !== 0] as const]), ['draw', Pencil, 'رسم', strokes.current.length > 0], ['tags', MapPin, 'موقع ومنشن', !!(loc.trim() || men.trim() || lnk.trim())], ['poll', BarChart3, 'استطلاع', !!extra.poll], ['ask', HelpCircle, 'سؤال', !!extra.ask], ['count', Clock, 'عدّاد', items.some(i => i.k === 'c')], ['dur', Play, 'مدة العرض', dur !== 5], ['aud', Users, 'مقربين', aud === 'close'], ['sched', Calendar, 'جدولة', !!sched]] as const).map(([k, Ic, label, on]) => (
@@ -4171,15 +4167,13 @@ function StoryComposer({ file, currentUser, onClose, onDone }: { file: File; cur
           : <div className="space-y-2">
               {remoteM && <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2">
                 <div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{remoteM.name}</span><button onClick={() => { setRemoteM(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div>
-                <div className="flex gap-2 px-2 mt-2">{([['cover', '🖼 الغلاف'], ['text', 'Aa الاسم'], ['lyrics', '🎤 الكلمات']] as const).filter(([k]) => k !== 'cover' || !!remoteM.cover).map(([k, l]) => <button key={k} onClick={() => void chooseStyle(k)} className={`flex-1 py-1.5 rounded-full text-xs font-semibold ${mStyle === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}</div>
-                <div className="flex items-center gap-2 px-2 mt-2"><span className="text-[11px] text-gray-300 shrink-0">لون النص</span>{TAG_COLORS.map(c => <button key={c} onClick={() => setMColor(c)} aria-label={c} className={`w-6 h-6 rounded-full ring-2 ${mColor === c ? 'ring-white scale-110' : 'ring-white/20'}`} style={{ background: c }} />)}</div>
-                <p className="px-2 mt-1.5 text-[11px] text-gray-400">اسحب الغلاف أو الاسم على الشاشة لتحريكه</p>
-                {mStyle === 'lyrics' && <p className="px-2 mt-1.5 text-[11px] text-gray-300">{lyrBusy === 'load' ? 'جاري تحميل كلمات الأغنية...' : lyrBusy === 'none' ? 'مفيش كلمات متاحة للأغنية دي، هتظهر باسمها بس' : lyr ? 'اسحب الكلمات على الشاشة لتحريكها، وبتتحرك مع الأغنية للمقطع اللي اخترته' : ''}</p>}
+                <div className="flex gap-2 px-2 mt-2">{([['cover', '🖼 غلاف'], ['none', '🚫 بدون غلاف']] as const).filter(([k]) => k !== 'cover' || !!remoteM.cover).map(([k, l]) => <button key={k} onClick={() => setMStyle(k)} className={`flex-1 py-1.5 rounded-full text-xs font-semibold ${mStyle === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}</div>
+                {mStyle === 'cover' && <p className="px-2 mt-1.5 text-[11px] text-gray-400">اسحب الغلاف على الشاشة لتحريكه</p>}
                 <div className="mt-2"><MusicTrimmer key={remoteM.url} src={remoteM.url} name={remoteM.name} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div>
               </div>}
               {remoteM && !libOpen
                 ? <button onClick={() => setLibOpen(true)} className="w-full py-2.5 rounded-2xl bg-white/10 text-white text-xs font-semibold">تغيير الأغنية</button>
-                : <MusicLibrary onDevice={() => musicPick.current?.click()} onClose={remoteM ? () => setLibOpen(false) : undefined} onPick={t => { setMusic(null); setRemoteM(t); setMStart(t.start ?? 0); setMEnd(t.end ?? 0); setMStyle(t.cover ? 'cover' : 'text'); setLibOpen(false); }} />}
+                : <MusicLibrary onDevice={() => musicPick.current?.click()} onClose={remoteM ? () => setLibOpen(false) : undefined} onPick={t => { setMusic(null); setRemoteM(t); setMStart(t.start ?? 0); setMEnd(t.end ?? 0); setMStyle(t.cover ? 'cover' : 'none'); setLibOpen(false); }} />}
             </div>}
           <input ref={musicPick} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setMusic(f); setRemoteM(null); setMStart(0); setMEnd(0); } }} /></div>}
         {tool === 'tags' && <div className="space-y-2 mb-2">{([[MapPin, loc, setLoc, 'أضف موقعاً'], [AtSign, men, setMen, 'منشن لصديق (اسم المستخدم)'], [LinkIcon, lnk, setLnk, 'رابط أو هاشتاج']] as const).map(([Ic, v, set, ph]) => <div key={ph} className="flex items-center gap-2 bg-white/10 rounded-full ps-3"><Ic size={18} color="#fff" strokeWidth={2.2} /><input value={v} onChange={e => set(e.target.value)} placeholder={ph} className="flex-1 min-w-0 px-2 py-2 bg-transparent text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>)}</div>}
@@ -4237,28 +4231,7 @@ async function shrinkImageFile(f: File): Promise<File> {
   } catch { return f; }
 }
 
-// ---- Synced lyrics on a story (like Instagram): the current line shows on screen and can be dragged in the editor. ----
-type LyricLine = { t: number; l: string };
-function parseLrc(src: string): LyricLine[] {
-  const out: LyricLine[] = [];
-  for (const row of src.split('\n')) {
-    const m = /^\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)$/.exec(row.trim());
-    if (m && m[3].trim()) out.push({ t: Number(m[1]) * 60 + Number(m[2]), l: m[3].trim() });
-  }
-  return out;
-}
-async function fetchLyrics(name: string): Promise<LyricLine[]> {
-  try {
-    const q = name.replace(/\s*[([].*?[)\]]/g, '').slice(0, 100);
-    const r = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`);
-    if (!r.ok) return [];
-    const j = (await r.json()) as { syncedLyrics?: string | null }[];
-    const hit = Array.isArray(j) ? j.find(x => x && x.syncedLyrics) : undefined;
-    return hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
-  } catch { return []; }
-}
 type Pct = { x: number; y: number };
-const TAG_COLORS = ['#ffffff', '#facc15', '#22d3ee', '#f472b6', '#a3e635', '#fb923c', '#a78bfa', '#000000'];
 // Drag an absolutely-positioned child around its parent; reports the position in % of the parent.
 function pctDrag(onMove?: (p: Pct) => void) {
   return (e: React.PointerEvent<HTMLDivElement>) => {
@@ -4274,39 +4247,12 @@ function pctDrag(onMove?: (p: Pct) => void) {
   };
 }
 
-function LyricsOverlay({ lines, time, pos, color, onMove }: { lines: LyricLine[]; time: number; pos: Pct; color?: string; onMove?: (p: Pct) => void }) {
-  let i = -1;
-  for (let k = 0; k < lines.length; k++) { if (lines[k].t <= time) i = k; else break; }
-  const cur = i >= 0 ? lines[i].l : '';
-  const nxt = lines[i + 1]?.l ?? '';
-  if (!cur && !onMove) return null;
-  return (
-    <div onPointerDown={pctDrag(onMove)} style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: 'translate(-50%,-50%)', touchAction: 'none', color: color ?? '#fff' }}
-      className={`absolute z-20 w-[84%] text-center kan-always-white select-none ${onMove ? 'cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-xl p-1.5' : 'pointer-events-none'}`}>
-      <div className="text-2xl font-extrabold leading-snug [text-shadow:0_2px_10px_rgba(0,0,0,.75)]" dir="auto">{cur || '♪'}</div>
-      {nxt && <div className="mt-1 text-base font-bold opacity-60 [text-shadow:0_2px_8px_rgba(0,0,0,.7)]" dir="auto">{nxt}</div>}
-    </div>
-  );
-}
-
-// Editor preview: the lyrics advance by themselves over the chosen clip, so you see what viewers will see.
-function LyricsLive({ lines, start, end, pos, color, onMove }: { lines: LyricLine[]; start: number; end: number; pos: Pct; color?: string; onMove?: (p: Pct) => void }) {
-  const [t, setT] = useState(start);
-  useEffect(() => {
-    const len = Math.max(1, end - start);
-    const t0 = performance.now();
-    setT(start);
-    const id = window.setInterval(() => setT(start + (((performance.now() - t0) / 1000) % len)), 200);
-    return () => window.clearInterval(id);
-  }, [start, end]);
-  return <LyricsOverlay lines={lines} time={t} pos={pos} color={color} onMove={onMove} />;
-}
-
-function StoryMusicTag({ m, pos, color, onMove }: { m: { name: string; cover?: string; style?: 'cover' | 'text' | 'lyrics' }; pos?: Pct; color?: string; onMove?: (p: Pct) => void }) {
+function StoryMusicTag({ m, pos, onMove }: { m: { name: string; cover?: string; style?: 'cover' | 'text' | 'none' }; pos?: Pct; onMove?: (p: Pct) => void }) {
+  if (m.style === 'none') return null;
   const cover = m.style === 'cover' && !!m.cover;
   const p = pos ?? (cover ? { x: 50, y: 62 } : { x: 50, y: 13 });
   return (
-    <div onPointerDown={pctDrag(onMove)} style={{ left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', touchAction: onMove ? 'none' : undefined, color: color ?? '#fff' }}
+    <div onPointerDown={pctDrag(onMove)} style={{ left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', touchAction: onMove ? 'none' : undefined, color: '#fff' }}
       className={`absolute z-10 w-fit max-w-[80%] kan-always-white ${onMove ? 'cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-2xl' : 'pointer-events-none'}`}>
       {cover ? (
         <div className="flex items-center gap-3 p-2 pe-4 rounded-2xl bg-white/20 backdrop-blur-xl ring-1 ring-white/30 shadow-xl">
@@ -4320,10 +4266,9 @@ function StoryMusicTag({ m, pos, color, onMove }: { m: { name: string; cover?: s
   );
 }
 
-function StoryMusic({ m }: { m: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'lyrics'; lyr?: LyricLine[]; lp?: Pct; tp?: Pct; tc?: string } }) {
+function StoryMusic({ m }: { m: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'none'; tp?: Pct } }) {
   const ref = useRef<HTMLAudioElement>(null);
   const [mute, setMute] = useState(false);
-  const [time, setTime] = useState(m.start);
   const end = m.end > m.start ? m.end : m.start + 30;
   // Stay inside the chosen clip: start exactly at its beginning (even before metadata has loaded) and loop at its end.
   useEffect(() => {
@@ -4335,10 +4280,9 @@ function StoryMusic({ m }: { m: { url: string; name: string; start: number; end:
   return (
     <>
       <audio ref={ref} src={m.url} muted={mute} preload="auto"
-        onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= end || a.currentTime < m.start - 0.3) { a.currentTime = m.start; if (a.paused) void a.play().catch(() => undefined); } setTime(a.currentTime); }}
+        onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= end || a.currentTime < m.start - 0.3) { a.currentTime = m.start; if (a.paused) void a.play().catch(() => undefined); } }}
         onEnded={e => { const a = e.currentTarget; a.currentTime = m.start; void a.play().catch(() => undefined); }} />
-      <StoryMusicTag m={m} pos={m.tp} color={m.tc} />
-      {m.style === 'lyrics' && m.lyr && m.lyr.length > 0 && <LyricsOverlay lines={m.lyr} time={time} pos={m.lp ?? { x: 50, y: 62 }} color={m.tc} />}
+      <StoryMusicTag m={m} pos={m.tp} />
       <button onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setMute(v => !v); }} aria-label={mute ? 'تشغيل الصوت' : 'كتم الصوت'} className="absolute top-16 end-3 z-20 w-8 h-8 rounded-full bg-black/45 backdrop-blur ring-1 ring-white/30 flex items-center justify-center">{mute ? <VolumeX size={16} color="#fff" /> : <Volume2 size={16} color="#fff" />}</button>
     </>
   );
@@ -4999,22 +4943,82 @@ function describeMessage(m: Message): string {
   }
 }
 
+// ---- Downloads to the device: streamed with a live % and a cancel button (shown in the top bar and in "تحميلاتي"). ----
+type DownJob = { id: string; name: string; pct: number; got: number; total: number; status: 'run' | 'done' | 'fail'; note?: string; barHidden?: boolean };
+let downList: DownJob[] = [];
+const downSubs = new Set<() => void>();
+const downSet = (fn: (l: DownJob[]) => DownJob[]) => { downList = fn(downList); downSubs.forEach(f => f()); };
+const downSubscribe = (cb: () => void) => { downSubs.add(cb); return () => { downSubs.delete(cb); }; };
+const downSnapshot = () => downList;
+const downPatch = (id: string, patch: Partial<DownJob>) => downSet(l => l.map(j => (j.id === id ? { ...j, ...patch } : j)));
+const dropDown = (id: string) => downSet(l => l.filter(j => j.id !== id));
+const downCtl = new Map<string, AbortController>();
+const cancelDown = (id: string) => { downCtl.get(id)?.abort(); downCtl.delete(id); dropDown(id); };
+
+type SaveStream = { write: (c: Uint8Array) => Promise<void>; close: () => Promise<void>; abort: () => Promise<void> };
+const DIRECT_SAVE_MB = 150;   // desktop: above this, stream straight to disk (no memory limit)
+const MEMORY_SAVE_MB = 800;   // other browsers: above this, hand the link to the browser's own download manager
+
 // Saves a file to the device (works for private signed links too).
 async function downloadFile(url: string, filename: string) {
+  const id = crypto.randomUUID();
+  const ctl = new AbortController();
+  downCtl.set(id, ctl);
+  downSet(l => [...l, { id, name: filename, pct: 0, got: 0, total: 0, status: 'run' }]);
+  let sink: SaveStream | null = null;
+  let handoff = false;
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: ctl.signal });
     if (!res.ok) throw new Error(`download failed: ${res.status}`);
-    const blobUrl = URL.createObjectURL(await res.blob());
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    const total = Number(res.headers.get('content-length') || 0);
+    downPatch(id, { total });
+    const picker = (window as unknown as { showSaveFilePicker?: (o: { suggestedName: string }) => Promise<{ createWritable: () => Promise<SaveStream> }> }).showSaveFilePicker;
+    if (picker && total > DIRECT_SAVE_MB * 1024 * 1024) {
+      try { sink = await (await picker({ suggestedName: filename })).createWritable(); }
+      catch (e) { if ((e as { name?: string })?.name === 'AbortError') { ctl.abort(); dropDown(id); return; } sink = null; }
+    }
+    if (!sink && total > MEMORY_SAVE_MB * 1024 * 1024) {
+      handoff = true; ctl.abort();
+      window.open(url, '_blank');
+      downPatch(id, { pct: 100, status: 'done', note: 'اتفتح في تحميلات المتصفح' });
+      return;
+    }
+    const reader = res.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let blob: Blob | null = null;
+    if (!reader) blob = await res.blob();
+    else {
+      let got = 0; let last = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        got += value.length;
+        if (sink) await sink.write(value); else chunks.push(value);
+        const now = performance.now();
+        if (now - last > 150) { last = now; downPatch(id, { got, pct: total > 0 ? Math.min(99, Math.round((got / total) * 100)) : 0 }); }
+      }
+      downPatch(id, { got });
+    }
+    if (sink) { await sink.close(); sink = null; }
+    else {
+      const blobUrl = URL.createObjectURL(blob ?? new Blob(chunks as BlobPart[], { type: res.headers.get('content-type') || 'application/octet-stream' }));
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    }
+    downPatch(id, { pct: 100, status: 'done' });
   } catch (e) {
+    if (sink) void sink.abort().catch(() => undefined);
+    if (ctl.signal.aborted && !handoff) return; // cancelled by the user: already removed from the list
     console.error(e);
+    downPatch(id, { status: 'fail', note: 'اتفتح في المتصفح' });
     window.open(url, '_blank');
+  } finally {
+    downCtl.delete(id);
   }
 }
 
@@ -5094,11 +5098,12 @@ function StatusScreen({ text, actions }: { text: string; actions?: { label: stri
 }
 
 // ============ Main App ============
-// Always-visible upload indicator (every screen): % while uploading, cancel, and a confirmation when it finishes.
+// Always-visible transfer bar (every screen): uploads and downloads with %, cancel, and a confirmation when done.
 let openFilesTab = false;
 function GlobalUploadBar({ onOpen }: { onOpen: () => void }) {
   const jobs = useSyncExternalStore(pubSubscribe, pubSnapshot);
-  const running = jobs.some(j => j.status === 'run');
+  const downs = useSyncExternalStore(downSubscribe, downSnapshot);
+  const running = jobs.some(j => j.status === 'run') || downs.some(j => j.status === 'run');
   useEffect(() => {
     if (!running) return;
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
@@ -5107,30 +5112,37 @@ function GlobalUploadBar({ onOpen }: { onOpen: () => void }) {
   }, [running]);
   useEffect(() => {
     const ids = jobs.filter(j => j.status === 'done').map(j => j.id);
-    if (ids.length === 0) return;
-    const h = window.setTimeout(() => ids.forEach(dropJob), 5000);
+    const dids = downs.filter(j => j.status === 'done' && !j.barHidden).map(j => j.id);
+    if (ids.length === 0 && dids.length === 0) return;
+    const h = window.setTimeout(() => { ids.forEach(dropJob); dids.forEach(i => downPatch(i, { barHidden: true })); }, 5000);
     return () => window.clearTimeout(h);
-  }, [jobs]);
-  if (jobs.length === 0) return null;
+  }, [jobs, downs]);
+  type Row = { id: string; down: boolean; label: string; sub: string; pct: number | null; status: 'run' | 'done' | 'fail'; cancel: () => void; close: () => void };
+  const rows: Row[] = [
+    ...downs.filter(j => !j.barHidden).map<Row>(j => ({ id: j.id, down: true, label: j.name, sub: j.note ?? (j.total ? `${formatBytes(j.got)} / ${formatBytes(j.total)}` : j.got ? formatBytes(j.got) : ''), pct: j.total ? j.pct : null, status: j.status, cancel: () => cancelDown(j.id), close: () => downPatch(j.id, { barHidden: true }) })),
+    ...jobs.map<Row>(j => ({ id: j.id, down: false, label: j.label, sub: j.size ? formatBytes(j.size) : '', pct: Math.round(j.pct), status: j.status, cancel: () => cancelJob(j.id), close: () => dropJob(j.id) })),
+  ];
+  if (rows.length === 0) return null;
   return (
     <div className="fixed top-14 inset-x-0 z-50 px-3 pt-2 space-y-2 pointer-events-none">
-      {jobs.map(j => {
-        const fail = j.status === 'fail'; const done = j.status === 'done';
-        const pct = Math.max(0, Math.min(100, Math.round(j.pct)));
+      {rows.map(r => {
+        const fail = r.status === 'fail'; const done = r.status === 'done';
+        const pct = r.pct === null ? 0 : Math.max(0, Math.min(100, r.pct));
+        const title = fail ? (r.down ? 'فشل التحميل' : 'فشل الرفع') : done ? (r.down ? 'تم التحميل ✓' : 'تم النشر ✓') : (r.down ? 'جاري تحميل الملف...' : 'جاري رفع الملف... لا تقفل التطبيق');
         return (
-          <div key={j.id} className="pointer-events-auto mx-auto max-w-md rounded-2xl bg-gray-900/95 backdrop-blur border border-white/10 shadow-xl px-3.5 py-2.5">
+          <div key={r.id} className="pointer-events-auto mx-auto max-w-md rounded-2xl bg-gray-900/95 backdrop-blur border border-white/10 shadow-xl px-3.5 py-2.5">
             <div className="flex items-center gap-2.5">
               <button onClick={onOpen} className="min-w-0 flex-1 text-right">
-                <div className="text-[13px] text-white truncate" dir="auto">{fail ? 'فشل الرفع' : done ? 'تم النشر ✓' : 'جاري رفع الملف... لا تقفل التطبيق'}{j.label ? ` · ${j.label}` : ''}</div>
-                {j.size ? <div className="text-[11px] text-gray-500">{formatBytes(j.size)}</div> : null}
+                <div className="text-[13px] text-white truncate" dir="auto">{title}{r.label ? ` · ${r.label}` : ''}</div>
+                {r.sub ? <div className="text-[11px] text-gray-500" dir="auto">{r.sub}</div> : null}
               </button>
-              <span className={`tabular-nums text-sm font-bold shrink-0 ${fail ? 'text-red-400' : done ? 'text-emerald-400' : 'text-cyan-300'}`}>{fail ? '!' : `${pct}%`}</span>
-              {j.status === 'run'
-                ? <button onClick={() => cancelJob(j.id)} className="shrink-0 px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 text-xs font-semibold">إلغاء</button>
-                : <button onClick={() => dropJob(j.id)} aria-label="إغلاق" className="shrink-0 p-1 text-gray-500"><X size={14} /></button>}
+              {r.pct !== null && <span className={`tabular-nums text-sm font-bold shrink-0 ${fail ? 'text-red-400' : done ? 'text-emerald-400' : 'text-cyan-300'}`}>{fail ? '!' : `${pct}%`}</span>}
+              {r.status === 'run'
+                ? <button onClick={r.cancel} className="shrink-0 px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 text-xs font-semibold">إلغاء</button>
+                : <button onClick={r.close} aria-label="إغلاق" className="shrink-0 p-1 text-gray-500"><X size={14} /></button>}
             </div>
-            <div className="mt-2 h-1.5 rounded-full bg-white/10 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-              <div className={`h-full rounded-full transition-all duration-300 ${fail ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`} style={{ width: `${Math.max(4, pct)}%` }} />
+            <div className="mt-2 h-1.5 rounded-full bg-white/10 overflow-hidden" role="progressbar" aria-valuenow={r.pct === null ? undefined : pct} aria-valuemin={0} aria-valuemax={100}>
+              <div className={`h-full rounded-full ${r.pct === null && !done && !fail ? 'w-1/3 animate-pulse bg-cyan-400' : `transition-all duration-300 ${fail ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`}`} style={r.pct === null && !done && !fail ? undefined : { width: `${Math.max(4, done ? 100 : pct)}%` }} />
             </div>
           </div>
         );
@@ -8853,30 +8865,30 @@ function SearchTab({ users, posts, currentUser, setUsers, onStartChat, onOpenPro
 }
 
 // ============ Profile Tab ============
-// ============ "تحميلاتي": uploads in progress (and just finished), with % and cancel ============
+// ============ "تحميلاتي": files being downloaded to this device (and finished ones), with % and cancel ============
 function MyFilesPanel() {
-  const jobs = useSyncExternalStore(pubSubscribe, pubSnapshot);
-  if (jobs.length === 0) return <div className="text-center py-10"><Download size={28} className="mx-auto text-gray-700 mb-2" /><p className="text-gray-500 text-sm">مفيش حاجة بتتحمل دلوقتي</p><p className="text-gray-600 text-xs mt-1">أي ملف ترفعه هيظهر هنا بنسبة التحميل وتقدر تلغيه</p></div>;
+  const downs = useSyncExternalStore(downSubscribe, downSnapshot);
+  if (downs.length === 0) return <div className="text-center py-10"><Download size={28} className="mx-auto text-gray-700 mb-2" /><p className="text-gray-500 text-sm">مفيش ملفات بتتحمّل دلوقتي</p><p className="text-gray-600 text-xs mt-1">أي ملف تحمّله على جهازك هيظهر هنا بنسبة التحميل وتقدر تلغيه</p></div>;
   return (
     <div className="space-y-3">
-      {[...jobs].reverse().map(j => {
-        const fail = j.status === 'fail';
-        const done = j.status === 'done';
-        const pct = Math.max(0, Math.min(100, Math.round(j.pct)));
+      {[...downs].reverse().map(j => {
+        const fail = j.status === 'fail'; const done = j.status === 'done';
+        const known = j.total > 0;
+        const pct = Math.max(0, Math.min(100, done ? 100 : j.pct));
         return (
           <div key={j.id} className="rounded-2xl bg-gray-900 border border-gray-800 px-4 py-3">
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
-                <div className="text-sm text-white truncate" dir="auto">{j.label || 'ملف'}</div>
-                <div className="text-[11px] text-gray-500">{j.size ? `${formatBytes(j.size)} · ` : ''}{fail ? 'فشل الرفع' : done ? 'تم الرفع ✓' : 'جاري الرفع...'}</div>
+                <div className="text-sm text-white truncate" dir="auto">{j.name}</div>
+                <div className="text-[11px] text-gray-500" dir="auto">{fail ? 'فشل التحميل' : done ? 'تم التحميل ✓' : 'جاري التحميل...'}{known ? ` · ${formatBytes(j.got)} / ${formatBytes(j.total)}` : j.got ? ` · ${formatBytes(j.got)}` : ''}{j.note ? ` · ${j.note}` : ''}</div>
               </div>
-              <span className={`tabular-nums text-sm font-bold shrink-0 ${fail ? 'text-red-400' : done ? 'text-emerald-400' : 'text-cyan-300'}`}>{fail ? '!' : `${pct}%`}</span>
+              {known && <span className={`tabular-nums text-sm font-bold shrink-0 ${fail ? 'text-red-400' : done ? 'text-emerald-400' : 'text-cyan-300'}`}>{fail ? '!' : `${pct}%`}</span>}
               {j.status === 'run'
-                ? <button onClick={() => cancelJob(j.id)} className="shrink-0 px-3 py-1.5 rounded-full bg-red-500/15 text-red-300 text-xs font-semibold ring-1 ring-red-400/25 active:scale-95">إلغاء</button>
-                : <button onClick={() => dropJob(j.id)} aria-label="إخفاء" className="shrink-0 p-1.5 text-gray-500 hover:text-white"><X size={15} /></button>}
+                ? <button onClick={() => cancelDown(j.id)} className="shrink-0 px-3 py-1.5 rounded-full bg-red-500/15 text-red-300 text-xs font-semibold ring-1 ring-red-400/25 active:scale-95">إلغاء</button>
+                : <button onClick={() => dropDown(j.id)} aria-label="إخفاء" className="shrink-0 p-1.5 text-gray-500 hover:text-white"><X size={15} /></button>}
             </div>
-            <div className="mt-2 h-2 rounded-full bg-gray-800 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-              <div className={`h-full rounded-full transition-all duration-300 ${fail ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`} style={{ width: `${Math.max(3, pct)}%` }} />
+            <div className="mt-2 h-2 rounded-full bg-gray-800 overflow-hidden">
+              <div className={`h-full rounded-full ${!known && j.status === 'run' ? 'w-1/3 animate-pulse bg-cyan-400' : `transition-all duration-300 ${fail ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`}`} style={!known && j.status === 'run' ? undefined : { width: `${Math.max(3, pct)}%` }} />
             </div>
           </div>
         );
@@ -8918,7 +8930,7 @@ function ProfileTab({ currentUser, users, posts, setPosts, onOpenProfile, onLoad
   const likedPosts = posts.filter(p => p.likes.includes(currentUser.id)).sort((a, b) => b.timestamp - a.timestamp);
   const bookmarkedPosts = posts.filter(p => p.bookmarks.includes(currentUser.id)).sort((a, b) => b.timestamp - a.timestamp);
   const displayPosts = tab === 'posts' ? myPosts : tab === 'likes' ? likedPosts : bookmarkedPosts;
-  const activeUploads = useSyncExternalStore(pubSubscribe, pubSnapshot).filter(j => j.status !== 'done').length;
+  const activeUploads = useSyncExternalStore(downSubscribe, downSnapshot).filter(j => j.status === 'run').length;
 
   return (
     <div className="px-4 py-4">
