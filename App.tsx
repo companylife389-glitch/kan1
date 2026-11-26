@@ -2948,7 +2948,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 </motion.button>
               )}
             </div>
-          {emojiOpen && <EmojiPicker docked onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `kan-sticker.${stkExt(st.blob, st.kind)}` }); }} />}
+          {emojiOpen && <EmojiPicker docked onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `${st.gif ? 'kix-gif' : 'kan-sticker'}.${stkExt(st.blob, st.kind)}` }); }} />}
           </div>
         )}
         {recording && (
@@ -3829,11 +3829,248 @@ const STORY_FILTERS: { n: string; f: string; fx?: StoryFx }[] = [{ n: 'عادي'
   { n: 'حلم باستيل', f: 'contrast(.85) brightness(1.22) saturate(.95)', fx: { g: ['#ffc6e8', '#bfe4ff', 'soft-light', 0.55, 160], bl: 0.35, fd: 0.14 } },
   { n: 'حرق ضوء', f: 'contrast(1.1) saturate(1.3) brightness(1.1)', fx: { lk: ['#ff5a2a', 0.65, 'tr'], gr: 0.12, v: 0.3 } },
   { n: 'سينما أزرق', f: 'contrast(1.3) saturate(.85) brightness(.92)', fx: { t: ['#1d5fa8', 'soft-light', 0.5], v: 0.55 } },
-  { n: 'ظل وردي', f: 'contrast(1.05) saturate(1.2) brightness(1.08)', fx: { g: ['#ff7aa8', '#ffe0c2', 'soft-light', 0.5, 200], bl: 0.2 } }];
-// Shown order in the picker: none, then the strong Instagram / grading looks first, then the older simple ones.
-const STORY_FILTER_ORDER: number[] = (() => { const n = STORY_FILTERS.length; const first = STORY_FILTERS.findIndex(f => f.n === 'كلارندون'); const fresh = Array.from({ length: n - first }, (_, k) => first + k); const old = Array.from({ length: first - 1 }, (_, k) => k + 1); return [0, ...fresh, ...old]; })();
+  { n: 'ظل وردي', f: 'contrast(1.05) saturate(1.2) brightness(1.08)', fx: { g: ['#ff7aa8', '#ffe0c2', 'soft-light', 0.5, 200], bl: 0.2 } },
+  { n: 'كلين جيرل', f: 'brightness(1.08) contrast(0.96) saturate(1.08)', fx: { bl: 0.12, t: ['#ffe6d5', 'soft-light', 0.3] } },
+  { n: 'سوفت بينك', f: 'brightness(1.1) contrast(0.93) saturate(1.15)', fx: { t: ['#ffb3d1', 'soft-light', 0.38], bl: 0.1 } },
+  { n: 'كوري', f: 'brightness(1.14) contrast(0.9) saturate(0.95)', fx: { t: ['#ffd6e8', 'screen', 0.22], bl: 0.18 } },
+  { n: 'جولدن جلو', f: 'saturate(1.25) contrast(1.05) brightness(1.06)', fx: { lk: ['#ffb347', 0.5, 'tr'], t: ['#ffc27a', 'soft-light', 0.28] } },
+  { n: 'خوخي', f: 'saturate(1.2) brightness(1.07) contrast(0.97)', fx: { t: ['#ff9a8b', 'soft-light', 0.34] } },
+  { n: 'دريمي', f: 'brightness(1.1) contrast(0.88) saturate(1.2)', fx: { bl: 0.3, t: ['#c9b6ff', 'soft-light', 0.3] } },
+  { n: 'صن كيسد', f: 'saturate(1.35) contrast(1.06) brightness(1.06)', fx: { lk: ['#ffcf70', 0.6, 'tl'], g: ['#ff9a3c', '#ffe9b0', 'soft-light', 0.35, 20] } },
+  { n: 'ماتشا', f: 'saturate(0.8) contrast(1.02) brightness(1.04) hue-rotate(15deg)', fx: { t: ['#b7d79a', 'soft-light', 0.4], gr: 0.03 } },
+  { n: 'بحر', f: 'saturate(1.25) contrast(1.08) brightness(1.04)', fx: { g: ['#00c2c7', '#ffd9a0', 'soft-light', 0.45, 180] } },
+  { n: 'دارك أكاديميا', f: 'sepia(0.35) contrast(1.15) brightness(0.88) saturate(0.85)', fx: { v: 0.55, t: ['#6b4a2b', 'soft-light', 0.35], gr: 0.05 } },
+  { n: 'تويلايت', f: 'contrast(1.1) saturate(1.3) brightness(0.97)', fx: { g: ['#5b2bd9', '#ff8a4d', 'overlay', 0.45, 180], v: 0.3 } },
+  { n: 'ستريت', f: 'contrast(1.2) saturate(0.75) brightness(0.96)', fx: { gr: 0.09, v: 0.35 } },
+  { n: 'فلاش', f: 'brightness(1.22) contrast(1.15) saturate(1.05)', fx: { bl: 0.2, v: 0.1 } },
+  { n: 'أورورا', f: 'saturate(1.4) contrast(1.1) brightness(0.98)', fx: { g: ['#00ffa3', '#a855f7', 'screen', 0.28, 200], v: 0.3 } },
+  { n: 'ميامي', f: 'saturate(1.45) contrast(1.05) brightness(1.04)', fx: { g: ['#ff4fa3', '#22d3ee', 'soft-light', 0.55, 150] } },
+  { n: 'ريد روم', f: 'contrast(1.2) saturate(1.2) brightness(0.9)', fx: { t: ['#ff1f3d', 'overlay', 0.35], v: 0.5 } },
+  { n: 'واي٢كي', f: 'saturate(1.5) contrast(1.08) brightness(1.05)', fx: { g: ['#ff5fd2', '#5fe1ff', 'overlay', 0.3, 135], gr: 0.04 } },
+  { n: 'سايبر نيون', f: 'contrast(1.2) saturate(1.7) brightness(0.92)', fx: { g: ['#7c3aed', '#06b6d4', 'overlay', 0.4, 160], v: 0.4 } },
+  { n: 'مون لايت', f: 'brightness(0.95) contrast(1.12) saturate(0.9)', fx: { t: ['#5b7cff', 'soft-light', 0.38], v: 0.45 } },
+  { n: 'تيل مودي', f: 'contrast(1.18) saturate(1.1) brightness(0.95)', fx: { t: ['#1f8a8a', 'soft-light', 0.35], v: 0.4, gr: 0.05 } },
+  { n: 'فيلم ٣٥', f: 'contrast(1.1) saturate(1.15) sepia(0.12)', fx: { gr: 0.1, v: 0.35, t: ['#ffd9a8', 'soft-light', 0.2] } },
+  { n: 'في إتش إس', f: 'saturate(1.3) contrast(1.05)', fx: { gr: 0.14, lk: ['#ff3d6e', 0.3, 'tl'], v: 0.25 } },
+  { n: 'نيو نوار', f: 'grayscale(1) contrast(1.35) brightness(0.95)', fx: { gr: 0.1, v: 0.5 } },
+  { n: 'سبيا ذهبي', f: 'sepia(0.75) saturate(1.3) contrast(1.05) brightness(1.04)', fx: { t: ['#ffb347', 'soft-light', 0.3], v: 0.3 } },
+  { n: 'كاندي بوب', f: 'saturate(1.6) contrast(1.08) brightness(1.08)', fx: { g: ['#ff6ec7', '#7afcff', 'soft-light', 0.4, 120] } },
+  // ---- New looks (2026): shown first in the strip ----
+  { n: 'بيتش فزّ', f: 'brightness(1.08) saturate(1.22) contrast(.95)', fx: { t: ['#ffb199', 'soft-light', 0.45], bl: 0.3 } },
+  { n: 'لافندر هيز', f: 'brightness(1.08) contrast(.92) saturate(1.1)', fx: { t: ['#c9b6ff', 'soft-light', 0.5], bl: 0.35, v: 0.15 } },
+  { n: 'مينت فريش', f: 'brightness(1.08) saturate(1.2) hue-rotate(-8deg)', fx: { t: ['#9ff5d1', 'soft-light', 0.4] } },
+  { n: 'أمبر', f: 'contrast(1.15) saturate(1.3) sepia(.25)', fx: { g: ['#5a2a00', '#ffc86b', 'soft-light', 0.5, 180], lk: ['#ff9a3c', 0.45, 'tr'] } },
+  { n: 'ستوديو بارد', f: 'contrast(1.15) saturate(.85) brightness(1.04)', fx: { t: ['#9cc7ff', 'soft-light', 0.35], v: 0.2 } },
+  { n: 'كريستال', f: 'brightness(1.15) contrast(1.1) saturate(.9)', fx: { g: ['#0a3d62', '#e8f6ff', 'soft-light', 0.4, 180], bl: 0.3 } },
+  { n: 'رمان', f: 'contrast(1.2) saturate(1.3) brightness(.96)', fx: { g: ['#4a0d3a', '#ff5d7d', 'soft-light', 0.5, 160], gr: 0.06, v: 0.35 } },
+  { n: 'غبار ذهبي', f: 'brightness(1.06) saturate(1.2) contrast(1.04)', fx: { t: ['#ffe0a0', 'soft-light', 0.35], lk: ['#ffd27a', 0.5, 'tl'], bl: 0.3 } },
+  { n: 'أزرق ملكي', f: 'contrast(1.2) saturate(1.3)', fx: { g: ['#0a1f6b', '#8fb4ff', 'soft-light', 0.5, 180], v: 0.4 } },
+  { n: 'نيون أخضر', f: 'contrast(1.25) saturate(1.6) brightness(.95)', fx: { g: ['#003b2a', '#39ff88', 'soft-light', 0.5, 150], bl: 0.3 } },
+  { n: 'ثلجي ناعم', f: 'brightness(1.2) contrast(.9) saturate(.8)', fx: { t: ['#e8f1ff', 'soft-light', 0.4], bl: 0.45 } },
+  { n: 'موكا', f: 'sepia(.4) contrast(1.1) saturate(1.1) brightness(.98)', fx: { t: ['#8a5a3c', 'soft-light', 0.35], fd: 0.15, v: 0.3 } },
+  { n: 'عسل', f: 'sepia(0.08) saturate(1.05) contrast(1.0) brightness(0.96)', fx: { t: ['#ffc15e', 'soft-light', 0.28], g: ['#7a3e00', '#ffc15e', 'soft-light', 0.3, 160], lk: ['#ffc15e', 0.3, 'tr'] } },
+  { n: 'كراميل', f: 'sepia(0.12) saturate(1.1) contrast(1.03) brightness(0.98)', fx: { v: 0.24, t: ['#d98a3d', 'overlay', 0.32], bl: 0.29 } },
+  { n: 'قرفة', f: 'sepia(0.16) saturate(1.15) contrast(1.06) brightness(1.0)', fx: { t: ['#b5651d', 'soft-light', 0.36], g: ['#3d1a00', '#b5651d', 'soft-light', 0.38, 200], gr: 0.05 } },
+  { n: 'شاي', f: 'sepia(0.2) saturate(1.2) contrast(1.09) brightness(1.02)', fx: { t: ['#c79a5b', 'color', 0.18], lk: ['#c79a5b', 0.39, 'bl'] } },
+  { n: 'تمر', f: 'sepia(0.24) saturate(1.25) contrast(1.12) brightness(1.04)', fx: { t: ['#8a4b2a', 'soft-light', 0.44], g: ['#2b1000', '#8a4b2a', 'soft-light', 0.46, 120], bl: 0.25 } },
+  { n: 'رمل', f: 'sepia(0.28) saturate(1.3) contrast(1.0) brightness(0.96)', fx: { v: 0.2, t: ['#e3c08d', 'soft-light', 0.48] } },
+  { n: 'نحاس', f: 'sepia(0.08) saturate(1.35) contrast(1.03) brightness(0.98)', fx: { t: ['#d0794a', 'overlay', 0.28], g: ['#552200', '#d0794a', 'soft-light', 0.34, 180], lk: ['#d0794a', 0.36, 'br'] } },
+  { n: 'برونزي', f: 'sepia(0.12) saturate(1.05) contrast(1.06) brightness(1.0)', fx: { t: ['#c28a4a', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
+  { n: 'شروق', f: 'sepia(0.16) saturate(1.1) contrast(1.09) brightness(1.02)', fx: { t: ['#ffb36b', 'color', 0.18], g: ['#7a2a3a', '#ffb36b', 'soft-light', 0.42, 140] } },
+  { n: 'أصيل', f: 'sepia(0.2) saturate(1.15) contrast(1.12) brightness(1.04)', fx: { v: 0.36, t: ['#ff9a52', 'soft-light', 0.4], lk: ['#ff9a52', 0.33, 'tl'] } },
+  { n: 'مشمش', f: 'sepia(0.24) saturate(1.2) contrast(1.0) brightness(0.96)', fx: { t: ['#ffb27a', 'soft-light', 0.44], g: ['#a04a2a', '#ffb27a', 'soft-light', 0.3, 160], bl: 0.33 } },
+  { n: 'خوخ', f: 'sepia(0.28) saturate(1.25) contrast(1.03) brightness(0.98)', fx: { t: ['#ffa58f', 'overlay', 0.48] } },
+  { n: 'عنبر دافئ', f: 'sepia(0.08) saturate(1.3) contrast(1.06) brightness(1.0)', fx: { t: ['#ffb000', 'soft-light', 0.28], g: ['#5a2a00', '#ffb000', 'soft-light', 0.38, 200], lk: ['#ffb000', 0.3, 'tr'], gr: 0.05 } },
+  { n: 'قهوة', f: 'sepia(0.12) saturate(1.35) contrast(1.09) brightness(1.02)', fx: { v: 0.32, t: ['#9a6a45', 'color', 0.18], bl: 0.29 } },
+  { n: 'دفء المساء', f: 'sepia(0.16) saturate(1.05) contrast(1.12) brightness(1.04)', fx: { t: ['#ff8c42', 'soft-light', 0.36], g: ['#3a1030', '#ff8c42', 'soft-light', 0.46, 120] } },
+  { n: 'غروب صحراء', f: 'sepia(0.2) saturate(1.1) contrast(1.0) brightness(0.96)', fx: { t: ['#f0a05a', 'soft-light', 0.4], lk: ['#f0a05a', 0.39, 'bl'] } },
+  { n: 'جمر', f: 'sepia(0.24) saturate(1.15) contrast(1.03) brightness(0.98)', fx: { t: ['#ff6a3a', 'overlay', 0.44], g: ['#400a00', '#ff6a3a', 'soft-light', 0.34, 180], bl: 0.25 } },
+  { n: 'شمس الظهيرة', f: 'sepia(0.28) saturate(1.2) contrast(1.06) brightness(1.0)', fx: { v: 0.28, t: ['#ffd27a', 'soft-light', 0.48], gr: 0.05 } },
+  { n: 'أزرق جليدي', f: 'hue-rotate(190deg) saturate(1.05) contrast(1.0) brightness(0.96)', fx: { t: ['#9ccaff', 'soft-light', 0.28], g: ['#0a2a5a', '#9ccaff', 'soft-light', 0.3, 160], lk: ['#9ccaff', 0.3, 'tr'] } },
+  { n: 'فيروز', f: 'hue-rotate(190deg) saturate(1.1) contrast(1.03) brightness(0.98)', fx: { v: 0.24, t: ['#4fe3d6', 'overlay', 0.32], bl: 0.29 } },
+  { n: 'سماوي', f: 'hue-rotate(190deg) saturate(1.15) contrast(1.06) brightness(1.0)', fx: { t: ['#7fd6ff', 'soft-light', 0.36], g: ['#06385a', '#7fd6ff', 'soft-light', 0.38, 200], gr: 0.05 } },
+  { n: 'نعناع بارد', f: 'hue-rotate(190deg) saturate(1.2) contrast(1.09) brightness(1.02)', fx: { t: ['#9affd0', 'color', 0.18], lk: ['#9affd0', 0.39, 'bl'] } },
+  { n: 'ضباب أزرق', f: 'hue-rotate(190deg) saturate(1.25) contrast(1.12) brightness(1.04)', fx: { t: ['#a5b8d8', 'soft-light', 0.44], g: ['#1a2a44', '#a5b8d8', 'soft-light', 0.46, 120], bl: 0.25 } },
+  { n: 'قطب شمالي', f: 'hue-rotate(190deg) saturate(1.3) contrast(1.0) brightness(0.96)', fx: { v: 0.2, t: ['#bfe6ff', 'soft-light', 0.48] } },
+  { n: 'عمق البحر', f: 'hue-rotate(190deg) saturate(1.35) contrast(1.03) brightness(0.98)', fx: { t: ['#2f7fb0', 'overlay', 0.28], g: ['#001a30', '#2f7fb0', 'soft-light', 0.34, 180], lk: ['#2f7fb0', 0.36, 'br'] } },
+  { n: 'لازورد', f: 'hue-rotate(190deg) saturate(1.05) contrast(1.06) brightness(1.0)', fx: { t: ['#4a6cff', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
+  { n: 'بحيرة', f: 'hue-rotate(190deg) saturate(1.1) contrast(1.09) brightness(1.02)', fx: { t: ['#5fb7c9', 'color', 0.18], g: ['#0a3a44', '#5fb7c9', 'soft-light', 0.42, 140] } },
+  { n: 'صقيع', f: 'hue-rotate(190deg) saturate(1.15) contrast(1.12) brightness(1.04)', fx: { v: 0.36, t: ['#d4ecff', 'soft-light', 0.4], lk: ['#d4ecff', 0.33, 'tl'] } },
+  { n: 'شفق أزرق', f: 'hue-rotate(190deg) saturate(1.2) contrast(1.0) brightness(0.96)', fx: { t: ['#6a8cff', 'soft-light', 0.44], g: ['#2a0a5a', '#6a8cff', 'soft-light', 0.3, 160], bl: 0.33 } },
+  { n: 'موج', f: 'hue-rotate(190deg) saturate(1.25) contrast(1.03) brightness(0.98)', fx: { t: ['#38b6d8', 'overlay', 0.48] } },
+  { n: 'ثلج الصباح', f: 'hue-rotate(190deg) saturate(1.3) contrast(1.06) brightness(1.0)', fx: { t: ['#e2f1ff', 'soft-light', 0.28], g: ['#6a8aaa', '#e2f1ff', 'soft-light', 0.38, 200], lk: ['#e2f1ff', 0.3, 'tr'], gr: 0.05 } },
+  { n: 'أزرق ليلي', f: 'hue-rotate(190deg) saturate(1.35) contrast(1.09) brightness(1.02)', fx: { v: 0.32, t: ['#3a5acf', 'color', 0.18], bl: 0.29 } },
+  { n: 'ندى', f: 'hue-rotate(190deg) saturate(1.05) contrast(1.12) brightness(1.04)', fx: { t: ['#a8f0e0', 'soft-light', 0.36], g: ['#2a6a6a', '#a8f0e0', 'soft-light', 0.46, 120] } },
+  { n: 'أرجواني بارد', f: 'hue-rotate(190deg) saturate(1.1) contrast(1.0) brightness(0.96)', fx: { t: ['#8a7cff', 'soft-light', 0.4], lk: ['#8a7cff', 0.39, 'bl'] } },
+  { n: 'رذاذ', f: 'hue-rotate(190deg) saturate(1.15) contrast(1.03) brightness(0.98)', fx: { t: ['#9fd8f0', 'overlay', 0.44], g: ['#2a5a7a', '#9fd8f0', 'soft-light', 0.34, 180], bl: 0.25 } },
+  { n: 'كوبالت', f: 'hue-rotate(190deg) saturate(1.2) contrast(1.06) brightness(1.0)', fx: { v: 0.28, t: ['#2a56c8', 'soft-light', 0.48], gr: 0.05 } },
+  { n: 'كوداك 200', f: 'contrast(1.0) saturate(1.05) sepia(0.08) brightness(0.96)', fx: { t: ['#ffb866', 'soft-light', 0.28], g: ['#3a2a10', '#ffb866', 'soft-light', 0.3, 160], lk: ['#ffb866', 0.3, 'tr'] } },
+  { n: 'كوداك جولد', f: 'contrast(1.03) saturate(1.1) sepia(0.12) brightness(0.98)', fx: { v: 0.24, t: ['#ffc94a', 'overlay', 0.32], bl: 0.29 } },
+  { n: 'فوجي بارد', f: 'contrast(1.06) saturate(1.15) sepia(0.16) brightness(1.0)', fx: { t: ['#6ad0a0', 'soft-light', 0.36], g: ['#0a3a2a', '#6ad0a0', 'soft-light', 0.38, 200], gr: 0.05 } },
+  { n: 'فوجي 400', f: 'contrast(1.09) saturate(1.2) sepia(0.2) brightness(1.02)', fx: { t: ['#7acaa8', 'color', 0.18], lk: ['#7acaa8', 0.39, 'bl'] } },
+  { n: 'تيل وبرتقال', f: 'contrast(1.12) saturate(1.25) sepia(0.24) brightness(1.04)', fx: { t: ['#ff9a4a', 'soft-light', 0.44], g: ['#0a5a6a', '#ff9a4a', 'soft-light', 0.46, 120], bl: 0.25 } },
+  { n: 'هوليوود', f: 'contrast(1.0) saturate(1.3) sepia(0.28) brightness(0.96)', fx: { v: 0.2, t: ['#ffae5a', 'soft-light', 0.48] } },
+  { n: 'أفلام السبعينات', f: 'contrast(1.03) saturate(1.35) sepia(0.08) brightness(0.98)', fx: { t: ['#d98a4a', 'overlay', 0.28], g: ['#4a3a1a', '#d98a4a', 'soft-light', 0.34, 180], lk: ['#d98a4a', 0.36, 'br'] } },
+  { n: 'نوفمبر سينما', f: 'contrast(1.06) saturate(1.05) sepia(0.12) brightness(1.0)', fx: { t: ['#8aa8b8', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
+  { n: 'ظلال زرقاء', f: 'contrast(1.09) saturate(1.1) sepia(0.16) brightness(1.02)', fx: { t: ['#6a8ac8', 'color', 0.18], g: ['#3a2a10', '#6a8ac8', 'soft-light', 0.42, 140] } },
+  { n: 'بروفيل سينمائي', f: 'contrast(1.12) saturate(1.15) sepia(0.2) brightness(1.04)', fx: { v: 0.36, t: ['#e6a060', 'soft-light', 0.4], lk: ['#e6a060', 0.33, 'tl'] } },
+  { n: 'مشهد ليلي', f: 'contrast(1.0) saturate(1.2) sepia(0.24) brightness(0.96)', fx: { t: ['#4a6aa8', 'soft-light', 0.44], g: ['#0a0a1a', '#4a6aa8', 'soft-light', 0.3, 160], bl: 0.33 } },
+  { n: 'دراما دافئة', f: 'contrast(1.03) saturate(1.25) sepia(0.28) brightness(0.98)', fx: { t: ['#e8a070', 'overlay', 0.48] } },
+  { n: 'فيلم أخضر', f: 'contrast(1.06) saturate(1.3) sepia(0.08) brightness(1.0)', fx: { t: ['#7ab88a', 'soft-light', 0.28], g: ['#1a3a2a', '#7ab88a', 'soft-light', 0.38, 200], lk: ['#7ab88a', 0.3, 'tr'], gr: 0.05 } },
+  { n: 'سينما بيضاء', f: 'contrast(1.09) saturate(1.35) sepia(0.12) brightness(1.02)', fx: { v: 0.32, t: ['#f0e0c8', 'color', 0.18], bl: 0.29 } },
+  { n: 'مخرج', f: 'contrast(1.12) saturate(1.05) sepia(0.16) brightness(1.04)', fx: { t: ['#c08050', 'soft-light', 0.36], g: ['#102030', '#c08050', 'soft-light', 0.46, 120] } },
+  { n: 'بلوكباستر', f: 'contrast(1.0) saturate(1.1) sepia(0.2) brightness(0.96)', fx: { t: ['#ff8a3a', 'soft-light', 0.4], lk: ['#ff8a3a', 0.39, 'bl'] } },
+  { n: 'ويسترن', f: 'contrast(1.03) saturate(1.15) sepia(0.24) brightness(0.98)', fx: { t: ['#d09a55', 'overlay', 0.44], g: ['#4a2a10', '#d09a55', 'soft-light', 0.34, 180], bl: 0.25 } },
+  { n: 'نيو سينما', f: 'contrast(1.06) saturate(1.2) sepia(0.28) brightness(1.0)', fx: { v: 0.28, t: ['#7aa0b8', 'soft-light', 0.48], gr: 0.05 } },
+  { n: 'بولارويد ✦', f: 'sepia(0.08) contrast(1.0) saturate(1.05) brightness(0.96) hue-rotate(-6deg)', fx: { t: ['#f0d890', 'soft-light', 0.28], g: ['#3a2a4a', '#f0d890', 'soft-light', 0.3, 160], lk: ['#f0d890', 0.3, 'tr'] } },
+  { n: 'ريترو 80', f: 'sepia(0.12) contrast(1.03) saturate(1.1) brightness(0.98) hue-rotate(-6deg)', fx: { v: 0.24, t: ['#ff7ac8', 'overlay', 0.32], bl: 0.29 } },
+  { n: 'فاكس', f: 'sepia(0.16) contrast(1.06) saturate(1.15) brightness(1.0) hue-rotate(-6deg)', fx: { t: ['#c8b890', 'soft-light', 0.36], g: ['#3a3020', '#c8b890', 'soft-light', 0.38, 200], gr: 0.05 } },
+  { n: 'صورة قديمة', f: 'sepia(0.2) contrast(1.09) saturate(1.2) brightness(1.02) hue-rotate(-6deg)', fx: { t: ['#d8c090', 'color', 0.18], lk: ['#d8c090', 0.39, 'bl'] } },
+  { n: 'ألبوم الجدة', f: 'sepia(0.24) contrast(1.12) saturate(1.25) brightness(1.04) hue-rotate(-6deg)', fx: { t: ['#c8a878', 'soft-light', 0.44], g: ['#3a2a18', '#c8a878', 'soft-light', 0.46, 120], bl: 0.25 } },
+  { n: 'كاسيت', f: 'sepia(0.28) contrast(1.0) saturate(1.3) brightness(0.96) hue-rotate(-6deg)', fx: { v: 0.2, t: ['#e0b860', 'soft-light', 0.48] } },
+  { n: 'مجلة 70', f: 'sepia(0.08) contrast(1.03) saturate(1.35) brightness(0.98) hue-rotate(-6deg)', fx: { t: ['#e8a860', 'overlay', 0.28], g: ['#2a4a3a', '#e8a860', 'soft-light', 0.34, 180], lk: ['#e8a860', 0.36, 'br'] } },
+  { n: 'سيبيا ناعم', f: 'sepia(0.12) contrast(1.06) saturate(1.05) brightness(1.0) hue-rotate(-6deg)', fx: { t: ['#c89a60', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
+  { n: 'ورق أصفر', f: 'sepia(0.16) contrast(1.09) saturate(1.1) brightness(1.02) hue-rotate(-6deg)', fx: { t: ['#e8d090', 'color', 0.18], g: ['#7a6a3a', '#e8d090', 'soft-light', 0.42, 140] } },
+  { n: 'ديسكو', f: 'sepia(0.2) contrast(1.12) saturate(1.15) brightness(1.04) hue-rotate(-6deg)', fx: { v: 0.36, t: ['#b86aff', 'soft-light', 0.4], lk: ['#b86aff', 0.33, 'tl'] } },
+  { n: 'فلاش قديم', f: 'sepia(0.24) contrast(1.0) saturate(1.2) brightness(0.96) hue-rotate(-6deg)', fx: { t: ['#fff0c0', 'soft-light', 0.44], g: ['#6a5a3a', '#fff0c0', 'soft-light', 0.3, 160], bl: 0.33 } },
+  { n: 'كاميرا يابانية', f: 'sepia(0.28) contrast(1.03) saturate(1.25) brightness(0.98) hue-rotate(-6deg)', fx: { t: ['#ffc0a0', 'overlay', 0.48] } },
+  { n: 'طبعة باهتة', f: 'sepia(0.08) contrast(1.06) saturate(1.3) brightness(1.0) hue-rotate(-6deg)', fx: { t: ['#d8c8b0', 'soft-light', 0.28], g: ['#6a5a4a', '#d8c8b0', 'soft-light', 0.38, 200], lk: ['#d8c8b0', 0.3, 'tr'], gr: 0.05 } },
+  { n: 'تسعينات', f: 'sepia(0.12) contrast(1.09) saturate(1.35) brightness(1.02) hue-rotate(-6deg)', fx: { v: 0.32, t: ['#ff9ab0', 'color', 0.18], bl: 0.29 } },
+  { n: 'نوستالجيا', f: 'sepia(0.16) contrast(1.12) saturate(1.05) brightness(1.04) hue-rotate(-6deg)', fx: { t: ['#e8b890', 'soft-light', 0.36], g: ['#4a3a5a', '#e8b890', 'soft-light', 0.46, 120] } },
+  { n: 'زمن جميل', f: 'sepia(0.2) contrast(1.0) saturate(1.1) brightness(0.96) hue-rotate(-6deg)', fx: { t: ['#d0a870', 'soft-light', 0.4], lk: ['#d0a870', 0.39, 'bl'] } },
+  { n: 'فيديو VHS', f: 'sepia(0.24) contrast(1.03) saturate(1.15) brightness(0.98) hue-rotate(-6deg)', fx: { t: ['#ff6a9a', 'overlay', 0.44], g: ['#2a6aff', '#ff6a9a', 'soft-light', 0.34, 180], bl: 0.25 } },
+  { n: 'صيف 85', f: 'sepia(0.28) contrast(1.06) saturate(1.2) brightness(1.0) hue-rotate(-6deg)', fx: { v: 0.28, t: ['#ffb070', 'soft-light', 0.48], gr: 0.05 } },
+  { n: 'نيون وردي', f: 'saturate(1.7) contrast(1.0) brightness(0.96)', fx: { t: ['#ff3ac8', 'soft-light', 0.28], g: ['#2a003a', '#ff3ac8', 'soft-light', 0.3, 160], lk: ['#ff3ac8', 0.3, 'tr'] } },
+  { n: 'نيون أزرق', f: 'saturate(1.7) contrast(1.03) brightness(0.98)', fx: { v: 0.24, t: ['#2ad4ff', 'overlay', 0.32], bl: 0.29 } },
+  { n: 'نيون بنفسجي', f: 'saturate(1.7) contrast(1.06) brightness(1.0)', fx: { t: ['#a63aff', 'soft-light', 0.36], g: ['#10003a', '#a63aff', 'soft-light', 0.38, 200], gr: 0.05 } },
+  { n: 'نيون أصفر', f: 'saturate(1.7) contrast(1.09) brightness(1.02)', fx: { t: ['#fff23a', 'color', 0.18], lk: ['#fff23a', 0.39, 'bl'] } },
+  { n: 'نيون برتقالي', f: 'saturate(1.7) contrast(1.12) brightness(1.04)', fx: { t: ['#ff8a1a', 'soft-light', 0.44], g: ['#3a0a00', '#ff8a1a', 'soft-light', 0.46, 120], bl: 0.25 } },
+  { n: 'سايبربانك', f: 'saturate(1.7) contrast(1.0) brightness(0.96)', fx: { v: 0.2, t: ['#ff2a8a', 'soft-light', 0.48] } },
+  { n: 'طوكيو ليلاً', f: 'saturate(1.7) contrast(1.03) brightness(0.98)', fx: { t: ['#ff5ac0', 'overlay', 0.28], g: ['#0a1a5a', '#ff5ac0', 'soft-light', 0.34, 180], lk: ['#ff5ac0', 0.36, 'br'] } },
+  { n: 'لاس فيغاس', f: 'saturate(1.7) contrast(1.06) brightness(1.0)', fx: { t: ['#ff4a6a', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
+  { n: 'ليزر', f: 'saturate(1.7) contrast(1.09) brightness(1.02)', fx: { t: ['#3aff8a', 'color', 0.18], g: ['#2a003a', '#3aff8a', 'soft-light', 0.42, 140] } },
+  { n: 'إلكتريك', f: 'saturate(1.7) contrast(1.12) brightness(1.04)', fx: { v: 0.36, t: ['#4a8aff', 'soft-light', 0.4], lk: ['#4a8aff', 0.33, 'tl'] } },
+  { n: 'ميامي ✦', f: 'saturate(1.7) contrast(1.0) brightness(0.96)', fx: { t: ['#ff7ad0', 'soft-light', 0.44], g: ['#00d0c0', '#ff7ad0', 'soft-light', 0.3, 160], bl: 0.33 } },
+  { n: 'فابورواف', f: 'saturate(1.7) contrast(1.03) brightness(0.98)', fx: { t: ['#c06aff', 'overlay', 0.48] } },
+  { n: 'تكنو', f: 'saturate(1.7) contrast(1.06) brightness(1.0)', fx: { t: ['#2affc0', 'soft-light', 0.28], g: ['#2a0a5a', '#2affc0', 'soft-light', 0.38, 200], lk: ['#2affc0', 0.3, 'tr'], gr: 0.05 } },
+  { n: 'غلوم', f: 'saturate(1.7) contrast(1.09) brightness(1.02)', fx: { v: 0.32, t: ['#ff3a5a', 'color', 0.18], bl: 0.29 } },
+  { n: 'أشعة', f: 'saturate(1.7) contrast(1.12) brightness(1.04)', fx: { t: ['#7aff3a', 'soft-light', 0.36], g: ['#003a2a', '#7aff3a', 'soft-light', 0.46, 120] } },
+  { n: 'بلازما', f: 'saturate(1.7) contrast(1.0) brightness(0.96)', fx: { t: ['#ff3aff', 'soft-light', 0.4], lk: ['#ff3aff', 0.39, 'bl'] } },
+  { n: 'هولوغرام', f: 'saturate(1.7) contrast(1.03) brightness(0.98)', fx: { t: ['#6affff', 'overlay', 0.44], g: ['#a03aff', '#6affff', 'soft-light', 0.34, 180], bl: 0.25 } },
+  { n: 'ألعاب', f: 'saturate(1.7) contrast(1.06) brightness(1.0)', fx: { v: 0.28, t: ['#3aff6a', 'soft-light', 0.48], gr: 0.05 } },
+  { n: 'وردي ناعم', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffc8d8', 'soft-light', 0.28], g: ['#8a4a6a', '#ffc8d8', 'soft-light', 0.3, 160], lk: ['#ffc8d8', 0.3, 'tr'] } },
+  { n: 'كريمي', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { v: 0.24, t: ['#fff0d8', 'overlay', 0.32], bl: 0.29 } },
+  { n: 'حرير', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffe8e0', 'soft-light', 0.36], g: ['#8a6a6a', '#ffe8e0', 'soft-light', 0.38, 200], gr: 0.05 } },
+  { n: 'بشرة مشرقة', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffd8c0', 'color', 0.18], lk: ['#ffd8c0', 0.39, 'bl'] } },
+  { n: 'لافندر', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#d8c0ff', 'soft-light', 0.44], g: ['#6a4a9a', '#d8c0ff', 'soft-light', 0.46, 120], bl: 0.25 } },
+  { n: 'سحابة', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { v: 0.2, t: ['#f0f4ff', 'soft-light', 0.48] } },
+  { n: 'وردة', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffb0c8', 'overlay', 0.28], g: ['#7a2a4a', '#ffb0c8', 'soft-light', 0.34, 180], lk: ['#ffb0c8', 0.36, 'br'] } },
+  { n: 'نقاء', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffffff', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
+  { n: 'بودرة', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#f8e8f0', 'color', 0.18], g: ['#9a7a8a', '#f8e8f0', 'soft-light', 0.42, 140] } },
+  { n: 'مارشميلو', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { v: 0.36, t: ['#ffd0e8', 'soft-light', 0.4], lk: ['#ffd0e8', 0.33, 'tl'] } },
+  { n: 'لبن', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#fff8f0', 'soft-light', 0.44], g: ['#a89a8a', '#fff8f0', 'soft-light', 0.3, 160], bl: 0.33 } },
+  { n: 'ضوء ناعم', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#fffae0', 'overlay', 0.48] } },
+  { n: 'زهري باستيل', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffc0d0', 'soft-light', 0.28], g: ['#9a6a8a', '#ffc0d0', 'soft-light', 0.38, 200], lk: ['#ffc0d0', 0.3, 'tr'], gr: 0.05 } },
+  { n: 'أخضر باستيل', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { v: 0.32, t: ['#c8f0d0', 'color', 0.18], bl: 0.29 } },
+  { n: 'أزرق باستيل', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#c0e0ff', 'soft-light', 0.36], g: ['#6a8aaa', '#c0e0ff', 'soft-light', 0.46, 120] } },
+  { n: 'خوخي ناعم', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffd0b8', 'soft-light', 0.4], lk: ['#ffd0b8', 0.39, 'bl'] } },
+  { n: 'وجه مشرق', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffe0d0', 'overlay', 0.44], g: ['#a08070', '#ffe0d0', 'soft-light', 0.34, 180], bl: 0.25 } },
+  { n: 'حلم وردي ✦', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { v: 0.28, t: ['#ffb8e0', 'soft-light', 0.48], gr: 0.05 } },
+  { n: 'غموض', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#4a3a6a', 'soft-light', 0.28], g: ['#05030a', '#4a3a6a', 'soft-light', 0.3, 160], lk: ['#4a3a6a', 0.3, 'tr'] } },
+  { n: 'ظلال عميقة', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { v: 0.24, t: ['#2a2a4a', 'overlay', 0.32], bl: 0.29 } },
+  { n: 'ليل المدينة', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#3a4a8a', 'soft-light', 0.36], g: ['#05050f', '#3a4a8a', 'soft-light', 0.38, 200], gr: 0.05 } },
+  { n: 'عاصفة', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#5a6a7a', 'color', 0.18], lk: ['#5a6a7a', 0.39, 'bl'] } },
+  { n: 'رماد', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#6a6a70', 'soft-light', 0.44], g: ['#101012', '#6a6a70', 'soft-light', 0.46, 120], bl: 0.25 } },
+  { n: 'فحم', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { v: 0.2, t: ['#3a3a3a', 'soft-light', 0.48] } },
+  { n: 'غابة مظلمة', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#1a4a3a', 'overlay', 0.28], g: ['#020a06', '#1a4a3a', 'soft-light', 0.34, 180], lk: ['#1a4a3a', 0.36, 'br'] } },
+  { n: 'دم', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#8a1a2a', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
+  { n: 'شبح', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#8a8a9a', 'color', 0.18], g: ['#0a0a14', '#8a8a9a', 'soft-light', 0.42, 140] } },
+  { n: 'كآبة زرقاء', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { v: 0.36, t: ['#2a4a7a', 'soft-light', 0.4], lk: ['#2a4a7a', 0.33, 'tl'] } },
+  { n: 'مطر', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#5a7a8a', 'soft-light', 0.44], g: ['#0a1218', '#5a7a8a', 'soft-light', 0.3, 160], bl: 0.33 } },
+  { n: 'هالووين', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#e8701a', 'overlay', 0.48] } },
+  { n: 'جوثيك', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#4a2a5a', 'soft-light', 0.28], g: ['#050008', '#4a2a5a', 'soft-light', 0.38, 200], lk: ['#4a2a5a', 0.3, 'tr'], gr: 0.05 } },
+  { n: 'ظل أحمر', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { v: 0.32, t: ['#a02a3a', 'color', 0.18], bl: 0.29 } },
+  { n: 'نصف قمر', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#5a6aa0', 'soft-light', 0.36], g: ['#05050f', '#5a6aa0', 'soft-light', 0.46, 120] } },
+  { n: 'ضباب كثيف', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#9aa0a8', 'soft-light', 0.4], lk: ['#9aa0a8', 0.39, 'bl'] } },
+  { n: 'قتامة ذهبية', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#8a6a2a', 'overlay', 0.44], g: ['#0a0600', '#8a6a2a', 'soft-light', 0.34, 180], bl: 0.25 } },
+  { n: 'بنفسج داكن', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { v: 0.28, t: ['#4a1a7a', 'soft-light', 0.48], gr: 0.05 } },
+  { n: 'عشب', f: 'saturate(1.05) contrast(1.0) brightness(0.96) hue-rotate(8deg)', fx: { t: ['#7ad050', 'soft-light', 0.28], g: ['#0a3a0a', '#7ad050', 'soft-light', 0.3, 160], lk: ['#7ad050', 0.3, 'tr'] } },
+  { n: 'ورق شجر', f: 'saturate(1.1) contrast(1.03) brightness(0.98) hue-rotate(8deg)', fx: { v: 0.24, t: ['#5ac060', 'overlay', 0.32], bl: 0.29 } },
+  { n: 'غابة مطيرة', f: 'saturate(1.15) contrast(1.06) brightness(1.0) hue-rotate(8deg)', fx: { t: ['#3aa070', 'soft-light', 0.36], g: ['#022a1a', '#3aa070', 'soft-light', 0.38, 200], gr: 0.05 } },
+  { n: 'ربيع زاهي', f: 'saturate(1.2) contrast(1.09) brightness(1.02) hue-rotate(8deg)', fx: { t: ['#a8e060', 'color', 0.18], lk: ['#a8e060', 0.39, 'bl'] } },
+  { n: 'حقل قمح', f: 'saturate(1.25) contrast(1.12) brightness(1.04) hue-rotate(8deg)', fx: { t: ['#e8d060', 'soft-light', 0.44], g: ['#6a5a1a', '#e8d060', 'soft-light', 0.46, 120], bl: 0.25 } },
+  { n: 'جبال', f: 'saturate(1.3) contrast(1.0) brightness(0.96) hue-rotate(8deg)', fx: { v: 0.2, t: ['#7a9ab8', 'soft-light', 0.48] } },
+  { n: 'شاطئ', f: 'saturate(1.35) contrast(1.03) brightness(0.98) hue-rotate(8deg)', fx: { t: ['#ffe0a8', 'overlay', 0.28], g: ['#1a8ab0', '#ffe0a8', 'soft-light', 0.34, 180], lk: ['#ffe0a8', 0.36, 'br'] } },
+  { n: 'بحر هادئ', f: 'saturate(1.05) contrast(1.06) brightness(1.0) hue-rotate(8deg)', fx: { t: ['#5ac0d0', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
+  { n: 'سماء صافية', f: 'saturate(1.1) contrast(1.09) brightness(1.02) hue-rotate(8deg)', fx: { t: ['#7ac8ff', 'color', 0.18], g: ['#1a5aaa', '#7ac8ff', 'soft-light', 0.42, 140] } },
+  { n: 'خريف ذهبي', f: 'saturate(1.15) contrast(1.12) brightness(1.04) hue-rotate(8deg)', fx: { v: 0.36, t: ['#e0902a', 'soft-light', 0.4], lk: ['#e0902a', 0.33, 'tl'] } },
+  { n: 'زهور', f: 'saturate(1.2) contrast(1.0) brightness(0.96) hue-rotate(8deg)', fx: { t: ['#ff8ac0', 'soft-light', 0.44], g: ['#4a8a3a', '#ff8ac0', 'soft-light', 0.3, 160], bl: 0.33 } },
+  { n: 'صحراء', f: 'saturate(1.25) contrast(1.03) brightness(0.98) hue-rotate(8deg)', fx: { t: ['#e8b868', 'overlay', 0.48] } },
+  { n: 'شلال', f: 'saturate(1.3) contrast(1.06) brightness(1.0) hue-rotate(8deg)', fx: { t: ['#8ae0d8', 'soft-light', 0.28], g: ['#0a4a4a', '#8ae0d8', 'soft-light', 0.38, 200], lk: ['#8ae0d8', 0.3, 'tr'], gr: 0.05 } },
+  { n: 'أخضر زيتوني', f: 'saturate(1.35) contrast(1.09) brightness(1.02) hue-rotate(8deg)', fx: { v: 0.32, t: ['#8aa050', 'color', 0.18], bl: 0.29 } },
+  { n: 'ثلج الجبل', f: 'saturate(1.05) contrast(1.12) brightness(1.04) hue-rotate(8deg)', fx: { t: ['#e8f4ff', 'soft-light', 0.36], g: ['#5a8ab0', '#e8f4ff', 'soft-light', 0.46, 120] } },
+  { n: 'حديقة', f: 'saturate(1.1) contrast(1.0) brightness(0.96) hue-rotate(8deg)', fx: { t: ['#78d078', 'soft-light', 0.4], lk: ['#78d078', 0.39, 'bl'] } },
+  { n: 'واحة', f: 'saturate(1.15) contrast(1.03) brightness(0.98) hue-rotate(8deg)', fx: { t: ['#58d098', 'overlay', 0.44], g: ['#a8802a', '#58d098', 'soft-light', 0.34, 180], bl: 0.25 } },
+  { n: 'ضوء الصباح', f: 'saturate(1.2) contrast(1.06) brightness(1.0) hue-rotate(8deg)', fx: { v: 0.28, t: ['#fff0b0', 'soft-light', 0.48], gr: 0.05 } },
+  { n: 'رمادي كلاسيك', f: 'grayscale(1) contrast(1.1) brightness(1)', fx: { v: 0.15, gr: 0.09 } },
+  { n: 'رمادي فاتح', f: 'grayscale(1) contrast(0.95) brightness(1.15)', fx: { v: 0.19, t: ['#4a3a2a', 'soft-light', 0.3] } },
+  { n: 'رمادي داكن', f: 'grayscale(1) contrast(1.3) brightness(0.85)', fx: { v: 0.23 } },
+  { n: 'أبيض وأسود حاد', f: 'grayscale(1) contrast(1.6) brightness(0.95)', fx: { v: 0.27, t: ['#1a2a4a', 'soft-light', 0.3], gr: 0.09 } },
+  { n: 'مات بلاك', f: 'grayscale(1) contrast(1.05) brightness(0.9)', fx: { v: 0.31 } },
+  { n: 'ضباب رمادي', f: 'grayscale(0.9) contrast(0.9) brightness(1.1)', fx: { v: 0.35, t: ['#2a2a2a', 'soft-light', 0.3] } },
+  { n: 'مونو ناعم', f: 'grayscale(1) contrast(0.9) brightness(1.05)', fx: { v: 0.15, gr: 0.09 } },
+  { n: 'ستريت ✦', f: 'grayscale(1) contrast(1.45) brightness(0.92)', fx: { v: 0.19, t: ['#4a3a2a', 'soft-light', 0.3] } },
+  { n: 'نوار فاخر', f: 'grayscale(1) contrast(1.7) brightness(0.85)', fx: { v: 0.23 } },
+  { n: 'تصوير صحفي', f: 'grayscale(1) contrast(1.25) brightness(1)', fx: { v: 0.27, t: ['#1a2a4a', 'soft-light', 0.3], gr: 0.09 } },
+  { n: 'فضي', f: 'grayscale(1) contrast(1.1) brightness(1.12)', fx: { v: 0.31 } },
+  { n: 'لوح فحم', f: 'grayscale(1) contrast(1.4) brightness(0.8)', fx: { v: 0.35, t: ['#2a2a2a', 'soft-light', 0.3] } },
+  { n: 'أبيض مضيء', f: 'grayscale(1) contrast(0.85) brightness(1.25)', fx: { v: 0.15, gr: 0.09 } },
+  { n: 'وثائقي', f: 'grayscale(1) contrast(1.2) brightness(0.95)', fx: { v: 0.19, t: ['#4a3a2a', 'soft-light', 0.3] } },
+  { n: 'دو توون وردي', f: 'grayscale(.55) contrast(1.15) saturate(1.3) brightness(1.02)', fx: { v: 0.15, t: ['#ff3a9a', 'soft-light', 0.25], g: ['#2a0a6a', '#ff3a9a', 'color', 0.55, 160] } },
+  { n: 'دو توون أزرق', f: 'grayscale(.55) contrast(1.15) saturate(1.35) brightness(1.02)', fx: { v: 0.18, t: ['#3ad0ff', 'soft-light', 0.25], g: ['#1a0a5a', '#3ad0ff', 'color', 0.58, 180] } },
+  { n: 'دو توون أخضر', f: 'grayscale(.55) contrast(1.15) saturate(1.4) brightness(1.02)', fx: { v: 0.21, t: ['#6aff9a', 'soft-light', 0.25], g: ['#0a2a4a', '#6aff9a', 'color', 0.61, 200] } },
+  { n: 'دو توون برتقالي', f: 'grayscale(.55) contrast(1.15) saturate(1.45) brightness(1.02)', fx: { v: 0.24, t: ['#ffa03a', 'soft-light', 0.25], g: ['#3a0a4a', '#ffa03a', 'color', 0.64, 140] } },
+  { n: 'دو توون أحمر', f: 'grayscale(.55) contrast(1.15) saturate(1.5) brightness(1.02)', fx: { v: 0.15, t: ['#ff4a4a', 'soft-light', 0.25], g: ['#1a0a3a', '#ff4a4a', 'color', 0.55, 160] } },
+  { n: 'دو توون بنفسجي', f: 'grayscale(.55) contrast(1.15) saturate(1.3) brightness(1.02)', fx: { v: 0.18, t: ['#c08aff', 'soft-light', 0.25], g: ['#0a0a3a', '#c08aff', 'color', 0.58, 180] } },
+  { n: 'دو توون ذهبي', f: 'grayscale(.55) contrast(1.15) saturate(1.35) brightness(1.02)', fx: { v: 0.21, t: ['#ffd24a', 'soft-light', 0.25], g: ['#3a0a2a', '#ffd24a', 'color', 0.61, 200] } },
+  { n: 'دو توون تيل', f: 'grayscale(.55) contrast(1.15) saturate(1.4) brightness(1.02)', fx: { v: 0.24, t: ['#3affd0', 'soft-light', 0.25], g: ['#3a0a4a', '#3affd0', 'color', 0.64, 140] } },
+  { n: 'صنسيت', f: 'grayscale(.55) contrast(1.15) saturate(1.45) brightness(1.02)', fx: { v: 0.15, t: ['#ff7a5a', 'soft-light', 0.25], g: ['#6a1a8a', '#ff7a5a', 'color', 0.55, 160] } },
+  { n: 'أورورا ✦', f: 'grayscale(.55) contrast(1.15) saturate(1.5) brightness(1.02)', fx: { v: 0.18, t: ['#6affc0', 'soft-light', 0.25], g: ['#3a1a8a', '#6affc0', 'color', 0.58, 180] } },
+  { n: 'كاندي', f: 'grayscale(.55) contrast(1.15) saturate(1.3) brightness(1.02)', fx: { v: 0.21, t: ['#ff8ad8', 'soft-light', 0.25], g: ['#6ad0ff', '#ff8ad8', 'color', 0.61, 200] } },
+  { n: 'مجرة', f: 'grayscale(.55) contrast(1.15) saturate(1.35) brightness(1.02)', fx: { v: 0.24, t: ['#9a6aff', 'soft-light', 0.25], g: ['#0a1a4a', '#9a6aff', 'color', 0.64, 140] } },
+  { n: 'لافا', f: 'grayscale(.55) contrast(1.15) saturate(1.4) brightness(1.02)', fx: { v: 0.15, t: ['#ff5a1a', 'soft-light', 0.25], g: ['#2a0a3a', '#ff5a1a', 'color', 0.55, 160] } },
+  { n: 'أوشن دو', f: 'grayscale(.55) contrast(1.15) saturate(1.45) brightness(1.02)', fx: { v: 0.18, t: ['#1ab0ff', 'soft-light', 0.25], g: ['#0a0a2a', '#1ab0ff', 'color', 0.58, 180] } },
+  { n: 'باندا', f: 'grayscale(.55) contrast(1.15) saturate(1.5) brightness(1.02)', fx: { v: 0.21, t: ['#ffffff', 'soft-light', 0.25], g: ['#101018', '#ffffff', 'color', 0.61, 200] } },
+  { n: 'رمادي أزرق', f: 'grayscale(.55) contrast(1.15) saturate(1.3) brightness(1.02)', fx: { v: 0.24, t: ['#a0c0e0', 'soft-light', 0.25], g: ['#101828', '#a0c0e0', 'color', 0.64, 140] } },
+  { n: 'تفتيح خفيف', f: 'brightness(1.12)' },
+  { n: 'تفتيح قوي', f: 'brightness(1.3) contrast(.95)' },
+  { n: 'تغميق خفيف', f: 'brightness(.88)' },
+  { n: 'تباين ناعم', f: 'contrast(1.12)' },
+  { n: 'تباين حاد', f: 'contrast(1.45)' },
+  { n: 'تشبع خفيف', f: 'saturate(1.25)' },
+  { n: 'تشبع قوي', f: 'saturate(1.9) contrast(1.05)' },
+  { n: 'باهت', f: 'saturate(.55) brightness(1.08)' },
+  { n: 'نصف رمادي', f: 'grayscale(.5)' },
+  { n: 'ألوان زاهية', f: 'saturate(1.5) brightness(1.06) contrast(1.08)' },
+  { n: 'شفاف', f: 'brightness(1.15) saturate(.8) contrast(.92)' },
+  { n: 'حدة', f: 'contrast(1.2) saturate(1.2) brightness(1.02)' },
+  { n: 'عكس لوني خفيف', f: 'hue-rotate(180deg) saturate(.8)' },
+  { n: 'دوران لوني 1', f: 'hue-rotate(40deg) saturate(1.2)' },
+  { n: 'دوران لوني 2', f: 'hue-rotate(90deg) saturate(1.2)' },
+  { n: 'دوران لوني 3', f: 'hue-rotate(140deg) saturate(1.2)' },
+  { n: 'دوران لوني 4', f: 'hue-rotate(230deg) saturate(1.2)' },
+  { n: 'دوران لوني 5', f: 'hue-rotate(290deg) saturate(1.2)' },
+];
+// Picker order + categories. Newer filters are always appended at the END of STORY_FILTERS so stored extra.filter indices stay valid.
+const STORY_FILTER_NEW0 = STORY_FILTERS.findIndex(f => f.n === 'عسل');
+const STORY_FILTER_ORDER: number[] = (() => { const first = STORY_FILTERS.findIndex(f => f.n === 'كلارندون'); const nw = STORY_FILTERS.findIndex(f => f.n === 'بيتش فزّ'); const rng = (a: number, b: number) => Array.from({ length: Math.max(0, b - a) }, (_, k) => a + k); return [0, ...rng(nw, STORY_FILTER_NEW0), ...rng(STORY_FILTER_NEW0, STORY_FILTERS.length), ...rng(first, nw)]; })();
+const STORY_FILTER_CATS: { id: string; l: string; list: number[] }[] = (() => {
+  const first = STORY_FILTERS.findIndex(f => f.n === 'كلارندون'); const nw = STORY_FILTERS.findIndex(f => f.n === 'بيتش فزّ'); const rng = (a: number, b: number) => Array.from({ length: Math.max(0, b - a) }, (_, k) => a + k);
+  const defs: { id: string; l: string; r: [number, number] }[] = [{ id: 'warm', l: 'دافئ', r: [0, 18] },{ id: 'cool', l: 'بارد', r: [18, 36] },{ id: 'film', l: 'سينمائي', r: [36, 54] },{ id: 'vintage', l: 'ريترو', r: [54, 72] },{ id: 'neon', l: 'نيون', r: [72, 90] },{ id: 'soft', l: 'ناعم', r: [90, 108] },{ id: 'moody', l: 'داكن', r: [108, 126] },{ id: 'nature', l: 'طبيعة', r: [126, 144] },{ id: 'bw', l: 'أبيض وأسود', r: [144, 158] },{ id: 'duo', l: 'دو توون', r: [158, 174] },{ id: 'basic', l: 'أساسي', r: [174, 192] }];
+  return [{ id: 'all', l: 'الكل', list: STORY_FILTER_ORDER }, { id: 'top', l: 'مميّز', list: [0, ...rng(nw, STORY_FILTER_NEW0), ...rng(first, nw)] }, ...defs.map(d => ({ id: d.id, l: d.l, list: [0, ...rng(STORY_FILTER_NEW0 + d.r[0], STORY_FILTER_NEW0 + d.r[1])] }))];
+})();
 const GRAIN_URL = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 1.1 -.1'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")";
-function FilterFx({ i }: { i: number }) {
+function FilterFx({ i, k = 1 }: { i: number; k?: number }) {
   const fx = STORY_FILTERS[i]?.fx;
   if (!fx) return null;
   const cls = 'absolute inset-0 pointer-events-none z-[3]';
@@ -3841,19 +4078,19 @@ function FilterFx({ i }: { i: number }) {
   const corner = { tr: '100% 0%', tl: '0% 0%', br: '100% 100%', bl: '0% 100%' } as const;
   return (
     <>
-      {fx.t && <div className={cls} style={{ background: fx.t[0], mixBlendMode: bm(fx.t[1]), opacity: fx.t[2] }} />}
-      {fx.g && <div className={cls} style={{ background: `linear-gradient(${fx.g[4]}deg, ${fx.g[0]}, ${fx.g[1]})`, mixBlendMode: bm(fx.g[2]), opacity: fx.g[3] }} />}
-      {fx.fd ? <div className={cls} style={{ background: 'rgb(48,40,64)', mixBlendMode: 'lighten', opacity: Math.min(1, fx.fd * 2.2) }} /> : null}
-      {fx.bl ? <div className={cls} style={{ background: 'radial-gradient(circle at 50% 38%, rgba(255,255,255,.95), rgba(255,255,255,0) 72%)', mixBlendMode: 'soft-light', opacity: Math.min(1, fx.bl * 2.4) }} /> : null}
-      {fx.lk && <div className={cls} style={{ background: `radial-gradient(circle at ${corner[fx.lk[2]]}, ${fx.lk[0]}, rgba(0,0,0,0) 62%)`, mixBlendMode: 'screen', opacity: fx.lk[1] }} />}
-      {fx.gr ? <div className={cls} style={{ backgroundImage: GRAIN_URL, backgroundSize: '180px 180px', mixBlendMode: 'overlay', opacity: Math.min(1, fx.gr * 5) }} /> : null}
-      {fx.v ? <div className={cls} style={{ background: `radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,${fx.v}) 100%)` }} /> : null}
+      {fx.t && <div className={cls} style={{ background: fx.t[0], mixBlendMode: bm(fx.t[1]), opacity: fx.t[2] * k }} />}
+      {fx.g && <div className={cls} style={{ background: `linear-gradient(${fx.g[4]}deg, ${fx.g[0]}, ${fx.g[1]})`, mixBlendMode: bm(fx.g[2]), opacity: fx.g[3] * k }} />}
+      {fx.fd ? <div className={cls} style={{ background: 'rgb(48,40,64)', mixBlendMode: 'lighten', opacity: Math.min(1, fx.fd * 2.2) * k }} /> : null}
+      {fx.bl ? <div className={cls} style={{ background: 'radial-gradient(circle at 50% 38%, rgba(255,255,255,.95), rgba(255,255,255,0) 72%)', mixBlendMode: 'soft-light', opacity: Math.min(1, fx.bl * 2.4) * k }} /> : null}
+      {fx.lk && <div className={cls} style={{ background: `radial-gradient(circle at ${corner[fx.lk[2]]}, ${fx.lk[0]}, rgba(0,0,0,0) 62%)`, mixBlendMode: 'screen', opacity: fx.lk[1] * k }} />}
+      {fx.gr ? <div className={cls} style={{ backgroundImage: GRAIN_URL, backgroundSize: '180px 180px', mixBlendMode: 'overlay', opacity: Math.min(1, fx.gr * 5) * k }} /> : null}
+      {fx.v ? <div className={cls} style={{ background: `radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,${fx.v}) 100%)`, opacity: k }} /> : null}
     </>
   );
 }
 // Paints the same layers as <FilterFx/> onto a canvas, so a published photo looks exactly like the preview.
-function paintStoryFx(ctx: CanvasRenderingContext2D, W: number, H: number, fx: StoryFx) {
-  const blend = (op: string, alpha: number, fill: string | CanvasGradient | CanvasPattern) => { ctx.save(); ctx.globalCompositeOperation = op as GlobalCompositeOperation; ctx.globalAlpha = alpha; ctx.fillStyle = fill; ctx.fillRect(0, 0, W, H); ctx.restore(); };
+function paintStoryFx(ctx: CanvasRenderingContext2D, W: number, H: number, fx: StoryFx, k = 1) {
+  const blend = (op: string, alpha: number, fill: string | CanvasGradient | CanvasPattern) => { ctx.save(); ctx.globalCompositeOperation = op as GlobalCompositeOperation; ctx.globalAlpha = alpha * k; ctx.fillStyle = fill; ctx.fillRect(0, 0, W, H); ctx.restore(); };
   if (fx.t) blend(fx.t[1], fx.t[2], fx.t[0]);
   if (fx.g) {
     const a = (fx.g[4] * Math.PI) / 180; const dx = Math.sin(a), dy = -Math.cos(a); const len = Math.abs(W * dx) + Math.abs(H * dy);
@@ -3869,7 +4106,7 @@ function paintStoryFx(ctx: CanvasRenderingContext2D, W: number, H: number, fx: S
   if (fx.gr) { const pat = ctx.createPattern(getGrain(), 'repeat'); if (pat) blend('overlay', Math.min(1, fx.gr * 5), pat); }
   if (fx.v) { const r = Math.hypot(W, H) / 2; const g = ctx.createRadialGradient(W / 2, H / 2, r * 0.45, W / 2, H / 2, r); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${fx.v})`); blend('source-over', 1, g); }
 }
-const bakeFilter = async (f: File, css: string, fxIdx = 0): Promise<File | null> => {
+const bakeFilter = async (f: File, css: string, fxIdx = 0, k = 1): Promise<File | null> => {
   try {
     const bmp = await createImageBitmap(f);
     const sc = Math.min(1, 2160 / Math.max(bmp.width, bmp.height));
@@ -3877,10 +4114,12 @@ const bakeFilter = async (f: File, css: string, fxIdx = 0): Promise<File | null>
     c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc);
     const ctx = c.getContext('2d');
     if (!ctx || !('filter' in ctx)) return null;
+    if (k < 1) { ctx.filter = 'none'; ctx.drawImage(bmp, 0, 0, c.width, c.height); ctx.globalAlpha = k; }
     ctx.filter = css;
     ctx.drawImage(bmp, 0, 0, c.width, c.height);
+    ctx.globalAlpha = 1;
     const fx = STORY_FILTERS[fxIdx]?.fx;
-    if (fx) { ctx.filter = 'none'; paintStoryFx(ctx, c.width, c.height, fx); }
+    if (fx) { ctx.filter = 'none'; paintStoryFx(ctx, c.width, c.height, fx, k); }
     const blob = await new Promise<Blob | null>(r => c.toBlob(r, 'image/jpeg', 0.92));
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
@@ -3911,12 +4150,13 @@ const pollOptions = (p: { a: string; b: string; o?: string[] }): string[] => (p.
 // Rotation snaps to every 45 degrees when you are within a few degrees of it.
 const snapAng = (r: number) => { const n = ((((r + 540) % 360) + 360) % 360) - 180; const m = Math.round(n / 45) * 45; return Math.abs(n - m) < 3.5 ? m : n; };
 
-function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSelect, xsel, onXSelect, onXf, onXRemove, onMention, onTap }: {
-  onTap?: (idx: number) => void; onMention?: (ref: string) => void; extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk' | 'poll' | 'item', x: number, y: number, idx?: number) => void; onScale?: (idx: number, s: number) => void; onRotate?: (idx: number, r: number) => void; onRemove?: (idx: number) => void; sel?: number; onSelect?: (idx: number) => void; xsel?: '' | 'poll' | 'ask'; onXSelect?: (k: 'poll' | 'ask') => void; onXf?: (k: 'poll' | 'ask', p: Partial<StoryXf>) => void; onXRemove?: (k: 'poll' | 'ask') => void }) {
+function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSelect, xsel, onXSelect, onXf, onXRemove, onMention, onTap, onLong }: {
+  onLong?: (idx: number) => void; onTap?: (idx: number) => void; onMention?: (ref: string) => void; extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk' | 'poll' | 'item', x: number, y: number, idx?: number) => void; onScale?: (idx: number, s: number) => void; onRotate?: (idx: number, r: number) => void; onRemove?: (idx: number) => void; sel?: number; onSelect?: (idx: number) => void; xsel?: '' | 'poll' | 'ask'; onXSelect?: (k: 'poll' | 'ask') => void; onXf?: (k: 'poll' | 'ask', p: Partial<StoryXf>) => void; onXRemove?: (k: 'poll' | 'ask') => void }) {
   const root = useRef<HTMLDivElement>(null);
   const ptrs = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ d: number; s: number; a: number; r: number } | null>(null);
   const tapRef = useRef({ x: 0, y: 0, moved: false, multi: false });
+  const lpT = useRef(0); const longFired = useRef(false);
   const xp = useRef<{ key: string; ptrs: Map<number, { x: number; y: number }>; pinch: { d: number; s: number; a: number; r: number } | null }>({ key: '', ptrs: new Map(), pinch: null });
   const [gd, setGd] = useState({ x: false, y: false });
   if (!extra) return null;
@@ -3998,6 +4238,8 @@ function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSele
             if (ptrs.current.size === 0) tapRef.current = { x: e.clientX, y: e.clientY, moved: false, multi: false };
             ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
             onSelect?.(i);
+            longFired.current = false; window.clearTimeout(lpT.current);
+            if (onLong && ptrs.current.size === 1) lpT.current = window.setTimeout(() => { if (!tapRef.current.moved && !tapRef.current.multi && ptrs.current.size === 1) { longFired.current = true; onLong(i); } }, 480);
             if (ptrs.current.size >= 2) tapRef.current.multi = true;
             if (ptrs.current.size === 2) { const [a, b] = [...ptrs.current.values()]; pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: it.s, a: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI, r: it.r ?? 0 }; }
           },
@@ -4013,8 +4255,8 @@ function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSele
             }
             if (ptrs.current.size === 1) { const p = pos(e.clientX, e.clientY); onMove!('item', p.x, p.y, i); }
           },
-          onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => { const tp = tapRef.current; const wasTap = ptrs.current.size === 1 && !tp.moved && !tp.multi; ptrs.current.delete(e.pointerId); if (ptrs.current.size < 2) pinch.current = null; endGd(); if (wasTap) onTap?.(i); },
-          onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => { ptrs.current.delete(e.pointerId); pinch.current = null; endGd(); },
+          onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => { const tp = tapRef.current; window.clearTimeout(lpT.current); const wasTap = !longFired.current && ptrs.current.size === 1 && !tp.moved && !tp.multi; ptrs.current.delete(e.pointerId); if (ptrs.current.size < 2) pinch.current = null; endGd(); if (wasTap) onTap?.(i); },
+          onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => { window.clearTimeout(lpT.current); ptrs.current.delete(e.pointerId); pinch.current = null; endGd(); },
           onWheel: (e: React.WheelEvent<HTMLDivElement>) => onScale?.(i, Math.max(14, Math.min(360, it.s - e.deltaY * 0.2))),
         } : {};
         return (
@@ -4274,8 +4516,8 @@ function TextStoryComposer({ onClose, onNext }: { onClose: () => void; onNext: (
 
 function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId, initialMusic }: { file: File; currentUser: User; users: User[]; onClose: () => void; onDone: () => void; sharedPostId?: string; initialMusic?: { url: string; name: string; start: number; end: number; file?: File } | null }) {
   useBackLayer(true, onClose);
-  const [previewUrl] = useState(() => URL.createObjectURL(file));
-  useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
+  const [previewUrl, setPreviewUrl] = useState('');
+  useEffect(() => { const u = URL.createObjectURL(file); setPreviewUrl(u); return () => URL.revokeObjectURL(u); }, [file]);
   const isVideo = file.type.startsWith('video/');
   const [caption, setCaption] = useState('');
   const [pct, setPct] = useState(0);
@@ -4292,13 +4534,14 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const [tp, setTp] = useState<Pct | undefined>(undefined);
   const [ly, setLy] = useState<LyState>({ on: false, raw: [], off: 0, st: 0, c: '#ffffff', p: { x: 50, y: 42, s: 1 } });
   const patchLy = (o: Partial<LyState>) => setLy(v => ({ ...v, ...o }));
-  const musicUrl = useMemo(() => (music ? URL.createObjectURL(music) : ''), [music]);
-  useEffect(() => () => { if (musicUrl) URL.revokeObjectURL(musicUrl); }, [musicUrl]);
+  const [musicUrl, setMusicUrl] = useState('');
+  useEffect(() => { if (!music) { setMusicUrl(''); return; } const u = URL.createObjectURL(music); setMusicUrl(u); return () => URL.revokeObjectURL(u); }, [music]);
   const lySrc = musicUrl || remoteM?.url || '';
   const [lyPlay, setLyPlay] = useState(false);
+  const [lyHold, setLyHold] = useState(false); // the clip-trimmer preview is playing: the auto music waits so the two never overlap
   const [lyT, setLyT] = useState(0);
   useEffect(() => {
-    if (!lyPlay || !lySrc) return;
+    if (!lyPlay || lyHold || !lySrc) return;
     const a = new Audio(lySrc);
     const endT = mEnd > mStart ? mEnd : mStart + 30;
     a.addEventListener('loadedmetadata', () => { a.currentTime = mStart; }, { once: true });
@@ -4307,8 +4550,8 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
     const loop = () => { raf = requestAnimationFrame(loop); if (a.currentTime >= endT) a.currentTime = mStart; setLyT(a.currentTime); };
     raf = requestAnimationFrame(loop);
     return () => { cancelAnimationFrame(raf); a.pause(); };
-  }, [lyPlay, lySrc, mStart, mEnd]);
-  useEffect(() => { if (tool !== 'music') setLyPlay(false); }, [tool]);
+  }, [lyPlay, lyHold, lySrc, mStart, mEnd]);
+  useEffect(() => { setLyPlay(!!lySrc); }, [lySrc]); // keeps playing after the music tab is closed
   const lyLines = useMemo(() => ly.raw.map(([t, s]) => [t + ly.off, s] as [number, string]), [ly.raw, ly.off]);
   // Lyrics begin at the first line of the verse you picked (the clip is only ~30 s), never earlier.
   const lyFirst = Math.max(0, lyLines.findIndex(([t]) => t >= mStart - 0.4));
@@ -4355,9 +4598,10 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const [xsel, setXsel] = useState<'' | 'poll' | 'ask'>('');
   const [pxs, setPxs] = useState<string[]>([]);
   const [flt, setFlt] = useState(0);
+  const [fk, setFk] = useState(100); // filter strength (photos)
   const [fltName, setFltName] = useState('');
   const swipeX = useRef(0);
-  const pickFlt = (i: number) => { const n = (i + STORY_FILTERS.length) % STORY_FILTERS.length; setFlt(n); setFltName(STORY_FILTERS[n].n); window.setTimeout(() => setFltName(''), 900); };
+  const pickFlt = (i: number) => { const n = (i + STORY_FILTERS.length) % STORY_FILTERS.length; setFlt(n); setFk(100); setFltName(STORY_FILTERS[n].n); window.setTimeout(() => setFltName(''), 900); };
   const [stk, setStk] = useState<string[]>([]);
   const [pq, setPq] = useState('');
   const [pa, setPa] = useState('');
@@ -4366,6 +4610,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const [aud, setAud] = useState<'all' | 'close'>('all');
   const [sched, setSched] = useState('');
   const [cfOpen, setCfOpen] = useState(false);
+  const [storeOpen, setStoreOpen] = useState(false);
   const [items, setItems] = useState<StoryItemEdit[]>([]);
   const [sel, setSel] = useState(-1);
   const itemPick = useRef<HTMLInputElement>(null);
@@ -4381,6 +4626,8 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const [, setDn] = useState(0);
   const [dur, setDur] = useState(5);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [fcat, setFcat] = useState('all');
+  void moreOpen;
   const tapStart = useRef<{ x: number; y: number } | null>(null);
   const [tFont, setTFont] = useState(0);
   const [cTitle, setCTitle] = useState('');
@@ -4473,7 +4720,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
     if (!isVideo) { try { baseFile = await bakeTransform(file); } catch (e) { console.error(e); } }
     let upFile: File = baseFile;
     let baked = false;
-    if (!isVideo && flt > 0) { try { const b = await bakeFilter(baseFile, STORY_FILTERS[flt].f, flt); if (b) { upFile = b; baked = true; } } catch (e) { console.error(e); } }
+    if (!isVideo && flt > 0) { try { const b = await bakeFilter(baseFile, STORY_FILTERS[flt].f, flt, fk / 100); if (b) { upFile = b; baked = true; } } catch (e) { console.error(e); } }
     if (!isVideo) { try { upFile = await shrinkImageFile(upFile); } catch (e) { console.error(e); } }
     let path: string;
     try { path = kanPath(`${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[upFile.type] ?? safeExt(upFile.name)}`, upFile.size); }
@@ -4567,6 +4814,11 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
     setItems(a => a.map((x, k) => (k === i ? { ...x, c: next } : x)));
     try { navigator.vibrate?.(8); } catch { /* ignore */ }
   };
+  const fontItem = (i: number) => {
+    const it = items[i]; if (!it || it.k !== 't') return;
+    setItems(a => a.map((x, k) => (k === i ? { ...x, f: ((x.f ?? 0) + 1) % STORY_FONTS.length } : x)));
+    try { navigator.vibrate?.(14); } catch { /* ignore */ }
+  };
   const normAng = (r: number) => ((((r + 540) % 360) + 360) % 360) - 180;
   const xfControls = (k: 'poll' | 'ask') => {
     const v = k === 'poll' ? pollPos : askPos; const set = k === 'poll' ? setPollPos : setAskPos;
@@ -4611,7 +4863,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
         <div style={{ background: isVideo ? undefined : bgc }} className="relative h-full w-full sm:w-auto sm:max-w-full sm:aspect-[9/16] bg-black sm:rounded-[32px] overflow-hidden sm:ring-2 ring-violet-400/40 sm:shadow-[0_0_60px_-10px_rgba(139,92,246,0.6)] flex items-center justify-center">
           {isVideo
             ? <video src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay />
-            : <>{blurBg && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}<img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="relative w-full h-full object-contain select-none pointer-events-none" /></>}
+            : <>{blurBg && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}<img src={previewUrl} alt="" draggable={false} style={{ filter: fk >= 100 ? STORY_FILTERS[flt].f : undefined, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="relative w-full h-full object-contain select-none pointer-events-none" />{fk < 100 && flt > 0 && <img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, opacity: fk / 100, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none" />}</>}
           {!isVideo && tool !== 'draw' && <div className="absolute inset-0 z-[4] touch-none cursor-grab"
             onPointerDown={e => { tapStart.current = { x: e.clientX, y: e.clientY }; setMoreOpen(false); e.currentTarget.setPointerCapture(e.pointerId); bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); setSel(-1); setXsel(''); if (bp.current.size === 2) { const [p, q] = [...bp.current.values()]; bz.current = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI, r: rot }; } }}
             onPointerMove={e => {
@@ -4634,7 +4886,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
           {remoteM && !music && musicMode === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={q => setTp(o => ({ ...q, r: o?.r, s: o?.s }))} />}
           {(music || remoteM) && ly.on && lyShown.length > 0 && <StoryLyrics ly={{ l: lyShown, st: ly.st, c: ly.c, p: ly.p }} idx={lyIdx} onMove={tool === 'music' ? (q => patchLy({ p: { ...ly.p, x: q.x, y: q.y } })) : undefined} />}
-          <FilterFx i={flt} />
+          <FilterFx i={flt} k={isVideo ? 1 : fk / 100} />
           {IS_TOUCH && selItem && tool !== 'draw' && (
             <div className="absolute top-14 inset-x-0 z-[32] flex justify-center pointer-events-none">
               <div className="pointer-events-auto flex items-center gap-1 p-1 rounded-full bg-black/55 backdrop-blur-xl ring-1 ring-white/20 shadow-xl ky-fade" onPointerDown={e => e.stopPropagation()}>
@@ -4647,17 +4899,20 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
             </div>
           )}
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
-          <div className="absolute top-3 end-3 z-20 flex flex-col items-center gap-2.5">
-            {toolDefs.slice(0, 5).map(([k, Ic, label, on]) => (
-              <button key={k} onClick={() => { setMoreOpen(false); setTool(t => (t === k ? '' : k)); }} aria-label={label} title={label} className={`relative w-11 h-11 rounded-2xl flex items-center justify-center text-white active:scale-90 transition-all duration-200 backdrop-blur-xl ${tool === k ? 'bg-gradient-to-br from-violet-500 to-cyan-400 shadow-lg shadow-violet-500/40 scale-105' : 'bg-black/35 ring-1 ring-white/25'}`}><Ic size={21} strokeWidth={2.2} color="#fff" />{on && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-white ring-2 ring-violet-600" />}</button>
-            ))}
-            <button onClick={() => { setTool(''); setMoreOpen(true); }} aria-label="المزيد" title="المزيد" className={`relative w-11 h-11 rounded-2xl flex items-center justify-center text-white text-xl font-black leading-none active:scale-90 transition-all backdrop-blur-xl bg-black/35 ring-1 ring-white/25`}>⋯{toolDefs.slice(5).some(d => d[3]) && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-white ring-2 ring-violet-600" />}</button>
-          </div>
-          <StoryOverlays extra={extra} sel={sel} xsel={xsel} onTap={tapItem} onXSelect={k => { setXsel(k); setSel(-1); setTool(k); }} onXf={(k, p) => (k === 'poll' ? setPollPos(o => ({ ...o, ...p })) : setAskPos(o => ({ ...o, ...p })))} onXRemove={k => { if (k === 'poll') { setPq(''); setPa(''); setPb(''); setPxs([]); } else setAsk(''); setXsel(''); }} onSelect={i => { setSel(i); setXsel(''); if (items[i]?.k === 't') setTool('text'); }} onRemove={removeItem} onScale={(i, sz) => setItems(a => a.map((x, k) => (k === i ? { ...x, s: sz } : x)))} onRotate={(i, r) => setItems(a => a.map((x, k) => (k === i ? { ...x, r } : x)))} onMove={(k, x, y, idx) => { if (k === 'text') { const tk = extra.texts?.[idx ?? -1]?.k; if (tk === 'loc') setLocP(o => ({ ...o, x, y })); else if (tk === 'men') setMenP(o => ({ ...o, x, y })); else if (tk === 'lnk') setLnkP(o => ({ ...o, x, y })); } else if (k === 'poll') setPollPos(o => ({ ...o, x, y })); else if (k === 'item' && idx !== undefined) setItems(a => a.map((it, i) => (i === idx ? { ...it, x, y } : it))); else setStkPos({ x, y }); }} />
+          <StoryOverlays extra={extra} sel={sel} xsel={xsel} onTap={tapItem} onLong={fontItem} onXSelect={k => { setXsel(k); setSel(-1); setTool(k); }} onXf={(k, p) => (k === 'poll' ? setPollPos(o => ({ ...o, ...p })) : setAskPos(o => ({ ...o, ...p })))} onXRemove={k => { if (k === 'poll') { setPq(''); setPa(''); setPb(''); setPxs([]); } else setAsk(''); setXsel(''); }} onSelect={i => { setSel(i); setXsel(''); if (items[i]?.k === 't' && !IS_TOUCH) setTool('text'); }} onRemove={removeItem} onScale={(i, sz) => setItems(a => a.map((x, k) => (k === i ? { ...x, s: sz } : x)))} onRotate={(i, r) => setItems(a => a.map((x, k) => (k === i ? { ...x, r } : x)))} onMove={(k, x, y, idx) => { if (k === 'text') { const tk = extra.texts?.[idx ?? -1]?.k; if (tk === 'loc') setLocP(o => ({ ...o, x, y })); else if (tk === 'men') setMenP(o => ({ ...o, x, y })); else if (tk === 'lnk') setLnkP(o => ({ ...o, x, y })); } else if (k === 'poll') setPollPos(o => ({ ...o, x, y })); else if (k === 'item' && idx !== undefined) setItems(a => a.map((it, i) => (i === idx ? { ...it, x, y } : it))); else setStkPos({ x, y }); }} />
         </div>
       </div>
-      <div key={tool || 'none'} className={`absolute inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 ${tool ? 'ky-sheet rounded-[28px] bg-gray-950/80 backdrop-blur-2xl ring-1 ring-white/15 p-3 max-h-[48%] overflow-y-auto no-scrollbar overscroll-contain shadow-2xl shadow-violet-950/50' : 'hidden'}`}>
-        {tool && <div className="flex items-center justify-between mb-2"><span className="text-white text-sm font-bold">{toolLabel}</span><button onClick={() => setTool('')} className="px-3.5 h-7 rounded-full bg-white text-black text-xs font-bold active:scale-95">تم</button></div>}
+      <div className="relative shrink-0 z-30">
+      <div key={tool || 'none'} className={tool ? 'ky-sheet absolute inset-x-0 bottom-full rounded-t-[30px] bg-gray-950/90 backdrop-blur-2xl border-t border-x border-white/15 px-3.5 pt-2 pb-3 max-h-[46dvh] overflow-y-auto no-scrollbar overscroll-contain shadow-[0_-18px_50px_-12px_rgba(76,29,149,0.55)]' : 'hidden'}>
+        {tool && <>
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/25" />
+          <div className="sticky top-0 z-10 -mx-1 px-1 pb-2 mb-1 flex items-center gap-2.5 bg-gradient-to-b from-gray-950 via-gray-950/95 to-transparent">
+            {(() => { const d = toolDefs.find(x => x[0] === tool); const Ic = d?.[1]; return Ic ? <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-violet-500/30"><Ic size={17} color="#fff" strokeWidth={2.2} /></span> : null; })()}
+            <span className="flex-1 min-w-0 truncate text-white text-[15px] font-bold">{toolLabel}{tool === 'filter' && flt > 0 ? <span className="text-white/55 font-medium text-xs"> · {STORY_FILTERS[flt].n}</span> : null}</span>
+            {tool === 'filter' && flt > 0 && <button onClick={() => pickFlt(0)} className="px-3 h-8 rounded-full bg-white/10 ring-1 ring-white/15 text-white/90 text-xs font-semibold active:scale-95">إزالة</button>}
+            <button onClick={() => setTool('')} className="px-4 h-8 rounded-full bg-white text-black text-xs font-bold active:scale-95 shadow">تم</button>
+          </div>
+        </>}
         {tool === 'text' && <div className="space-y-2 mb-1">
           <div className="flex gap-2"><input value={tNew} onChange={e => setTNew(e.target.value.slice(0, 200))} onKeyDown={e => { if (e.key === 'Enter') addText(tNew); }} placeholder="اكتب نصاً ثم اضغط +" dir="auto" className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><button onClick={() => addText(tNew)} className="shrink-0 w-10 h-10 rounded-full bg-white text-black flex items-center justify-center active:scale-90" aria-label="إضافة"><Plus size={20} /></button></div>
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -4686,6 +4941,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <input ref={itemPick} type="file" accept="image/*" multiple className="hidden" onChange={e => { const fs = (Array.from(e.target.files ?? []) as File[]).slice(0, 6); e.target.value = ''; for (const f of fs) if (f.type.startsWith('image/')) addItem('i', URL.createObjectURL(f), f); }} />
           <div className="flex gap-2 overflow-x-auto no-scrollbar items-center">
             <button onClick={() => itemPick.current?.click()} className="shrink-0 h-12 px-4 rounded-full bg-white/15 ring-1 ring-white/30 text-white text-sm font-semibold flex items-center gap-2 active:scale-95"><ImageIcon size={18} color="#fff" /> صورة</button>
+            <button onClick={() => setStoreOpen(true)} className="shrink-0 h-12 px-4 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold flex items-center gap-2 active:scale-95"><Sparkles size={18} color="#fff" /> متجر KIX</button>
             {['😍', '🔥', '😂', '🎉', '❤️', '😎', '🙏', '💯', '⭐', '👏', '🥰', '😭', '🤩', '😘', '🤝', '💪', '🌹', '☀️', '🌙', '✨', '🎶', '🥳', '😅', '🤔'].map(e => <button key={e} onClick={() => addItem('e', e)} className="text-3xl shrink-0 w-12 h-12 rounded-full bg-white/10 active:scale-90 transition-transform">{e}</button>)}
           </div>
           {selControls}
@@ -4696,7 +4952,11 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <span className="w-11 text-center text-white text-xs tabular-nums" dir="ltr">{Math.round(items[sel].r ?? 0)}°</span>
           <button onClick={() => patchSel({ r: ((items[sel].r ?? 0) + 90 > 180 ? (items[sel].r ?? 0) - 270 : (items[sel].r ?? 0) + 90) })} className="shrink-0 px-2.5 py-1 rounded-full bg-white/15 text-white text-xs font-semibold">90°</button>
         </div>}
-        {tool === 'filter' && <div className="flex gap-2.5 overflow-x-auto no-scrollbar mb-2">{STORY_FILTER_ORDER.map(i => ({ f: STORY_FILTERS[i], i })).map(({ f, i }) => <button key={f.n} onClick={() => pickFlt(i)} className="shrink-0 flex flex-col items-center gap-1 w-16"><span className={`relative block w-16 h-16 rounded-xl overflow-hidden isolate ${flt === i ? 'ring-2 ring-white scale-105' : 'opacity-85'}`}>{isVideo ? <video src={`${previewUrl}#t=0.1`} preload="metadata" muted playsInline style={{ filter: f.f }} className="w-full h-full object-cover pointer-events-none" /> : <img src={previewUrl} alt="" style={{ filter: f.f }} className="w-full h-full object-cover" />}<FilterFx i={i} /></span><span className={`text-[11px] ${flt === i ? 'text-white font-bold' : 'text-white/70'}`}>{f.n}</span></button>)}</div>}
+        {tool === 'filter' && flt > 0 && !isVideo && <div className="flex items-center gap-3 px-1 mb-2"><span className="text-white/80 text-xs shrink-0">الشدة</span><input type="range" min={10} max={100} value={fk} onChange={e => setFk(Number(e.target.value))} className="flex-1 accent-white" aria-label="شدة الفلتر" /><span className="w-10 text-center text-white text-xs tabular-nums" dir="ltr">{fk}%</span></div>}
+        {tool === 'filter' && <div className="mb-1">
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar mb-2.5 -mx-1 px-1">{STORY_FILTER_CATS.map(c => <button key={c.id} onClick={() => setFcat(c.id)} className={`shrink-0 px-3.5 h-8 rounded-full text-xs font-semibold transition-all active:scale-95 ${fcat === c.id ? 'bg-white text-black shadow' : 'bg-white/10 text-white/80 ring-1 ring-white/10'}`}>{c.l}<span className={`ms-1.5 text-[10px] ${fcat === c.id ? 'text-black/50' : 'text-white/40'}`}>{c.list.length - 1}</span></button>)}</div>
+          <div key={fcat} className="grid grid-rows-2 grid-flow-col auto-cols-[68px] gap-x-2.5 gap-y-2 overflow-x-auto no-scrollbar pb-1 ky-fade">{(STORY_FILTER_CATS.find(c => c.id === fcat) ?? STORY_FILTER_CATS[0]).list.map(i => ({ f: STORY_FILTERS[i], i })).map(({ f, i }) => <button key={f.n} onClick={() => pickFlt(i)} className="flex flex-col items-center gap-1 active:scale-95 transition-transform"><span className={`relative block w-[68px] h-[68px] rounded-2xl overflow-hidden isolate transition-all ${flt === i ? 'ring-2 ring-white shadow-lg shadow-violet-500/40' : 'ring-1 ring-white/10 opacity-90'}`}>{isVideo ? <video src={`${previewUrl}#t=0.1`} preload="metadata" muted playsInline style={{ filter: f.f }} className="w-full h-full object-cover pointer-events-none" /> : <img src={previewUrl} alt="" loading="lazy" style={{ filter: f.f }} className="w-full h-full object-cover" />}<FilterFx i={i} />{flt === i && <span className="absolute bottom-1 end-1 z-[5] w-4 h-4 rounded-full bg-white text-black text-[10px] font-black flex items-center justify-center">✓</span>}</span><span className={`w-full truncate text-center text-[10.5px] ${flt === i ? 'text-white font-bold' : 'text-white/65'}`}>{f.n}</span></button>)}</div>
+        </div>}
         {tool === 'frame' && !isVideo && <div className="space-y-2.5 mb-1">
           <button onClick={() => setBlurBg(b => !b)} className={`w-full py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] ${blurBg ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>🌫️ خلفية ضبابية من نفس الصورة {blurBg ? '✓' : ''}</button>
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -4712,14 +4972,14 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           </div>
         </div>}
         {tool === 'music' && <div className="mb-2">{music
-          ? <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2"><div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{music.name}</span><button onClick={() => { setMusic(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div><div className="mt-2 px-1"><MusicModeBar mode={musicMode} onMode={setMusicMode} hasCover={false} hasLyrics={ly.raw.length > 0} /></div><div className="mt-2"><MusicTrimmer file={music} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div></div>
+          ? <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2"><div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{music.name}</span><button onClick={() => { setMusic(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div><div className="mt-2 px-1"><MusicModeBar mode={musicMode} onMode={setMusicMode} hasCover={false} hasLyrics={ly.raw.length > 0} /></div><div className="mt-2"><MusicTrimmer file={music} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} onPreview={setLyHold} /></div></div>
           : <div className="space-y-2">
               {remoteM && <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2">
                 <div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{remoteM.name}</span><button onClick={() => { setRemoteM(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div>
                 <div className="px-2 mt-2"><MusicModeBar mode={musicMode} onMode={setMusicMode} hasCover={!!remoteM.cover} hasLyrics={ly.raw.length > 0} /></div>
                 {musicMode === 'cover' && !IS_TOUCH && <div className="mt-1.5 flex items-center gap-2 px-2"><span className="text-[11px] text-gray-300 shrink-0">اسحب الغلاف لتحريكه · تدوير</span><input type="range" min={-180} max={180} value={Math.round(tp?.r ?? 0)} onChange={e => setTp(o => ({ x: o?.x ?? 50, y: o?.y ?? 62, s: o?.s, r: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round(tp?.r ?? 0)}°</span></div>}
                 {musicMode === 'cover' && <div className="mt-1.5 flex items-center gap-2 px-2"><span className="text-[11px] text-gray-300 shrink-0">حجم الغلاف</span><input type="range" min={0.4} max={1.6} step={0.05} value={tp?.s ?? 1} onChange={e => setTp(o => ({ x: o?.x ?? 50, y: o?.y ?? 62, r: o?.r, s: Number(e.target.value) }))} className="flex-1 min-w-0 accent-white" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round((tp?.s ?? 1) * 100)}%</span></div>}
-                <div className="mt-2"><MusicTrimmer key={remoteM.url} src={remoteM.url} name={remoteM.name} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div>
+                <div className="mt-2"><MusicTrimmer key={remoteM.url} src={remoteM.url} name={remoteM.name} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} onPreview={setLyHold} /></div>
               </div>}
               {remoteM && !libOpen
                 ? <button onClick={() => setLibOpen(true)} className="w-full py-2.5 rounded-2xl bg-white/10 text-white text-xs font-semibold">تغيير الأغنية</button>
@@ -4766,28 +5026,23 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           ))}
         </div>
       </div>
-      <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2 bg-white/[0.06] backdrop-blur-2xl border-t border-white/15 rounded-t-3xl">
-        <input value={caption} onChange={e => setCaption(e.target.value.slice(0, 300))} placeholder="أضف تعليقاً..." className="flex-1 px-4 py-2.5 bg-white/10 backdrop-blur ring-1 ring-white/20 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none focus:ring-violet-400/70" />
-        <button onClick={() => void publish()} disabled={busy} className="px-6 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 shadow-lg shadow-cyan-500/30 ring-1 ring-white/25 text-white text-sm font-bold flex items-center gap-2 disabled:opacity-70 active:scale-95 transition-transform">
+      <div dir={DIR} className="flex gap-0.5 overflow-x-auto no-scrollbar px-2 pt-2 pb-1 bg-black/75 backdrop-blur-2xl border-t border-white/10">
+        {toolDefs.map(([k, Ic, label, on]) => (
+          <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} aria-label={label} className="shrink-0 w-[62px] flex flex-col items-center gap-1 py-1 active:scale-90 transition-transform">
+            <span className={`relative w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-200 ${tool === k ? 'bg-gradient-to-br from-violet-500 to-cyan-400 shadow-lg shadow-violet-500/40 -translate-y-0.5' : on ? 'bg-white/20 ring-1 ring-white/40' : 'bg-white/10 ring-1 ring-white/10'}`}><Ic size={21} strokeWidth={2.1} color="#fff" />{on && tool !== k && <span className="absolute -top-0.5 -end-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-black" />}</span>
+            <span className={`text-[10px] leading-tight max-w-full truncate ${tool === k ? 'text-white font-bold' : 'text-white/65'}`}>{label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="px-3 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2 bg-black/75 backdrop-blur-2xl">
+        <input value={caption} onChange={e => setCaption(e.target.value.slice(0, 300))} placeholder="أضف تعليقاً..." className="flex-1 min-w-0 px-4 py-2.5 bg-white/10 ring-1 ring-white/15 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none focus:ring-violet-400/70" />
+        <button onClick={() => void publish()} disabled={busy} className="shrink-0 px-6 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 shadow-lg shadow-cyan-500/30 ring-1 ring-white/25 text-white text-sm font-bold flex items-center gap-2 disabled:opacity-70 active:scale-95 transition-transform">
           {busy ? <><RefreshCw size={15} className="animate-spin" /> {pct}%</> : <><Send size={15} /> {sched ? 'جدولة' : 'نشر'}</>}
         </button>
       </div>
-      {moreOpen && (
-        <div className="absolute inset-0 z-[35] flex items-end bg-black/55 ky-fade" onClick={() => setMoreOpen(false)}>
-          <div className="w-full rounded-t-[28px] bg-gray-950/95 backdrop-blur-2xl ring-1 ring-white/10 p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] ky-sheet" onClick={e => e.stopPropagation()}>
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/25" />
-            <div className="grid grid-cols-4 gap-x-2 gap-y-4">
-              {toolDefs.slice(5).map(([k, Ic, label, on]) => (
-                <button key={k} onClick={() => { setMoreOpen(false); setTool(k); }} className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform">
-                  <span className={`relative w-14 h-14 rounded-2xl flex items-center justify-center ${on ? 'bg-gradient-to-br from-violet-500 to-cyan-400 shadow-lg shadow-violet-500/30' : 'bg-white/10 ring-1 ring-white/10'}`}><Ic size={24} color="#fff" strokeWidth={2.1} /></span>
-                  <span className="text-[11px] text-white/85 text-center leading-tight">{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
       {cfOpen && <CloseFriendsModal meId={currentUser.id} onClose={() => setCfOpen(false)} />}
+      {storeOpen && <KixStore onClose={() => setStoreOpen(false)} onPick={async st => { try { const blob = await (await fetch(st.gif)).blob(); const f = new File([blob], 'kix-sticker.gif', { type: 'image/gif' }); addItem('i', URL.createObjectURL(f), f); } catch { addItem('i', st.gif); } setStoreOpen(false); }} />}
       {err && <div className="absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500/90 text-white text-xs">{err}</div>}
     </div>,
     document.body,
@@ -5495,8 +5750,8 @@ function ReactionSheet({ current, onPick, onClose }: { current?: string; onPick:
   return createPortal(
     <>
       <div data-msg-ui {...stop} onPointerDown={e => e.stopPropagation()} className="fixed inset-0 z-[158] bg-black/35" onClick={e => { e.stopPropagation(); onClose(); }} />
-      <div data-msg-ui {...stop} onPointerDown={e => e.stopPropagation()} dir={DIR} className="fixed inset-x-0 z-[159] flex justify-center px-3 pointer-events-none transition-[bottom] duration-150" style={{ bottom: `calc(${kb}px + 0.75rem + env(safe-area-inset-bottom))` }}>
-        <div className="pointer-events-auto w-full max-w-md rounded-[28px] bg-gray-900/95 backdrop-blur-2xl ring-1 ring-white/15 shadow-2xl shadow-black/60 overflow-hidden kan-pop" onPointerDown={e => { e.stopPropagation(); e.preventDefault(); }} onMouseDown={e => e.preventDefault()}>
+      <div data-msg-ui {...stop} onPointerDown={e => e.stopPropagation()} dir="ltr" className="fixed inset-x-0 z-[159] flex justify-end px-3 pointer-events-none transition-[bottom] duration-150" style={{ bottom: `calc(${kb}px + 0.75rem + env(safe-area-inset-bottom))` }}>
+        <div dir={DIR} className="pointer-events-auto w-full max-w-md rounded-[28px] bg-gray-900/95 backdrop-blur-2xl ring-1 ring-white/15 shadow-2xl shadow-black/60 overflow-hidden kan-pop" onPointerDown={e => { e.stopPropagation(); e.preventDefault(); }} onMouseDown={e => e.preventDefault()}>
           <div className="flex items-center gap-1 p-2 overflow-x-auto no-scrollbar">
             {QUICK_REACTIONS.map(e => (
               <button key={e} onClick={() => onPick(e)} className={`shrink-0 w-11 h-11 text-[26px] rounded-full flex items-center justify-center active:scale-125 transition-transform ${current === e ? 'bg-violet-500/30 ring-1 ring-violet-300/60' : 'hover:bg-white/10'}`}>{e}</button>
@@ -5514,22 +5769,26 @@ function ReactionSheet({ current, onPick, onClose }: { current?: string; onPick:
 function EmojiPicker({ onPick, onClose, docked = false, onSticker, startOnStickers = false }: { onPick: (emoji: string) => void; onClose: () => void; docked?: boolean; onSticker?: (st: SavedSticker) => void; startOnStickers?: boolean }) {
   const [group, setGroup] = useState(0);
   const [stk, setStk] = useState(!!onSticker && startOnStickers);
+  const [shop, setShop] = useState(false);
   return (
     <div dir={DIR} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} className={docked ? 'kan-pop mt-2 w-full bg-gray-900/70 border-t border-white/10' : 'absolute bottom-full mb-2 right-0 z-30 w-72 max-w-[92vw] bg-gray-900 border border-gray-700 rounded-2xl shadow-xl'}>
       <div className="flex items-center justify-between px-2 pt-2 border-b border-gray-800">
-        <div className="flex">
+        <div className="flex overflow-x-auto no-scrollbar">
           {onSticker && (
-            <button onClick={() => setStk(true)} className={`px-2.5 py-1.5 text-xs font-semibold rounded-t-lg ${stk ? 'bg-gray-800 text-cyan-300' : 'text-gray-400 hover:text-white'}`}>ملصقات</button>
+            <button onClick={() => { setStk(true); setShop(false); }} className={`shrink-0 px-3 h-9 text-xs font-semibold rounded-t-lg active:scale-95 ${stk && !shop ? 'bg-gray-800 text-cyan-300' : 'text-gray-400 hover:text-white'}`}>ملصقاتي</button>
+          )}
+          {onSticker && (
+            <button onClick={() => { setShop(true); setStk(false); }} className={`shrink-0 px-3 h-9 text-xs font-semibold rounded-t-lg flex items-center gap-1 active:scale-95 ${shop ? 'bg-gray-800 text-cyan-300' : 'text-gray-400 hover:text-white'}`}><Sparkles size={13} />متجر KIX</button>
           )}
           {EMOJI_GROUPS.map((g, i) => (
-            <button key={g.icon} onClick={() => { setStk(false); setGroup(i); }} className={`px-2 py-1.5 text-lg rounded-t-lg ${!stk && i === group ? 'bg-gray-800' : 'opacity-60 hover:opacity-100'}`}>
+            <button key={g.icon} onClick={() => { setStk(false); setShop(false); setGroup(i); }} className={`shrink-0 px-2.5 h-9 text-lg rounded-t-lg ${!stk && !shop && i === group ? 'bg-gray-800' : 'opacity-60 hover:opacity-100'}`}>
               {g.icon}
             </button>
           ))}
         </div>
         <button onClick={onClose} className="p-1 text-gray-400 hover:text-white" aria-label="إغلاق"><X size={16} /></button>
       </div>
-      {stk && onSticker ? <StickerPane onSend={onSticker} /> : (
+      {shop && onSticker ? <KixStore inline onClose={() => setShop(false)} onPick={async st => { const sv = await storeToSaved(st); if (sv) onSticker(sv); }} /> : stk && onSticker ? <StickerPane onSend={onSticker} /> : (
       <div className={`grid gap-0.5 p-2 overflow-y-auto overscroll-contain ${docked ? 'grid-cols-8 min-[420px]:grid-cols-10 sm:grid-cols-14 h-60' : 'grid-cols-8 max-h-52'}`}>
         {EMOJI_GROUPS[group].items.map(e => (
           <button key={e} onClick={() => onPick(e)} className="h-9 text-2xl rounded-lg hover:bg-gray-800 active:scale-125 transition-transform">{e}</button>
@@ -6449,8 +6708,8 @@ export default function App() {
     return () => window.removeEventListener('kan-swipe-tab', h);
   });
   // Home button: already on the feed -> one tap scrolls to the top, a quick second tap refreshes it.
-  const lastHomeTap = useRef(0);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
+  useEffect(() => { const h = document.documentElement, b = document.body; h.style.overscrollBehaviorY = 'none'; b.style.overscrollBehaviorY = 'none'; return () => { h.style.overscrollBehaviorY = ''; b.style.overscrollBehaviorY = ''; }; }, []); // no browser pull-to-refresh either
   openPostHandler = (postId, commentId) => pushScreen({ k: 'post', postId, commentId });
   const [reelStart, setReelStart] = useState<string | null>(null);
   openReelHandler = id => { setReelStart(id); goTab('reels'); };
@@ -6490,18 +6749,15 @@ export default function App() {
     setHomeRefreshing(true);
     void loadFeedFirst().finally(() => window.setTimeout(() => setHomeRefreshing(false), 400));
   };
-  // One tap: back to the top only. Two quick taps: back to the top, then refresh.
+  // Home icon: from any screen -> back to Home. On Home: scrolled down -> top; already at the top -> refresh the feed (the icon spins).
   const onHomeTap = () => {
-    const now = Date.now();
-    const dbl = now - lastHomeTap.current < 450;
-    lastHomeTap.current = dbl ? 0 : now;
     if (activeTab !== 'feed' || viewedUserId) {
       goTab('feed');
-      window.setTimeout(() => { window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); if (dbl) refreshHome(); }, 60);
+      window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }), 60);
       return;
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (dbl) window.setTimeout(refreshHome, 280);
+    if (window.scrollY > 40) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    refreshHome();
   };
   const openProfile = (id: string) => {
     if (id === currentUserId) {
@@ -7104,95 +7360,10 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
     return () => observer.disconnect();
   }, [hasMore, loading, displayPosts.length]);
 
-  // Pull down at the top of the page: a spinner follows your finger, release to refresh (like Instagram).
-  const [pull, setPull] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const refreshRef = useRef(onRefresh);
-  refreshRef.current = onRefresh;
-  const busyRef = useRef(false);
-  const doRefresh = async () => {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setRefreshing(true);
-    setPull(54);
-    try { await refreshRef.current(); } catch (e) { console.error(e); }
-    window.setTimeout(() => { setRefreshing(false); setPull(0); busyRef.current = false; }, 350);
-  };
-  useEffect(() => {
-    const TRIGGER = 64;
-    const MAX = 120;
-    let startY = 0;
-    let startX = 0;
-    let pulling = false;
-    let dist = 0;
-    // The page must be resting at the very top (no scrolling or momentum in the last 300 ms) before a pull can start.
-    // Scrolling back up from the middle of the feed never refreshes it.
-    let lastScroll = performance.now();
-    let sawBelowTop = window.scrollY > 0;
-    const onScroll = () => { lastScroll = performance.now(); if (window.scrollY > 0) sawBelowTop = true; };
-    const html = document.documentElement; const body = document.body;
-    html.style.overscrollBehaviorY = 'none'; body.style.overscrollBehaviorY = 'none';
-    const onStart = (e: TouchEvent) => {
-      const restingAtTop = window.scrollY <= 0 && performance.now() - lastScroll > 300;
-      pulling = !busyRef.current && restingAtTop && e.touches.length === 1 && !(e.target as HTMLElement | null)?.closest('[data-no-ptr]');
-      sawBelowTop = false;
-      startY = e.touches[0].clientY;
-      startX = e.touches[0].clientX;
-      dist = 0;
-    };
-    const onMove = (e: TouchEvent) => {
-      if (!pulling) return;
-      const dy = e.touches[0].clientY - startY;
-      const dx = Math.abs(e.touches[0].clientX - startX);
-      if (dy <= 0 || window.scrollY > 0 || sawBelowTop || e.touches.length > 1 || (dx > dy && dist === 0)) {
-        if (dist > 0) { dist = 0; setPull(0); setDragging(false); }
-        pulling = false;
-        return;
-      }
-      if (dy < 12 && dist === 0) return; // ignore tiny drags
-      dist = Math.min(MAX, (dy - 12) * 0.5);
-      setDragging(true);
-      setPull(dist);
-    };
-    const onEnd = () => {
-      if (!pulling && dist === 0) return;
-      pulling = false;
-      setDragging(false);
-      if (dist >= TRIGGER) void doRefresh(); else setPull(0);
-      dist = 0;
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('touchstart', onStart, { passive: true });
-    window.addEventListener('touchmove', onMove, { passive: true });
-    window.addEventListener('touchend', onEnd, { passive: true });
-    window.addEventListener('touchcancel', onEnd, { passive: true });
-    return () => {
-      html.style.overscrollBehaviorY = ''; body.style.overscrollBehaviorY = '';
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('touchstart', onStart);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onEnd);
-      window.removeEventListener('touchcancel', onEnd);
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  void onRefresh; // no pull-to-refresh: refreshing happens only from the Home icon
 
   return (
-    <div className="px-4 py-4 space-y-4 max-lg:px-0 max-lg:py-0 max-lg:space-y-0" style={{ transform: pull > 0 ? `translateY(${pull * 0.55}px)` : undefined, transition: dragging ? 'none' : 'transform 0.25s ease' }}>
-      {createPortal(
-        <>
-          <div className="pointer-events-none fixed left-0 right-0 z-40 flex justify-center" style={{ top: 64 }}>
-            <div
-              className="w-10 h-10 rounded-full bg-gray-800 border border-white/10 shadow-lg shadow-black/40 flex items-center justify-center"
-              style={{ transform: `translateY(${pull - 44}px)`, opacity: Math.min(1, pull / 40), transition: dragging ? 'none' : 'transform 0.25s ease, opacity 0.25s ease' }}
-            >
-              <RefreshCw size={18} className={`text-violet-300 ${refreshing ? 'animate-spin' : ''}`} style={refreshing ? undefined : { transform: `rotate(${pull * 4}deg)` }} />
-            </div>
-          </div>
-          {/* New posts never appear by themselves: pull down (or tap Home twice) to refresh. */}
-        </>,
-        document.body,
-      )}
+    <div className="px-4 py-4 space-y-4 max-lg:px-0 max-lg:py-0 max-lg:space-y-0">
       <StoriesBar users={users} currentUser={currentUser} />
       <div className="seg flex gap-1 bg-gray-900/70 rounded-2xl p-1 border border-white/5">
         {([{ key: 'all', label: t('الكل'), Icon: LayoutGrid }, { key: 'following', label: t('المتابَعون'), Icon: Users }, { key: 'files', label: t('الملفات'), Icon: FileText }] as const).map(t => (
@@ -9087,8 +9258,11 @@ function MusicLibrary({ onPick, onDevice, onClose }: { onPick: (t: { url: string
   );
 }
 
-function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: File; src?: string; name?: string; start: number; end: number; onStart: (n: number) => void; onEnd: (n: number) => void }) {
+function MusicTrimmer({ file, src, name, start, end, onStart, onEnd, onPreview }: { file?: File; src?: string; name?: string; start: number; end: number; onStart: (n: number) => void; onEnd: (n: number) => void; onPreview?: (playing: boolean) => void }) {
   const [url] = useState(() => src ?? URL.createObjectURL(file as File));
+  const previewCb = useRef(onPreview);
+  previewCb.current = onPreview;
+  useEffect(() => () => previewCb.current?.(false), []); // leaving the trimmer always hands playback back
   useEffect(() => () => { if (!src) URL.revokeObjectURL(url); }, [url, src]);
   const ref = useRef<HTMLAudioElement>(null);
   const [dur, setDur] = useState(0);
@@ -9182,7 +9356,7 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
   );
   return (
     <div className="mb-4 -mt-2 p-3 rounded-2xl bg-gradient-to-b from-gray-800/80 to-gray-900/80 border border-white/10 space-y-3">
-      <audio ref={ref} src={url} preload="metadata" onLoadedMetadata={e => onMeta(e.currentTarget)} onDurationChange={e => onMeta(e.currentTarget)} onPlay={() => setOn(true)} onPause={() => setOn(false)}
+      <audio ref={ref} src={url} preload="metadata" onLoadedMetadata={e => onMeta(e.currentTarget)} onDurationChange={e => onMeta(e.currentTarget)} onPlay={() => { setOn(true); onPreview?.(true); }} onPause={() => { setOn(false); onPreview?.(false); }}
         onTimeUpdate={e => { const a = e.currentTarget; setCur(a.currentTime); if (a.currentTime >= eff) a.pause(); }} />
       <div className="flex items-center gap-3">
         <button onClick={() => { const a = ref.current; if (!a) return; if (on) a.pause(); else play(start); }} className="w-10 h-10 shrink-0 rounded-full bg-white text-gray-900 flex items-center justify-center shadow" aria-label="تشغيل المقطع">
@@ -9467,6 +9641,19 @@ function LocationPicker({ onPick, onClose }: { onPick: (l: GeoLoc) => void; onCl
 type FaceLm = { x: number; y: number }[];
 const STUDIO_CF: { n: string; css: string; tint?: [string, number]; sp?: [string, string]; v?: number; bl?: number; gr?: number; lk?: string }[] = [
   { n: 'عادي', css: '' },
+  // ---- New looks (2026) ----
+  { n: 'بيتش فزّ', css: 'brightness(1.1) saturate(1.25) contrast(.95)', tint: ['#ffb199', 0.18], bl: 0.4 },
+  { n: 'لافندر هيز', css: 'brightness(1.08) contrast(.92) saturate(1.1)', tint: ['#c9b6ff', 0.2], bl: 0.5, v: 0.12 },
+  { n: 'مينت فريش', css: 'brightness(1.08) saturate(1.2) hue-rotate(-8deg)', tint: ['#9ff5d1', 0.16], bl: 0.2 },
+  { n: 'أمبر', css: 'contrast(1.15) saturate(1.3) sepia(.25)', sp: ['#5a2a00', '#ffc86b'], lk: '#ff9a3c', v: 0.25 },
+  { n: 'ستوديو بارد', css: 'contrast(1.15) saturate(.85) brightness(1.04)', tint: ['#9cc7ff', 0.14], v: 0.2 },
+  { n: 'كريستال', css: 'brightness(1.15) contrast(1.1) saturate(.9)', sp: ['#0a3d62', '#e8f6ff'], bl: 0.3 },
+  { n: 'رمان', css: 'contrast(1.2) saturate(1.3) brightness(.96)', sp: ['#4a0d3a', '#ff5d7d'], gr: 0.06, v: 0.35 },
+  { n: 'غبار ذهبي', css: 'brightness(1.06) saturate(1.2) contrast(1.04)', tint: ['#ffe0a0', 0.1], lk: '#ffd27a', bl: 0.5 },
+  { n: 'أزرق ملكي', css: 'contrast(1.2) saturate(1.3)', sp: ['#0a1f6b', '#8fb4ff'], v: 0.4 },
+  { n: 'نيون أخضر', css: 'contrast(1.25) saturate(1.6) brightness(.95)', sp: ['#003b2a', '#39ff88'], bl: 0.3 },
+  { n: 'ثلجي ناعم', css: 'brightness(1.2) contrast(.9) saturate(.8)', tint: ['#e8f1ff', 0.14], bl: 0.5 },
+  { n: 'موكا', css: 'sepia(.4) contrast(1.1) saturate(1.1) brightness(.98)', tint: ['#8a5a3c', 0.12], gr: 0.05, v: 0.3 },
   { n: 'سينما ذهبية', css: 'contrast(1.2) saturate(1.15) brightness(.97)', sp: ['#0b3a53', '#ffb066'], v: 0.45, gr: 0.06 },
   { n: 'حلم', css: 'brightness(1.1) contrast(.9) saturate(1.2)', tint: ['#ff9ecf', 0.12], bl: 0.45, v: 0.2 },
   { n: 'نيون ليلي', css: 'contrast(1.3) saturate(1.7) brightness(.92)', sp: ['#2a0a5e', '#ff4fd8'], bl: 0.3, v: 0.5 },
@@ -9477,38 +9664,7 @@ const STUDIO_CF: { n: string; css: string; tint?: [string, number]; sp?: [string
   { n: 'غروب كوني', css: 'saturate(1.5) contrast(1.15)', sp: ['#2d1b69', '#ff8a4d'], bl: 0.3, lk: '#ff4d8d' },
   { n: 'مسرح', css: 'contrast(1.4) saturate(1.1) brightness(.88)', v: 0.7 },
   { n: 'بورتريه ذهبي', css: 'brightness(1.08) saturate(1.2) contrast(1.05)', tint: ['#ffc27a', 0.12], bl: 0.35, v: 0.2 },
-  { n: 'دافئ', css: 'sepia(.35) saturate(1.3) hue-rotate(-10deg) brightness(1.05)', tint: ['#ff9a3c', 0.12] },
-  { n: 'بارد', css: 'saturate(1.2) hue-rotate(15deg) brightness(1.03)', tint: ['#3c8cff', 0.12] },
-  { n: 'أبيض وأسود', css: 'grayscale(1) contrast(1.1)' },
-  { n: 'قديم', css: 'sepia(.8) contrast(.95) brightness(1.05)', tint: ['#a0703c', 0.18] },
-  { n: 'مشرق', css: 'brightness(1.15) contrast(1.08) saturate(1.25)' },
-  { n: 'درامي', css: 'contrast(1.35) saturate(.85) brightness(.92)' },
-  { n: 'نيون', css: 'saturate(1.8) contrast(1.15) hue-rotate(-20deg)', tint: ['#b026ff', 0.14] },
-  { n: 'وردي', css: 'saturate(1.3) hue-rotate(-30deg) brightness(1.08)', tint: ['#ff6bb5', 0.16] },
-  { n: 'غروب', css: 'sepia(.4) saturate(1.6) hue-rotate(-20deg) brightness(1.05)', tint: ['#ff7a30', 0.16] },
-  { n: 'فجر', css: 'hue-rotate(-40deg) saturate(1.3) brightness(1.08) sepia(.2)', tint: ['#ff9ec0', 0.14] },
-  { n: 'ذهبي', css: 'sepia(.6) saturate(1.8) brightness(1.1) hue-rotate(-15deg)', tint: ['#e8b64a', 0.18] },
-  { n: 'شتاء', css: 'saturate(.8) hue-rotate(190deg) brightness(1.1) contrast(.95)', tint: ['#8fd3ff', 0.14] },
-  { n: 'ثلجي', css: 'brightness(1.2) saturate(.6) hue-rotate(160deg)', tint: ['#d8f1ff', 0.16] },
-  { n: 'محيط', css: 'hue-rotate(170deg) saturate(1.4)', tint: ['#14b8d4', 0.16] },
-  { n: 'غابة', css: 'hue-rotate(70deg) saturate(1.3) brightness(.95)', tint: ['#2f9e44', 0.14] },
-  { n: 'لافندر', css: 'hue-rotate(250deg) saturate(1.2) brightness(1.05)', tint: ['#a78bfa', 0.16] },
-  { n: 'كاندي', css: 'saturate(1.6) brightness(1.12) hue-rotate(-12deg) contrast(.95)', tint: ['#ff7ac8', 0.12] },
-  { n: 'سينمائي', css: 'contrast(1.25) saturate(.9) hue-rotate(-8deg) brightness(.95)', tint: ['#0e7490', 0.12] },
-  { n: 'أفلام', css: 'contrast(1.2) sepia(.2) saturate(1.1) brightness(.95)', tint: ['#a0703c', 0.1] },
-  { n: 'فينتج', css: 'sepia(.5) contrast(1.1) brightness(.9) saturate(.9)', tint: ['#8a6a3c', 0.16] },
-  { n: 'باهت', css: 'contrast(.85) brightness(1.15) saturate(.7)' },
-  { n: 'حيوي', css: 'saturate(2) contrast(1.1)' },
-  { n: 'تباين عالي', css: 'contrast(1.6) saturate(1.2)' },
-  { n: 'تفتيح', css: 'brightness(1.25) contrast(.95)' },
   { n: 'بشرة ناعمة', css: 'blur(.8px) brightness(1.08) contrast(.96) saturate(1.1)' },
-  { n: 'سلفر', css: 'grayscale(1) brightness(1.15) contrast(.9)' },
-  { n: 'أسود قوي', css: 'grayscale(1) contrast(1.6) brightness(.95)' },
-  { n: 'أحمر', css: 'sepia(1) saturate(4) hue-rotate(-50deg)', tint: ['#ff2a2a', 0.2] },
-  { n: 'ليل أزرق', css: 'brightness(.8) hue-rotate(200deg) saturate(1.5) contrast(1.2)', tint: ['#1d4ed8', 0.2] },
-  { n: 'ماتريكس', css: 'grayscale(1) sepia(1) hue-rotate(60deg) saturate(3) contrast(1.2)', tint: ['#22c55e', 0.22] },
-  { n: 'سلبي', css: 'invert(1)' },
-  { n: 'سايبر', css: 'saturate(2.2) contrast(1.2) hue-rotate(-60deg) brightness(1.05)', tint: ['#00e5ff', 0.14] },
   // ---- Instagram-style + colour grading (strong) ----
   { n: 'كلارندون', css: 'contrast(1.3) saturate(1.5) brightness(1.08)', sp: ['#1e4fd8', '#ffb25a'], v: 0.22 },
   { n: 'جونو', css: 'contrast(1.15) saturate(1.7) brightness(1.05) sepia(.1)', sp: ['#2a7bff', '#ffd36b'], lk: '#ffb347', v: 0.2 },
@@ -9524,8 +9680,24 @@ const STUDIO_CF: { n: string; css: string; tint?: [string, number]; sp?: [string
   { n: 'Y2K', css: 'contrast(1.2) saturate(1.5) brightness(1.15)', tint: ['#ffc2f0', 0.14], bl: 0.45 },
   { n: 'ديسكو', css: 'contrast(1.25) saturate(2)', sp: ['#7c3aed', '#ff2d95'], bl: 0.4, lk: '#22d3ee' },
   { n: 'فيلم 35', css: 'sepia(.2) contrast(1.15) saturate(1.3)', gr: 0.2, v: 0.4, lk: '#ff7a30' },
+  { n: 'كلين جيرل', css: 'brightness(1.08) contrast(.96) saturate(1.1)', tint: ['#ffe6d5', 0.14], bl: 0.4 },
+  { n: 'سوفت بينك', css: 'brightness(1.1) contrast(.93) saturate(1.15)', tint: ['#ffb3d1', 0.16], bl: 0.5, v: 0.12 },
+  { n: 'جلو سكن', css: 'brightness(1.06) contrast(1.02) saturate(1.12)', tint: ['#ffd1b0', 0.12], bl: 0.55 },
+  { n: 'خوخي', css: 'saturate(1.2) brightness(1.07) contrast(.97)', tint: ['#ff9a8b', 0.14], bl: 0.35 },
+  { n: 'جولدن جلو', css: 'saturate(1.25) contrast(1.05) brightness(1.05)', lk: '#ffb347', tint: ['#ffc27a', 0.1], v: 0.15 },
+  { n: 'مون لايت', css: 'brightness(.96) contrast(1.12) saturate(.92)', tint: ['#5b7cff', 0.16], v: 0.45 },
+  { n: 'كول تون', css: 'saturate(1.1) hue-rotate(8deg) brightness(1.04)', tint: ['#7fb2ff', 0.12], bl: 0.25 },
+  { n: 'تيل مودي', css: 'contrast(1.18) saturate(1.1) brightness(.95)', sp: ['#0b4a52', '#ffe0c2'], v: 0.4, gr: 0.05 },
+  { n: 'ريترو بوب', css: 'saturate(1.5) contrast(1.1) brightness(1.06)', sp: ['#ff4fa3', '#22d3ee'], gr: 0.05 },
+  { n: 'أورورا', css: 'saturate(1.4) contrast(1.1)', sp: ['#00ffa3', '#a855f7'], bl: 0.25, v: 0.3 },
+  { n: 'ميامي', css: 'saturate(1.45) contrast(1.05) brightness(1.04)', sp: ['#ff4fa3', '#22d3ee'], bl: 0.2 },
+  { n: 'ستريت', css: 'contrast(1.2) saturate(.75) brightness(.96)', gr: 0.1, v: 0.35 },
+  { n: 'كوري', css: 'brightness(1.12) contrast(.92) saturate(.98)', tint: ['#ffd6e8', 0.12], bl: 0.4 },
+  { n: 'دارك أكاديميا', css: 'sepia(.35) contrast(1.15) brightness(.9) saturate(.85)', tint: ['#6b4a2b', 0.12], v: 0.55, gr: 0.05 }
 ];
-const STUDIO_FX = ['بدون', 'نظارة', 'تاج', 'كلب', 'شنب', 'قلوب', 'نيون', 'قطة', 'أرنب', 'نظارة دائرية', 'شيطان', 'هالة', 'تاج ورد', 'قبعة', 'تخرج', 'خدود', 'أحمر شفاه', 'ظل عيون', 'نجوم', 'ثلج', 'نار', 'قناع', 'لحية', 'شبكة', 'عيون كبيرة', 'أنف مهرج', 'نظارة 3D', 'سماعات', 'ألماسة', 'قوس قزح', 'دموع', 'تنين', '✨ تجميل ذكي', '👀 عيون ضخمة', '😁 ابتسامة ضخمة', '🔮 وجه مجسّم', '🪞 مرآة', '📺 غلتش', '🧊 هولوجرام', '🥇 وجه ذهبي', '🎨 كارتون', '🦋 فراشات', '🤪 وجه ضخم', '🎈 رأس كبير', '😵 وجه ممطوط', '🫓 وجه مفلطح', '👄 فم عملاق', '🐽 أنف ضخم', '👸 ملكة', '🥽 سايبر', '🌈 دموع ملونة', '💫 هالة نيون', '🧛 دراكولا', '🤖 روبوت', '🦄 يونيكورن', '🎉 حفلة', '👁️ عين ثالثة', '🌸 أنمي'];
+const STUDIO_FX = ['بدون', '🕶️ نظارة', '👑 تاج', '🐶 كلب', '🥸 شنب', '😍 قلوب', '🌟 نيون', '🐱 قطة', '🐰 أرنب', '🤓 نظارة دائرية', '😈 شيطان', '😇 هالة', '🌼 تاج ورد', '🎩 قبعة', '🎓 تخرج', '😊 خدود', '💋 أحمر شفاه', '🎀 ظل عيون', '⭐ نجوم', '❄️ ثلج', '🔥 نار', '🎭 قناع', '🧔 لحية', '🎅 بابا نويل', '🙄 عيون كبيرة', '🤡 أنف مهرج', '🎬 نظارة 3D', '🎧 سماعات', '💎 ألماسة', '🌈 قوس قزح', '😢 دموع', '🐲 تنين', '✨ تجميل ذكي', '👀 عيون ضخمة', '😁 ابتسامة ضخمة', '🔮 وجه مجسّم', '🪞 مرآة', '📺 غلتش', '🧊 هولوجرام', '🥇 وجه ذهبي', '🎨 كارتون', '🦋 فراشات', '🤪 وجه ضخم', '🎈 رأس كبير', '😵 وجه ممطوط', '🫓 وجه مفلطح', '👄 فم عملاق', '🐽 أنف ضخم', '👸 ملكة', '🥽 سايبر', '🌈 دموع ملونة', '💫 هالة نيون', '🧛 دراكولا', '🤖 روبوت', '🦄 يونيكورن', '🎉 حفلة', '👁️ عين ثالثة', '🌸 أنمي', '💄 جلام', '🌷 بلاش كوري', '✨ هايلايتر', '🍑 خوخ', '🌙 سموكي', '❤️ ريد ليب', '💜 نيون وجه', '🌈 وجه ملوّن', '🧿 جلاس سكين', '🖤 غوثيك', '🤎 نمش', '🍓 توت', '🌅 جولدن آور', '🐻 دبدوب', '🦊 ثعلب', '🐼 باندا', '🏴‍☠️ قرصان', '🧙 ساحر', '🤠 كاوبوي', '🐝 نحلة', '🐸 ضفدع', '🐷 خنزير', '🧢 كاب'];
+const STUDIO_FX_ORDER: number[] = [0, ...Array.from({ length: 10 }, (_, k) => 71 + k), ...Array.from({ length: 70 }, (_, k) => k + 1)]; // new lenses first
+
 const FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
 type StudioTrack = { url: string; name: string; start: number; end: number; file?: File };
 type FaceGeo = { CW: number; vw: number; vh: number; sc: number; ox: number; oy: number; mirror: boolean };
@@ -9593,6 +9765,97 @@ function warpFaceFx(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, fx: num
     case 47: bulge(nose.x, nose.y, fh * 0.26, 2.3); break;
   }
 }
+// Snap / Insta style colour looks painted on the real face (skin, cheeks, lips, eyes) with the face landmarks.
+const LIPS_OUT = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185];
+const LIPS_IN = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191];
+const EYE_L = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
+const EYE_R = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
+function colorFaceFx(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, fx: number, lm: FaceLm, g: FaceGeo, now: number, canFilter: boolean) {
+  type Pt = { x: number; y: number };
+  const CW = c.width, CH = c.height;
+  fxSnap = fxSnap ?? document.createElement('canvas');
+  if (fxSnap.width !== CW) { fxSnap.width = CW; fxSnap.height = CH; }
+  const sx = fxSnap.getContext('2d'); if (!sx) return;
+  sx.clearRect(0, 0, CW, CH); sx.drawImage(c, 0, 0);
+  const snap = fxSnap;
+  const P = (i: number): Pt => { const l = lm[i]; let x = g.ox + l.x * g.vw * g.sc; if (g.mirror) x = g.CW - x; return { x, y: g.oy + l.y * g.vh * g.sc }; };
+  const mid = (a: Pt, b: Pt): Pt => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
+  const eye = dist(P(33), P(263)); const fh = dist(P(10), P(152)); const nose = P(1);
+  const path = (ids: number[]) => { ctx.beginPath(); ids.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.closePath(); };
+  const oval = () => path(FACE_OVAL);
+  const eyeC = [mid(P(33), P(133)), mid(P(362), P(263))];
+  const fl = (css: string) => { if (canFilter) (ctx as unknown as { filter: string }).filter = css; };
+  // soft glow blob (radial gradient) in any blend mode
+  const blob = (p: Pt, r: number, col: string, a: number, op: GlobalCompositeOperation = 'source-over') => {
+    const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r); gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save(); ctx.globalCompositeOperation = op; ctx.globalAlpha = a; ctx.fillStyle = gr; ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2); ctx.restore();
+  };
+  const lips = (fill: string, a: number, op: GlobalCompositeOperation = 'source-over') => {
+    ctx.save(); ctx.beginPath(); [LIPS_OUT, LIPS_IN].forEach(ids => { ids.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.closePath(); });
+    ctx.globalCompositeOperation = op; ctx.globalAlpha = a; ctx.fillStyle = fill; ctx.fill('evenodd'); ctx.restore();
+  };
+  const gloss = () => { const u = P(14), m = mid(P(61), P(291)); blob({ x: (u.x + m.x) / 2, y: u.y + fh * 0.012 }, eye * 0.16, 'rgba(255,255,255,.95)', 0.55, 'soft-light'); blob({ x: u.x, y: u.y + fh * 0.01 }, eye * 0.07, 'rgba(255,255,255,1)', 0.45); };
+  // smooth the skin but keep eyes and lips sharp
+  const smooth = (amt: number) => {
+    if (!canFilter) return;
+    ctx.save(); oval(); ctx.clip(); fl('blur(6px) brightness(1.06) saturate(1.05)'); ctx.globalAlpha = amt; ctx.drawImage(snap, 0, 0); ctx.restore();
+    for (const ids of [EYE_L, EYE_R, LIPS_OUT]) { ctx.save(); path(ids); ctx.clip(); ctx.drawImage(snap, 0, 0); ctx.restore(); }
+  };
+  const faceTint = (col: string, a: number, op: GlobalCompositeOperation) => { ctx.save(); oval(); ctx.clip(); ctx.globalCompositeOperation = op; ctx.globalAlpha = a; ctx.fillStyle = col; ctx.fillRect(0, 0, CW, CH); ctx.restore(); };
+  const cheeks = (col: string, a: number, r = 0.2, op: GlobalCompositeOperation = 'source-over') => { for (const p of [P(205), P(425)]) blob(p, fh * r, col, a, op); };
+  const shadow = (col: string, a: number, k = 1) => { for (const e of eyeC) { const p = { x: e.x, y: e.y - eye * 0.06 }; ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, 0.62); const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, eye * 0.42 * k); gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)'); ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = a; ctx.fillStyle = gr; ctx.fillRect(-eye, -eye, eye * 2, eye * 2); ctx.restore(); } };
+  const liner = (a: number, wing: boolean) => {
+    ctx.save(); ctx.strokeStyle = `rgba(10,5,15,${a})`; ctx.lineWidth = Math.max(2, eye * 0.03); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const ids of [[33, 246, 161, 160, 159, 158, 157, 173, 133], [362, 398, 384, 385, 386, 387, 388, 466, 263]]) {
+      ctx.beginPath(); ids.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.stroke();
+    }
+    if (wing) for (const [o, ref] of [[33, 133], [263, 362]] as const) { const a0 = P(o), r0 = P(ref); const dx = a0.x - r0.x, dy = a0.y - r0.y; const l = Math.hypot(dx, dy) || 1; ctx.beginPath(); ctx.moveTo(a0.x, a0.y); ctx.lineTo(a0.x + (dx / l) * eye * 0.12, a0.y + (dy / l) * eye * 0.12 - eye * 0.07); ctx.stroke(); }
+    ctx.restore();
+  };
+  const rnd = (k: number) => { const x = Math.sin(k * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  switch (fx) {
+    case 58: smooth(0.5); cheeks('rgba(255,90,130,.9)', 0.35, 0.2); lips('rgba(255,50,110,1)', 0.5); gloss(); break; // جلام
+    case 59: smooth(0.45); cheeks('rgba(255,140,165,1)', 0.55, 0.26); blob(nose, fh * 0.1, 'rgba(255,150,170,1)', 0.35); lips('rgba(255,120,150,1)', 0.38); blob(mid(P(13), P(14)), eye * 0.3, 'rgba(255,90,125,1)', 0.5); break; // بلاش كوري
+    case 59 + 1: { // هايلايتر
+      smooth(0.35);
+      const pulse = 0.5 + 0.1 * Math.sin(now / 500);
+      for (const p of [P(116), P(345)]) blob(p, fh * 0.13, 'rgba(255,248,225,1)', pulse, 'screen');
+      blob(mid(P(6), P(168)), fh * 0.1, 'rgba(255,250,235,1)', 0.45, 'screen'); blob(P(0), eye * 0.12, 'rgba(255,250,235,1)', 0.5, 'screen');
+      for (const p of [P(105), P(334)]) blob({ x: p.x, y: p.y - fh * 0.015 }, fh * 0.09, 'rgba(255,245,225,1)', 0.35, 'screen');
+      faceTint('rgba(255,225,190,1)', 0.1, 'soft-light'); break;
+    }
+    case 61: faceTint('rgba(255,170,140,1)', 0.5, 'soft-light'); cheeks('rgba(255,154,139,1)', 0.45, 0.22); shadow('rgba(255,150,120,1)', 0.45, 0.9); lips('rgba(255,130,110,1)', 0.45); smooth(0.3); break; // خوخ
+    case 62: smooth(0.3); shadow('rgba(35,20,45,1)', 0.85, 1.25); shadow('rgba(90,60,110,1)', 0.35, 1.7); liner(0.85, false); lips('rgba(190,100,105,1)', 0.35); break; // سموكي
+    case 63: smooth(0.4); liner(0.9, true); lips('rgba(205,10,45,1)', 0.78); gloss(); cheeks('rgba(255,90,100,1)', 0.18, 0.18); break; // ريد ليب
+    case 64: { // نيون وجه
+      ctx.save(); oval(); ctx.clip(); const gr = ctx.createLinearGradient(P(234).x, 0, P(454).x, 0); gr.addColorStop(0, '#a855f7'); gr.addColorStop(1, '#22d3ee');
+      ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = 0.7; ctx.fillStyle = gr; ctx.fillRect(0, 0, CW, CH); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 0.14; ctx.fillRect(0, 0, CW, CH); ctx.restore();
+      ctx.save(); oval(); ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 24; ctx.strokeStyle = 'rgba(167,139,250,.9)'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); break;
+    }
+    case 65: { // وجه ملوّن
+      const h = (now / 22) % 360; ctx.save(); oval(); ctx.clip(); const gr = ctx.createLinearGradient(P(234).x, P(10).y, P(454).x, P(152).y);
+      gr.addColorStop(0, `hsl(${h},90%,60%)`); gr.addColorStop(1, `hsl(${(h + 140) % 360},90%,60%)`);
+      ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = 0.9; ctx.fillStyle = gr; ctx.fillRect(0, 0, CW, CH); ctx.globalCompositeOperation = 'color'; ctx.globalAlpha = 0.28; ctx.fillRect(0, 0, CW, CH); ctx.restore(); break;
+    }
+    case 66: smooth(0.62); faceTint('rgba(215,232,255,1)', 0.16, 'soft-light'); blob(P(10), fh * 0.2, 'rgba(255,255,255,1)', 0.3, 'screen'); for (const p of [P(116), P(345), P(1)]) blob(p, fh * 0.12, 'rgba(255,255,255,1)', 0.38, 'screen'); break; // جلاس سكين
+    case 67: { // غوثيك
+      if (canFilter) { ctx.save(); oval(); ctx.clip(); fl('grayscale(.7) brightness(1.12) contrast(1.05)'); ctx.globalAlpha = 0.75; ctx.drawImage(snap, 0, 0); ctx.restore(); }
+      faceTint('rgba(235,225,245,1)', 0.2, 'screen'); shadow('rgba(5,0,10,1)', 0.95, 1.4); liner(0.95, true); lips('rgba(12,0,18,1)', 0.85); break;
+    }
+    case 68: { // نمش
+      ctx.save(); oval(); ctx.clip(); ctx.globalCompositeOperation = 'multiply';
+      for (let k = 0; k < 46; k++) { const side = k % 2 ? 1 : -1; const x = nose.x + side * (rnd(k) * 0.5 + 0.05) * eye * 1.15 * (0.6 + rnd(k + 9) * 0.6); const y = nose.y + (rnd(k + 33) - 0.55) * fh * 0.13; ctx.fillStyle = `rgba(125,72,45,${0.4 + rnd(k + 5) * 0.35})`; ctx.beginPath(); ctx.arc(x, y, Math.max(1.2, eye * (0.008 + rnd(k + 17) * 0.011)), 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore(); cheeks('rgba(255,150,130,1)', 0.22, 0.2); smooth(0.2); break;
+    }
+    case 69: faceTint('rgba(255,90,130,1)', 0.26, 'soft-light'); cheeks('rgba(255,70,110,1)', 0.38, 0.22); lips('rgba(230,30,80,1)', 0.62); gloss(); smooth(0.35); break; // توت
+    case 70: { // جولدن آور
+      ctx.save(); oval(); ctx.clip(); const gr = ctx.createLinearGradient(P(454).x, P(10).y, P(234).x, P(152).y); gr.addColorStop(0, 'rgba(255,190,90,.95)'); gr.addColorStop(1, 'rgba(255,120,60,.15)');
+      ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = 0.85; ctx.fillStyle = gr; ctx.fillRect(0, 0, CW, CH); ctx.restore();
+      blob(P(454), fh * 0.35, 'rgba(255,200,110,1)', 0.35, 'screen'); smooth(0.3); lips('rgba(220,110,80,1)', 0.25); break;
+    }
+  }
+}
 function drawFaceFx(ctx: CanvasRenderingContext2D, fx: number, lm: FaceLm, g: FaceGeo, now: number) {
   type Pt = { x: number; y: number };
   const P = (i: number): Pt => { const l = lm[i]; let x = g.ox + l.x * g.vw * g.sc; if (g.mirror) x = g.CW - x; return { x, y: g.oy + l.y * g.vh * g.sc }; };
@@ -9613,11 +9876,11 @@ function drawFaceFx(ctx: CanvasRenderingContext2D, fx: number, lm: FaceLm, g: Fa
   const ell = (x: number, y: number, rx: number, ry: number, a = 0) => { ctx.beginPath(); ctx.ellipse(x, y, Math.max(1, rx), Math.max(1, ry), a, 0, Math.PI * 2); ctx.fill(); };
   const emo = (txt: string, p: Pt, size: number, a = 0) => { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(a); ctx.font = `${size}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, 0, 0); ctx.restore(); };
   const poly = (ids: number[], fill: string) => { ctx.beginPath(); ids.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); };
-  const mustache = () => {
+  const mustache = (col = '#2b1b12') => {
     const m = { x: nose.x + (lipU.x - nose.x) * 0.6, y: nose.y + (lipU.y - nose.y) * 0.6 };
     const w = dist(mL, mR) * 1.25;
     rot(m, () => {
-      ctx.fillStyle = '#2b1b12'; ctx.beginPath(); ctx.moveTo(0, -w * 0.05);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, -w * 0.05);
       ctx.bezierCurveTo(w * 0.15, -w * 0.2, w * 0.45, -w * 0.12, w * 0.5, w * 0.05);
       ctx.bezierCurveTo(w * 0.3, 0, w * 0.15, w * 0.08, 0, w * 0.06);
       ctx.bezierCurveTo(-w * 0.15, w * 0.08, -w * 0.3, 0, -w * 0.5, w * 0.05);
@@ -9705,10 +9968,19 @@ function drawFaceFx(ctx: CanvasRenderingContext2D, fx: number, lm: FaceLm, g: Fa
       ctx.beginPath(); JAW.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.lineTo(mR.x, mR.y); ctx.lineTo(lipL.x, lipL.y + fh * 0.01); ctx.lineTo(mL.x, mL.y); ctx.closePath(); ctx.fillStyle = 'rgba(55,38,26,.93)'; ctx.fill();
       mustache();
       break;
-    case 23: { // mesh
-      ctx.fillStyle = 'rgba(255,255,255,.85)';
-      for (let i = 0; i < 468; i += 5) { const p = P(i); ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3); }
-      ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2; ctx.beginPath(); FACE_OVAL.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.closePath(); ctx.stroke(); ctx.restore();
+    case 23: { // Santa (Snap-style): red hat with a white band and pom-pom, white beard and moustache
+      rot(top, () => {
+        const hw = eye * 0.95, hh = fh * 0.58;
+        ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 8;
+        ctx.fillStyle = '#d4202c'; ctx.beginPath(); ctx.moveTo(-hw, fh * 0.07);
+        ctx.quadraticCurveTo(-hw * 0.75, -hh * 0.95, hw * 0.35, -hh); ctx.quadraticCurveTo(hw * 1.0, -hh * 0.8, hw, fh * 0.07); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = '#ffffff'; rr(-hw * 1.1, -fh * 0.03, hw * 2.2, fh * 0.15, fh * 0.075);
+        ell(hw * 0.38, -hh, eye * 0.14, eye * 0.14);
+      });
+      ctx.beginPath(); JAW.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); });
+      ctx.lineTo(mR.x, mR.y); ctx.lineTo(lipL.x, lipL.y + fh * 0.01); ctx.lineTo(mL.x, mL.y); ctx.closePath(); ctx.fillStyle = 'rgba(250,250,252,.96)'; ctx.fill();
+      mustache('#ffffff');
       break;
     }
     case 24: // googly eyes
@@ -9801,6 +10073,53 @@ function drawFaceFx(ctx: CanvasRenderingContext2D, fx: number, lm: FaceLm, g: Fa
       rot(top, () => { ctx.strokeStyle = '#9aa3b5'; ctx.lineWidth = eye * 0.04; ctx.beginPath(); ctx.moveTo(0, fh * 0.02); ctx.lineTo(0, -fh * 0.25); ctx.stroke(); ctx.fillStyle = `rgba(255,60,60,${0.6 + 0.4 * Math.sin(now / 160)})`; ell(0, -fh * 0.27, eye * 0.07, eye * 0.07); });
       break;
     }
+    case 71: // bear
+      rot(top, () => { for (const sg of [-1, 1]) { ctx.fillStyle = '#8b5a2b'; ell(sg * eye * 0.78, fh * 0.06, eye * 0.24, eye * 0.24); ctx.fillStyle = '#d9a066'; ell(sg * eye * 0.78, fh * 0.07, eye * 0.13, eye * 0.13); } });
+      rot(nose, () => { ctx.fillStyle = 'rgba(222,170,110,.92)'; ell(0, eye * 0.1, eye * 0.26, eye * 0.2); ctx.fillStyle = '#2b1a10'; ell(0, eye * 0.02, eye * 0.1, eye * 0.07); });
+      break;
+    case 72: // fox
+      rot(top, () => { for (const sg of [-1, 1]) { ctx.fillStyle = '#f0762b'; ctx.beginPath(); ctx.moveTo(sg * eye * 0.45, fh * 0.05); ctx.lineTo(sg * eye * 0.95, fh * 0.02); ctx.lineTo(sg * eye * 0.8, -fh * 0.32); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#3a1d10'; ctx.beginPath(); ctx.moveTo(sg * eye * 0.62, 0); ctx.lineTo(sg * eye * 0.84, -fh * 0.01); ctx.lineTo(sg * eye * 0.79, -fh * 0.2); ctx.closePath(); ctx.fill(); } });
+      rot(nose, () => { ctx.fillStyle = '#fff'; ell(0, eye * 0.12, eye * 0.3, eye * 0.17); ctx.fillStyle = '#111'; ell(0, 0, eye * 0.09, eye * 0.065); ctx.strokeStyle = 'rgba(30,20,15,.8)'; ctx.lineWidth = Math.max(1.5, eye * 0.018); for (const sg of [-1, 1]) for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(sg * eye * 0.3, eye * 0.12 + k * eye * 0.05); ctx.lineTo(sg * eye * 0.75, eye * 0.12 + k * eye * 0.12); ctx.stroke(); } });
+      break;
+    case 73: // panda
+      rot(top, () => { ctx.fillStyle = '#161616'; for (const sg of [-1, 1]) ell(sg * eye * 0.8, fh * 0.05, eye * 0.24, eye * 0.24); });
+      for (const c of [c1, c2]) { const sg = c.x < nose.x ? -1 : 1; ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(roll + sg * 0.35); ctx.fillStyle = 'rgba(20,20,20,.92)'; ctx.beginPath(); ctx.ellipse(0, 0, sep * 0.34, sep * 0.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); ctx.fillStyle = '#fff'; ell(c.x, c.y, sep * 0.09, sep * 0.09); }
+      rot(nose, () => { ctx.fillStyle = '#111'; ell(0, eye * 0.03, eye * 0.09, eye * 0.06); });
+      break;
+    case 74: { // pirate
+      rot(top, () => {
+        ctx.fillStyle = '#b5121b'; ctx.beginPath(); ctx.moveTo(-eye, fh * 0.09); ctx.quadraticCurveTo(0, -fh * 0.35, eye, fh * 0.09); ctx.lineTo(eye, fh * 0.16); ctx.quadraticCurveTo(0, fh * 0.02, -eye, fh * 0.16); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff'; for (let k = -3; k <= 3; k++) ell(k * eye * 0.26, fh * 0.04 - (3 - Math.abs(k)) * fh * 0.025, eye * 0.035, eye * 0.035);
+        ctx.fillStyle = '#b5121b'; ell(eye * 1.02, fh * 0.14, eye * 0.12, eye * 0.2);
+      });
+      const pc = c2; ctx.save(); ctx.strokeStyle = '#111'; ctx.lineWidth = Math.max(2, eye * 0.04); ctx.beginPath(); ctx.moveTo(pc.x - Math.cos(roll) * sep * 0.4, pc.y - Math.sin(roll) * sep * 0.4); ctx.lineTo(c1.x - Math.cos(roll) * sep * 0.5, c1.y - Math.sin(roll) * sep * 0.5 - sep * 0.2); ctx.stroke(); ctx.restore();
+      rot(pc, () => { ctx.fillStyle = '#111'; ell(0, 0, sep * 0.4, sep * 0.34); });
+      mustache('#2b1b12');
+      break;
+    }
+    case 75: // wizard
+      rot(top, () => { const hh = fh * 0.95, bw = eye * 0.8; ctx.fillStyle = '#4c1d95'; ctx.beginPath(); ctx.moveTo(-bw, fh * 0.06); ctx.quadraticCurveTo(-bw * 0.2, -hh * 0.5, bw * 0.35, -hh); ctx.quadraticCurveTo(bw * 0.45, -hh * 0.4, bw, fh * 0.06); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#6d28d9'; ell(0, fh * 0.06, eye * 1.15, fh * 0.07); ctx.fillStyle = '#fde047'; ell(-bw * 0.15, -hh * 0.35, eye * 0.05, eye * 0.05); ell(bw * 0.25, -hh * 0.6, eye * 0.04, eye * 0.04); ell(bw * 0.1, -hh * 0.15, eye * 0.035, eye * 0.035); });
+      emo('✨', { x: nose.x + Math.cos(now / 700) * fh * 0.7, y: nose.y - fh * 0.2 + Math.sin(now / 700) * fh * 0.3 }, eye * 0.25);
+      break;
+    case 76: // cowboy
+      rot(top, () => { ctx.fillStyle = '#8a5a2b'; ell(0, fh * 0.02, eye * 1.3, fh * 0.09); rr(-eye * 0.62, -fh * 0.3, eye * 1.24, fh * 0.32, fh * 0.08); ctx.fillStyle = '#5a3718'; ctx.fillRect(-eye * 0.62, -fh * 0.06, eye * 1.24, fh * 0.07); });
+      mustache('#3a2412');
+      break;
+    case 77: // bee
+      rot(top, () => { ctx.strokeStyle = '#222'; ctx.lineWidth = Math.max(2, eye * 0.035); ctx.lineCap = 'round'; for (const sg of [-1, 1]) { const wob = Math.sin(now / 220 + sg) * eye * 0.06; ctx.beginPath(); ctx.moveTo(sg * eye * 0.2, fh * 0.05); ctx.quadraticCurveTo(sg * eye * 0.35, -fh * 0.25, sg * eye * 0.55 + wob, -fh * 0.36); ctx.stroke(); ctx.fillStyle = '#facc15'; ell(sg * eye * 0.55 + wob, -fh * 0.36, eye * 0.11, eye * 0.11); ctx.fillStyle = '#222'; ell(sg * eye * 0.55 + wob, -fh * 0.36, eye * 0.05, eye * 0.05); } });
+      emo('🐝', { x: nose.x + Math.cos(now / 500) * fh * 0.8, y: top.y - fh * 0.1 + Math.sin(now / 380) * fh * 0.12 }, eye * 0.3);
+      break;
+    case 78: // frog
+      rot(top, () => { for (const sg of [-1, 1]) { ctx.fillStyle = '#4ade80'; ell(sg * eye * 0.5, -fh * 0.02, eye * 0.3, eye * 0.3); ctx.fillStyle = '#fff'; ell(sg * eye * 0.5, -fh * 0.03, eye * 0.2, eye * 0.2); ctx.fillStyle = '#111'; ell(sg * eye * 0.5 + Math.sin(now / 400) * eye * 0.04, -fh * 0.02, eye * 0.09, eye * 0.09); } });
+      if (open) { ctx.fillStyle = '#f43f5e'; rot(lipL, () => { rr(-eye * 0.08, 0, eye * 0.16, fh * 0.26 * (1 + 0.1 * Math.sin(now / 90)), eye * 0.08); }); }
+      break;
+    case 79: // pig
+      rot(top, () => { ctx.fillStyle = '#f9a8c9'; for (const sg of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sg * eye * 0.4, fh * 0.05); ctx.lineTo(sg * eye * 0.95, 0); ctx.lineTo(sg * eye * 0.75, -fh * 0.25); ctx.closePath(); ctx.fill(); } });
+      rot(nose, () => { ctx.fillStyle = '#f472b6'; ell(0, eye * 0.08, eye * 0.3, eye * 0.22); ctx.fillStyle = '#9d174d'; ell(-eye * 0.1, eye * 0.08, eye * 0.055, eye * 0.085); ell(eye * 0.1, eye * 0.08, eye * 0.055, eye * 0.085); });
+      break;
+    case 80: // cap
+      rot(top, () => { ctx.fillStyle = '#2563eb'; ctx.beginPath(); ctx.ellipse(0, fh * 0.03, eye * 0.95, fh * 0.3, 0, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#1d4ed8'; ell(eye * 0.55, fh * 0.05, eye * 0.7, fh * 0.06); ctx.fillStyle = '#fff'; ell(0, -fh * 0.1, eye * 0.07, eye * 0.07); });
+      break;
     case 54: // unicorn
       rot(top, () => {
         const hh = fh * 0.62, bw = eye * 0.2;
@@ -9875,11 +10194,11 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
   const [shot, setShot] = useState<{ file: File; url: string } | null>(null);
   const [track, setTrack] = useState<StudioTrack | null>(null);
   const [lyr, setLyr] = useState<[number, string][]>([]);
-  const [lyMode, setLyMode] = useState<'me' | 'video' | 'off'>('me');
+  const [lyMode, setLyMode] = useState<'me' | 'video' | 'off' | 'both'>('both');
   const [lyOff, setLyOff] = useState(0);
   const [lyT, setLyT] = useState(0);
   const lyRef = useRef<[number, string][]>([]); lyRef.current = lyr;
-  const lyModeRef = useRef<'me' | 'video' | 'off'>('me'); lyModeRef.current = lyMode;
+  const lyModeRef = useRef<'me' | 'video' | 'off' | 'both'>('both'); lyModeRef.current = lyMode;
   const lyOffRef = useRef(0); lyOffRef.current = lyOff;
   const [sheet, setSheet] = useState<'' | 'lib' | 'trim'>('');
   const audRef = useRef<HTMLAudioElement | null>(null);
@@ -9931,9 +10250,10 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
         if (lk && now - lastDet > 45) { lastDet = now; try { lmRef.current = lk.detectForVideo(v, now).faceLandmarks?.[0] ?? null; } catch { /* skip this frame */ } }
         if (fxR.current >= 36 && fxR.current <= 37) warpFaceFx(ctx, c, fxR.current, null, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
         else if (lmRef.current && ((fxR.current >= 32 && fxR.current <= 40) || (fxR.current >= 42 && fxR.current <= 47))) warpFaceFx(ctx, c, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
+        else if (lmRef.current && fxR.current >= 58 && fxR.current <= 70) colorFaceFx(ctx, c, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
         else if (lmRef.current) drawFaceFx(ctx, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now);
       }
-      if (recOn.current && lyModeRef.current === 'video' && lyRef.current.length) {
+      if (recOn.current && (lyModeRef.current === 'video' || lyModeRef.current === 'both') && lyRef.current.length) {
         const li = lyActive(lyRef.current, (audRef.current?.currentTime ?? 0) + lyOffRef.current);
         const line = li >= 0 ? lyRef.current[li][1] : '';
         if (line) {
@@ -10055,14 +10375,14 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
         <canvas ref={cref} width={720} height={1280} className="h-full max-w-full aspect-[9/16] bg-black object-cover rounded-2xl" />
         {!ready && !err && <p className="absolute text-sm text-white/80">بفتح الكاميرا...</p>}
         {err && <p className="absolute inset-x-6 text-center text-sm text-white">{err}</p>}
-        {lyr.length > 0 && lyMode === 'me' && (() => {
+        {lyr.length > 0 && (lyMode === 'me' || lyMode === 'both') && (() => {
           const li = lyActive(lyr, rec ? lyT : (track?.start ?? 0) + 0.05);
           const row = (k: number, big: boolean) => lyr[k] ? <div key={k} className={big ? 'text-[26px] font-extrabold leading-tight text-white' : 'text-base font-bold text-white/45'} style={{ textShadow: '0 2px 14px rgba(0,0,0,.7)' }}>{lyr[k][1]}</div> : null;
           return <div className="absolute inset-x-0 bottom-6 px-6 text-center space-y-1.5 pointer-events-none">{row(li - 1, false)}{li >= 0 ? row(li, true) : row(0, false)}{li >= 0 ? row(li + 1, false) : null}</div>;
         })()}
         {lyr.length > 0 && (
           <div className="absolute top-3 start-3 z-10 flex items-center gap-1.5">
-            <button onClick={() => setLyMode(m => (m === 'me' ? 'video' : m === 'video' ? 'off' : 'me'))} className="h-8 px-3 rounded-full bg-black/55 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-bold active:scale-95">{lyMode === 'me' ? '🎤 كلمات: ليّ' : lyMode === 'video' ? '🎤 كلمات: على الفيديو' : '🎤 كلمات: إيقاف'}</button>
+            <button onClick={() => setLyMode(m => (m === 'both' ? 'me' : m === 'me' ? 'video' : m === 'video' ? 'off' : 'both'))} className="h-8 px-3 rounded-full bg-black/55 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-bold active:scale-95">{lyMode === 'both' ? '🎤 كلمات: ليّ + على الفيديو' : lyMode === 'me' ? '🎤 كلمات: ليّ' : lyMode === 'video' ? '🎤 كلمات: على الفيديو' : '🎤 كلمات: إيقاف'}</button>
             {lyMode !== 'off' && <><button onClick={() => setLyOff(o => Math.round((o - 0.5) * 10) / 10)} className="w-8 h-8 rounded-full bg-black/55 text-white text-[11px] font-bold">−</button><button onClick={() => setLyOff(o => Math.round((o + 0.5) * 10) / 10)} className="w-8 h-8 rounded-full bg-black/55 text-white text-[11px] font-bold">+</button></>}
           </div>
         )}
@@ -10083,7 +10403,7 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
                 <span className={`text-[10.5px] truncate max-w-full ${cf === i ? 'text-white font-bold' : 'text-white/65'}`}>{f.n}</span>
               </button>
             ))
-            : STUDIO_FX.map((f, i) => (
+            : STUDIO_FX_ORDER.map(i => ({ f: STUDIO_FX[i], i })).map(({ f, i }) => (
               <button key={f} onClick={() => void pickFx(i)} className="shrink-0 w-[64px] flex flex-col items-center gap-1 active:scale-95 transition-transform">
                 <span className={`w-[52px] h-[52px] rounded-2xl flex items-center justify-center text-[22px] transition-all ${fx === i ? 'bg-gradient-to-br from-violet-500 to-cyan-400 ring-2 ring-white scale-105 shadow-lg shadow-violet-500/40' : 'bg-white/10 ring-1 ring-white/15'}`}>{i === 0 ? '🚫' : (/^\p{Extended_Pictographic}/u.test(f) ? f.split(' ')[0] : f[0])}</span>
                 <span className={`text-[10.5px] truncate max-w-full ${fx === i ? 'text-white font-bold' : 'text-white/65'}`}>{/^\p{Extended_Pictographic}/u.test(f) ? f.split(' ').slice(1).join(' ') : f}</span>
@@ -11875,7 +12195,7 @@ function ChatBgPicker({ current, onChange, onImageUpload }: {
 // ============ Stickers ============
 // A sticker is an ordinary chat image/video whose file name starts with "kan-sticker"; the chat draws it without a bubble.
 const isStickerName = (name?: string | null) => !!name && name.startsWith('kan-sticker');
-interface SavedSticker { id: string; kind: 'image' | 'video'; blob: Blob; at: number }
+interface SavedSticker { id: string; kind: 'image' | 'video'; blob: Blob; at: number; gif?: boolean }
 const stkDb = () => new Promise<IDBDatabase>((res, rej) => {
   const r = indexedDB.open('kan_stickers', 1);
   r.onupgradeneeded = () => { r.result.createObjectStore('s', { keyPath: 'id' }); };
@@ -12011,6 +12331,244 @@ async function videoToSticker(file: File, start: number, len: number): Promise<B
   }
 }
 
+// ============ متجر KIX: animated stickers with search ============
+// Works out of the box with Google's animated emoji (no key). If VITE_GIPHY_KEY is set, the search also pulls Giphy stickers.
+const GIPHY_KEY = (import.meta.env.VITE_GIPHY_KEY as string | undefined) ?? '';
+const NOTO_BASE = 'https://fonts.gstatic.com/s/e/notoemoji/latest';
+type StoreSticker = { id: string; gif: string; webp: string; thumb: string; kind?: 'sticker' | 'gif' };
+type GiphyRow = { id: string; images?: Record<string, { url?: string } | undefined> };
+const STORE_CATS: [string, string][] = [['all', 'الكل'], ['faces', 'وجوه'], ['hearts', 'قلوب'], ['party', 'احتفال'], ['hands', 'إيدين'], ['fun', 'حاجات'], ['nature', 'طبيعة']];
+const STORE_ITEMS: [string, string, string][] = [
+  ['1f600', 'faces', 'ابتسامة سعيد happy grin smile'],
+  ['1f603', 'faces', 'سعيد فرحان happy smile'],
+  ['1f604', 'faces', 'ضحك سعيد laugh happy'],
+  ['1f601', 'faces', 'ابتسامة عريضة grin'],
+  ['1f606', 'faces', 'ضحك lol laugh'],
+  ['1f605', 'faces', 'عرق توتر sweat nervous'],
+  ['1f923', 'faces', 'ضحك هستيري يموت من الضحك rofl lol funny'],
+  ['1f602', 'faces', 'ضحك دموع lol funny laugh tears'],
+  ['1f642', 'faces', 'ابتسامة خفيفة smile'],
+  ['1f609', 'faces', 'غمزة wink'],
+  ['1f60a', 'faces', 'خجلان سعيد blush happy'],
+  ['1f607', 'faces', 'ملاك angel innocent'],
+  ['1f970', 'faces', 'حب قلوب love hearts adore'],
+  ['1f60d', 'faces', 'عيون قلوب حب love heart eyes'],
+  ['1f929', 'faces', 'نجوم مبهور wow star struck'],
+  ['1f618', 'faces', 'بوسة kiss'],
+  ['1f60b', 'faces', 'لذيذ yummy tasty'],
+  ['1f61b', 'faces', 'لسان tongue'],
+  ['1f61c', 'faces', 'غمزة لسان wink tongue crazy'],
+  ['1f92a', 'faces', 'مجنون crazy zany'],
+  ['1f911', 'faces', 'فلوس money rich'],
+  ['1f917', 'faces', 'حضن hug'],
+  ['1f92d', 'faces', 'اوبس يضحك oops giggle'],
+  ['1f92b', 'faces', 'هس سر shush secret'],
+  ['1f914', 'faces', 'تفكير thinking hmm'],
+  ['1f928', 'faces', 'شك مش مقتنع skeptical'],
+  ['1f610', 'faces', 'عادي محايد neutral'],
+  ['1f644', 'faces', 'قلب عينيه eye roll'],
+  ['1f62c', 'faces', 'حرج awkward grimace'],
+  ['1f60c', 'faces', 'مرتاح relieved'],
+  ['1f634', 'faces', 'نايم نوم sleep'],
+  ['1f924', 'faces', 'لعاب drool'],
+  ['1f912', 'faces', 'تعبان مريض sick'],
+  ['1f922', 'faces', 'قرف nauseated'],
+  ['1f92e', 'faces', 'يستفرغ vomit'],
+  ['1f975', 'faces', 'حر سخن hot'],
+  ['1f976', 'faces', 'برد freezing cold'],
+  ['1f974', 'faces', 'دايخ woozy'],
+  ['1f92f', 'faces', 'مصدوم mind blown explode'],
+  ['1f920', 'faces', 'كاوبوي cowboy'],
+  ['1f973', 'faces', 'حفلة party'],
+  ['1f60e', 'faces', 'كول نظارة cool sunglasses'],
+  ['1f913', 'faces', 'ذكي nerd'],
+  ['1f633', 'faces', 'محرج flushed'],
+  ['1f97a', 'faces', 'عيون توسل pleading please'],
+  ['1f62d', 'faces', 'بكاء يبكي cry sob'],
+  ['1f622', 'faces', 'دمعة حزين sad tear'],
+  ['1f631', 'faces', 'صراخ خوف scream fear'],
+  ['1f620', 'faces', 'غضبان angry'],
+  ['1f621', 'faces', 'غاضب جدا rage mad'],
+  ['1f92c', 'faces', 'شتيمة سباب swear'],
+  ['1f608', 'faces', 'شيطان devil'],
+  ['1f480', 'faces', 'جمجمة موت skull dead'],
+  ['1f921', 'faces', 'مهرج clown'],
+  ['1f47b', 'faces', 'شبح ghost'],
+  ['1f47d', 'faces', 'فضائي alien'],
+  ['1f916', 'faces', 'روبوت robot'],
+  ['1f4a9', 'faces', 'كاكا poop'],
+  ['2764_fe0f', 'hearts', 'قلب احمر حب heart love red'],
+  ['1f9e1', 'hearts', 'قلب برتقالي orange heart'],
+  ['1f49b', 'hearts', 'قلب اصفر yellow heart'],
+  ['1f49a', 'hearts', 'قلب اخضر green heart'],
+  ['1f499', 'hearts', 'قلب ازرق blue heart'],
+  ['1f49c', 'hearts', 'قلب بنفسجي purple heart'],
+  ['1f90d', 'hearts', 'قلب ابيض white heart'],
+  ['1f5a4', 'hearts', 'قلب اسود black heart'],
+  ['1f494', 'hearts', 'قلب مكسور broken heart'],
+  ['1f495', 'hearts', 'قلبين two hearts love'],
+  ['1f496', 'hearts', 'قلب لامع sparkling heart'],
+  ['1f497', 'hearts', 'قلب ينمو growing heart'],
+  ['1f498', 'hearts', 'قلب سهم cupid arrow'],
+  ['1f49d', 'hearts', 'قلب شريط gift heart'],
+  ['1f48b', 'hearts', 'بوسة قبلة kiss lips'],
+  ['1f48c', 'hearts', 'رسالة حب love letter'],
+  ['1f389', 'party', 'احتفال مبروك party congrats tada'],
+  ['1f38a', 'party', 'كونفيتي confetti'],
+  ['1f388', 'party', 'بالون balloon'],
+  ['1f381', 'party', 'هدية gift present'],
+  ['1f382', 'party', 'تورتة عيد ميلاد birthday cake'],
+  ['1f973', 'party', 'حفلة party'],
+  ['1f451', 'party', 'تاج ملك crown king queen'],
+  ['1f3c6', 'party', 'كأس فوز trophy win'],
+  ['1f947', 'party', 'ميدالية ذهبية gold medal'],
+  ['2728', 'party', 'لمعان نجوم sparkles shine'],
+  ['1f31f', 'party', 'نجمة glowing star'],
+  ['1f4af', 'party', 'مية 100 hundred'],
+  ['1f386', 'party', 'العاب نارية fireworks'],
+  ['1f387', 'party', 'شرارة sparkler'],
+  ['1f48e', 'party', 'الماس gem diamond'],
+  ['1f3b6', 'party', 'موسيقى music notes'],
+  ['1f44d', 'hands', 'لايك تمام thumbs up like ok'],
+  ['1f44e', 'hands', 'ديسلايك thumbs down'],
+  ['1f44f', 'hands', 'تصفيق clap applause'],
+  ['1f64c', 'hands', 'رفع الايدين hooray raised hands'],
+  ['1f64f', 'hands', 'شكرا دعاء thanks pray please'],
+  ['1f4aa', 'hands', 'قوة عضلات muscle strong'],
+  ['1f44b', 'hands', 'تلويح اهلا باي wave hi bye'],
+  ['1f91d', 'hands', 'مصافحة اتفاق handshake deal'],
+  ['270c_fe0f', 'hands', 'نصر victory peace'],
+  ['1f91e', 'hands', 'حظ fingers crossed luck'],
+  ['1f918', 'hands', 'روك rock'],
+  ['1f44c', 'hands', 'تمام perfect ok'],
+  ['1f595', 'hands', 'اصبع middle finger'],
+  ['1f449', 'hands', 'اشارة point right'],
+  ['1f440', 'hands', 'عيون eyes look'],
+  ['1f9e0', 'hands', 'مخ brain'],
+  ['1f525', 'fun', 'نار حرق fire hot lit'],
+  ['1f4a5', 'fun', 'انفجار boom collision'],
+  ['1f4a3', 'fun', 'قنبلة bomb'],
+  ['1f4a8', 'fun', 'سرعة dash wind'],
+  ['1f4a6', 'fun', 'قطرات sweat drops water'],
+  ['1f4a4', 'fun', 'نوم zzz sleep'],
+  ['1f4a1', 'fun', 'فكرة idea bulb'],
+  ['1f680', 'fun', 'صاروخ rocket'],
+  ['1f697', 'fun', 'عربية car'],
+  ['26bd', 'fun', 'كورة football soccer'],
+  ['1f3c0', 'fun', 'سلة basketball'],
+  ['1f3ae', 'fun', 'جيم لعبة game controller'],
+  ['1f4f1', 'fun', 'موبايل phone'],
+  ['1f4b0', 'fun', 'فلوس money bag'],
+  ['1f355', 'fun', 'بيتزا pizza'],
+  ['1f354', 'fun', 'برجر burger'],
+  ['1f35f', 'fun', 'بطاطس fries'],
+  ['1f369', 'fun', 'دونات donut'],
+  ['2615', 'fun', 'قهوة coffee'],
+  ['1f37f', 'fun', 'فشار popcorn'],
+  ['1f339', 'nature', 'وردة rose flower'],
+  ['1f33b', 'nature', 'دوار الشمس sunflower'],
+  ['1f337', 'nature', 'توليب tulip'],
+  ['1f340', 'nature', 'برسيم حظ clover luck'],
+  ['1f308', 'nature', 'قوس قزح rainbow'],
+  ['1f319', 'nature', 'قمر moon'],
+  ['2b50', 'nature', 'نجمة star'],
+  ['2600_fe0f', 'nature', 'شمس sun'],
+  ['2601_fe0f', 'nature', 'سحابة cloud'],
+  ['26a1', 'nature', 'برق lightning'],
+  ['2744_fe0f', 'nature', 'ثلج snowflake'],
+  ['1f30a', 'nature', 'موجة بحر wave sea'],
+  ['1f436', 'nature', 'كلب dog'],
+  ['1f431', 'nature', 'قطة cat'],
+  ['1f98b', 'nature', 'فراشة butterfly'],
+  ['1f984', 'nature', 'يونيكورن unicorn'],
+  ['1f981', 'nature', 'اسد lion'],
+  ['1f43c', 'nature', 'باندا panda'],
+  ['1f427', 'nature', 'بطريق penguin'],
+  ['1f41d', 'nature', 'نحلة bee'],
+];
+const notoSticker = (cp: string): StoreSticker => ({ id: 'noto-' + cp, gif: `${NOTO_BASE}/${cp}/512.gif`, webp: `${NOTO_BASE}/${cp}/512.webp`, thumb: `${NOTO_BASE}/${cp}/512.webp` });
+const GIF_QUICK: [string, string][] = [['😂', 'funny'], ['❤️', 'love'], ['💃', 'dance'], ['😮', 'wow'], ['😢', 'sad'], ['👏', 'clap'], ['🔥', 'fire'], ['😎', 'cool']];
+// A store pick becomes a chat file: stickers keep the sticker look, GIFs go out as ordinary animated images.
+const storeToSaved = async (st: StoreSticker): Promise<SavedSticker | null> => {
+  try {
+    const blob = await (await fetch(st.kind === 'gif' ? st.gif : st.webp)).blob();
+    return { id: crypto.randomUUID(), kind: 'image', blob, at: Date.now(), gif: st.kind === 'gif' };
+  } catch { return null; }
+};
+function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { onPick: (s: StoreSticker) => void | Promise<void>; onClose: () => void; inline?: boolean; startKind?: 'sticker' | 'gif' }) {
+  useBackLayer(!inline, onClose);
+  const [kind, setKind] = useState<'sticker' | 'gif'>(startKind);
+  const [q, setQ] = useState('');
+  const [cat, setCat] = useState('all');
+  const [bad, setBad] = useState<Set<string>>(() => new Set());
+  const [net, setNet] = useState<StoreSticker[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [pickBusy, setPickBusy] = useState('');
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const local = STORE_ITEMS.filter(([cp, c, k]) => {
+    if (cat !== 'all' && !words.length && c !== cat) return false;
+    if (!words.length) return true;
+    const typed = [...q.trim()].map(ch => ch.codePointAt(0)?.toString(16)).join('_');
+    return words.every(w => k.includes(w)) || cp.startsWith(typed) || (typed.length > 0 && cp.replace('_fe0f', '') === typed.replace('_fe0f', '').replace(/^fe0f_?/, ''));
+  }).map(([cp]) => ({ ...notoSticker(cp), kind })).filter(x => !bad.has(x.id));
+  useEffect(() => {
+    setNet([]);
+    if (!GIPHY_KEY) return;
+    const ctl = new AbortController();
+    const tm = window.setTimeout(async () => {
+      setBusy(true);
+      try {
+        const path = kind === 'gif' ? 'gifs' : 'stickers';
+        const base = q.trim() ? `https://api.giphy.com/v1/${path}/search?q=${encodeURIComponent(q.trim())}&` : `https://api.giphy.com/v1/${path}/trending?`;
+        const r = await fetch(`${base}api_key=${GIPHY_KEY}&limit=30&rating=g`, { signal: ctl.signal });
+        const j = await r.json() as { data?: GiphyRow[] };
+        setNet((j.data ?? []).map(d => { const u = d.images?.fixed_height?.url ?? ''; return { id: `g-${kind}-${d.id}`, gif: u, webp: u, thumb: d.images?.fixed_height_small?.url ?? u, kind }; }).filter(x => x.gif));
+      } catch { /* the built-in catalogue is still there */ }
+      finally { if (!ctl.signal.aborted) setBusy(false); }
+    }, q ? 350 : 0);
+    return () => { window.clearTimeout(tm); ctl.abort(); };
+  }, [q, kind]);
+  const gifOnline = kind === 'gif' && !!GIPHY_KEY;
+  const all = gifOnline && net.length ? net : [...local, ...net];
+  const choose = async (st: StoreSticker) => { if (pickBusy) return; setPickBusy(st.id); try { await onPick(st); } finally { setPickBusy(''); } };
+  const body = (
+    <div className={inline ? 'flex flex-col h-64 bg-gray-950/60' : 'w-full sm:max-w-md h-[80vh] rounded-t-[28px] sm:rounded-[28px] bg-gray-950 ring-1 ring-white/15 flex flex-col overflow-hidden'} onClick={e => e.stopPropagation()}>
+      {!inline && (
+        <div className="flex items-center gap-2 px-4 pt-4 pb-2">
+          <Sparkles size={18} className="text-cyan-300" /><span className="flex-1 text-white font-bold">متجر KIX</span>
+          <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center active:scale-90" aria-label="إغلاق"><X size={18} /></button>
+        </div>
+      )}
+      <div className="flex items-center gap-2 px-3 pt-2 pb-2">
+        <div className="shrink-0 flex rounded-full bg-white/10 p-0.5 text-xs font-bold">
+          {([['sticker', 'ملصقات'], ['gif', 'GIF']] as const).map(([k, l]) => <button key={k} onClick={() => { setKind(k); setCat('all'); }} className={`px-3.5 h-9 rounded-full transition-colors active:scale-95 ${kind === k ? 'bg-white text-black' : 'text-white/80'}`}>{l}</button>)}
+        </div>
+        <div className="flex-1 min-w-0 flex items-center gap-2 bg-white/10 rounded-full ps-3"><Search size={16} color="#fff" /><input value={q} onChange={e => setQ(e.target.value)} placeholder={kind === 'gif' ? 'ابحث عن GIF: funny، love...' : 'ابحث: ضحك، قلب، نار، happy...'} dir="auto" className="flex-1 min-w-0 px-2 h-9 bg-transparent text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>
+      </div>
+      <div className="flex gap-2 overflow-x-auto no-scrollbar px-3 pb-2">
+        {gifOnline
+          ? GIF_QUICK.map(([e, w]) => <button key={w} onClick={() => setQ(w)} className={`shrink-0 px-3.5 h-9 rounded-full text-sm font-bold active:scale-95 ${q === w ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{e} {w}</button>)
+          : STORE_CATS.map(([k, l]) => <button key={k} onClick={() => setCat(k)} className={`shrink-0 px-3.5 h-9 rounded-full text-xs font-bold active:scale-95 ${cat === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pb-3">
+        {!all.length && !busy && <p className="text-center text-white/60 text-xs py-10">مفيش نتائج، جرّب كلمة تانية</p>}
+        {kind === 'gif' && !GIPHY_KEY && <p className="text-center text-white/50 text-[11px] pb-2">دي GIF متحركة جاهزة. للبحث في ملايين الـ GIF أضف VITE_GIPHY_KEY.</p>}
+        <div className={`grid gap-2 ${gifOnline ? 'grid-cols-3' : 'grid-cols-4 min-[420px]:grid-cols-5'}`}>
+          {all.map(st => <button key={st.id} onClick={() => void choose(st)} className={`relative aspect-square rounded-2xl bg-white/5 ${gifOnline ? 'p-0.5 overflow-hidden' : 'p-1.5'} active:scale-90 transition-transform ${pickBusy === st.id ? 'opacity-50' : ''}`}><img src={st.thumb} alt="" loading="lazy" draggable={false} onError={() => setBad(b => new Set(b).add(st.id))} className={`w-full h-full ${gifOnline ? 'object-cover rounded-xl' : 'object-contain'}`} /></button>)}
+        </div>
+        {busy && <p className="text-center text-white/50 text-[11px] py-3">جارٍ تحميل المزيد...</p>}
+      </div>
+    </div>
+  );
+  if (inline) return <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>{body}</div>;
+  return createPortal(
+    <div dir={DIR} className="kan-always-white fixed inset-0 z-[170] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={onClose} onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+      {body}
+    </div>,
+    document.body,
+  );
+}
+
 function StickerThumb({ st, className }: { st: SavedSticker; className?: string }) {
   const [url, setUrl] = useState('');
   useEffect(() => {
@@ -12029,6 +12587,7 @@ function StickerPane({ onSend }: { onSend: (st: SavedSticker) => void }) {
   const [list, setList] = useState<SavedSticker[]>([]);
   const [making, setMaking] = useState<File | null>(null);
   const [manage, setManage] = useState(false);
+  const [store, setStore] = useState(false);
   const pickRef = useRef<HTMLInputElement>(null);
   const reload = () => { void stkAll().then(setList); };
   useEffect(reload, []);
@@ -12037,7 +12596,10 @@ function StickerPane({ onSend }: { onSend: (st: SavedSticker) => void }) {
       <input ref={pickRef} type="file" accept="image/*,video/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setMaking(f); }} />
       <div className="grid grid-cols-4 min-[420px]:grid-cols-5 sm:grid-cols-8 gap-2">
         <button onClick={() => pickRef.current?.click()} className="aspect-square rounded-xl border-2 border-dashed border-violet-400/50 text-violet-300 flex flex-col items-center justify-center gap-0.5 active:scale-90 transition-transform">
-          <Plus size={20} /><span className="text-[10px]">جديد</span>
+          <Plus size={20} /><span className="text-[10px] leading-tight text-center">استوديو KIX</span>
+        </button>
+        <button onClick={() => setStore(true)} className="aspect-square rounded-xl bg-gradient-to-br from-violet-600/40 to-cyan-500/40 ring-1 ring-cyan-300/40 text-cyan-100 flex flex-col items-center justify-center gap-0.5 active:scale-90 transition-transform">
+          <Sparkles size={20} /><span className="text-[10px] leading-tight text-center">متجر KIX</span>
         </button>
         {list.map(st => (
           <div key={st.id} className="relative aspect-square rounded-xl bg-white/5 overflow-hidden">
@@ -12050,6 +12612,7 @@ function StickerPane({ onSend }: { onSend: (st: SavedSticker) => void }) {
       </div>
       {list.length === 0 && <p className="text-center text-gray-500 text-xs pt-5 leading-6">اصنع أول ملصق من صورة أو فيديو قصير</p>}
       {list.length > 0 && <div className="flex justify-center pt-3"><button onClick={() => setManage(m => !m)} className={`px-4 py-1 rounded-full text-[11px] border ${manage ? 'bg-rose-500/20 border-rose-400/40 text-rose-200' : 'bg-white/5 border-white/10 text-gray-400'}`}>{manage ? 'تم' : 'حذف ملصقات'}</button></div>}
+      {store && <KixStore onClose={() => setStore(false)} onPick={async st => { const sv = await storeToSaved(st); if (sv) { setStore(false); onSend(sv); } }} />}
       {making && <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}><StickerMaker file={making} onClose={() => setMaking(null)} onSaved={st => { setMaking(null); reload(); onSend(st); }} /></div>}
     </div>
   );
@@ -13597,7 +14160,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               </motion.button>
             )}
           </div>
-          {emojiOpen && <EmojiPicker key={stickerStart ? 's' : 'e'} docked onPick={insertEmoji} onClose={() => setEmojiOpen(false)} startOnStickers={stickerStart} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `kan-sticker.${stkExt(st.blob, st.kind)}` }); }} />}
+          {emojiOpen && <EmojiPicker key={stickerStart ? 's' : 'e'} docked onPick={insertEmoji} onClose={() => setEmojiOpen(false)} startOnStickers={stickerStart} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `${st.gif ? 'kix-gif' : 'kan-sticker'}.${stkExt(st.blob, st.kind)}` }); }} />}
         </div>
       )}
       {viewer && <ImageViewer src={viewer.src} name={viewer.name} gallery={messages.flatMap(x => x.media && !isStickerName(x.media.name) && (x.media.type === 'image' || x.media.type === 'video') ? [{ src: x.media.url, name: x.media.name, type: x.media.type as 'image' | 'video' }] : [])} onClose={() => setViewer(null)} />}
