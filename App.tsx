@@ -21,6 +21,7 @@ const LANG: Lang = getLang();
 const setLangStored = (l: Lang) => { try { localStorage.setItem('kan_lang', l); } catch { /* ignore */ } window.location.reload(); };
 if (typeof document !== 'undefined') { document.documentElement.lang = LANG; document.documentElement.dir = LANG === 'en' ? 'ltr' : 'rtl'; }
 const EN: Record<string, string> = {
+  'جاري التحديث': 'Refreshing...',
   'الرئيسية': 'Home', 'ريلز': 'Reels', 'فيديوهات': 'Videos', 'حسابي': 'Profile', 'نشر': 'Post',
   'الإشعارات': 'Notifications', 'الرسائل': 'Messages', 'بحث': 'Search', 'الإعدادات': 'Settings', 'القائمة': 'Menu', 'إغلاق القائمة': 'Close menu',
   'الكل': 'All', 'المتابَعون': 'Following', 'الملفات': 'Files', 'القصص': 'Stories', 'قصتك': 'Your story',
@@ -3678,9 +3679,12 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
   }, [currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flash = (msg: string) => { setHint(msg); window.setTimeout(() => setHint(''), 2200); };
-  const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
+  const pick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const raw = input.files?.[0];
+    if (!raw) return;
+    const f = await normalizePickedMedia(raw);
+    input.value = '';
     if (!f.type.startsWith('image/') && !f.type.startsWith('video/')) { flash('اختر صورة أو فيديو'); return; }
     if (f.size > 80 * 1024 * 1024) { flash('الملف كبير جداً (الحد 80 ميجا)'); return; }
     setComposer(f);
@@ -3704,7 +3708,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
       <div className="flex items-center justify-between px-1 mb-2">
         <h3 className="text-sm font-semibold text-gray-200">{t('القصص')}</h3>
       </div>
-      <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={pick} />
+      <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={e => void pick(e)} />
       <div className="flex gap-3.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
         <button onClick={() => (mine ? setOpenAt(0) : setAddMenu(true))} className="flex flex-col items-center gap-1.5 shrink-0 w-[68px] active:scale-95 transition-transform">
           <div className="relative">
@@ -4861,8 +4865,8 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
       <div className="relative flex-1 min-h-0 flex items-center justify-center">
         <div style={{ background: isVideo ? undefined : bgc }} className="relative h-full w-full sm:w-auto sm:max-w-full sm:aspect-[9/16] bg-black sm:rounded-[32px] overflow-hidden sm:ring-2 ring-violet-400/40 sm:shadow-[0_0_60px_-10px_rgba(139,92,246,0.6)] flex items-center justify-center">
           {isVideo
-            ? <video src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay />
-            : <>{blurBg && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}<img src={previewUrl} alt="" draggable={false} style={{ filter: fk >= 100 ? STORY_FILTERS[flt].f : undefined, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} onError={() => { const r = new FileReader(); r.onload = () => { if (typeof r.result === 'string') setPreviewUrl(r.result); }; r.readAsDataURL(file); }} className="relative w-full h-full object-contain select-none pointer-events-none" />{fk < 100 && flt > 0 && <img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, opacity: fk / 100, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none" />}</>}
+            ? (previewUrl ? <video key={previewUrl} src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay preload="auto" /> : null)
+            : <>{blurBg && previewUrl && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}{previewUrl && <img key={previewUrl} src={previewUrl} alt="" draggable={false} style={{ filter: fk >= 100 ? STORY_FILTERS[flt].f : undefined, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} onError={() => { const r = new FileReader(); r.onload = () => { if (typeof r.result === 'string') setPreviewUrl(r.result); }; r.readAsDataURL(file); }} className="relative w-full h-full object-contain select-none pointer-events-none" />}{fk < 100 && flt > 0 && <img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, opacity: fk / 100, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none" />}</>}
           {!isVideo && tool !== 'draw' && <div className="absolute inset-0 z-[4] touch-none cursor-grab"
             onPointerDown={e => { tapStart.current = { x: e.clientX, y: e.clientY }; setMoreOpen(false); e.currentTarget.setPointerCapture(e.pointerId); bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); setSel(-1); setXsel(''); if (bp.current.size === 2) { const [p, q] = [...bp.current.values()]; bz.current = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI, r: rot }; } }}
             onPointerMove={e => {
@@ -5046,6 +5050,29 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
     </div>,
     document.body,
   );
+}
+
+// Gallery pickers (Android / Google Photos / iOS) can hand over a lazy or short-lived file: no MIME type, HEIC/AVIF, or bytes that
+// vanish once the picker closes -> broken-image icon. Snapshot the bytes now, repair the type, convert exotic images to JPEG.
+const PICK_TYPES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', jfif: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', avif: 'image/avif', bmp: 'image/bmp', mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', '3gp': 'video/3gpp', mkv: 'video/x-matroska' };
+async function normalizePickedMedia(f: File): Promise<File> {
+  try {
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    const type = (f.type && f.type !== 'application/octet-stream' ? f.type : PICK_TYPES[ext]) || f.type || '';
+    let data: Blob = f;
+    if (f.size <= 48 * 1024 * 1024) { try { data = new Blob([await f.arrayBuffer()], { type }); } catch { data = f; } }
+    let out = new File([data], f.name || `media.${ext || 'bin'}`, { type, lastModified: f.lastModified });
+    if (type.startsWith('image/') && !/^image\/(jpeg|png|webp|gif)$/.test(type)) {
+      try {
+        const bmp = await createImageBitmap(out);
+        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+        c.getContext('2d')!.drawImage(bmp, 0, 0);
+        const jb: Blob | null = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+        if (jb) out = new File([jb], (f.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+      } catch { /* keep the original */ }
+    }
+    return out;
+  } catch { return f; }
 }
 
 async function shrinkImageFile(f: File): Promise<File> {
@@ -6708,6 +6735,7 @@ export default function App() {
   });
   // Home button: already on the feed -> one tap scrolls to the top, a quick second tap refreshes it.
   const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [homeBounce, setHomeBounce] = useState(0);
   useEffect(() => { const h = document.documentElement, b = document.body; h.style.overscrollBehaviorY = 'none'; b.style.overscrollBehaviorY = 'none'; return () => { h.style.overscrollBehaviorY = ''; b.style.overscrollBehaviorY = ''; }; }, []); // no browser pull-to-refresh either
   openPostHandler = (postId, commentId) => pushScreen({ k: 'post', postId, commentId });
   const [reelStart, setReelStart] = useState<string | null>(null);
@@ -6737,7 +6765,7 @@ export default function App() {
   // Home, scrolled down: the phone's back button first takes you back to the top of the page.
   setBackFallback(() => {
     if (currentUserId !== null && activeTab === 'feed' && !viewedUserId && selectedChat === null && window.scrollY > 120) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      glideToTop();
       return true;
     }
     return false;
@@ -6750,15 +6778,36 @@ export default function App() {
     void Promise.race([loadFeedFirst(), new Promise<void>(r => window.setTimeout(r, 12000))]).finally(() => { feedBusy.current = false; setFeedLoading(false); window.setTimeout(() => setHomeRefreshing(false), 400); });
   };
   // Home icon: from any screen -> back to Home. On Home: scrolled down -> top; already at the top -> refresh the feed (the icon spins).
+  // Animated glide to the very top (ease-out). Not the browser's smooth scroll: the feed re-renders while refreshing and cancels that one.
+  const topAnim = useRef(0);
+  const glideToTop = (done?: () => void) => {
+    const from = window.scrollY;
+    cancelAnimationFrame(topAnim.current);
+    if (from < 4) { done?.(); return; }
+    const dur = Math.min(650, Math.max(320, from * 0.35));
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur);
+      const e = 1 - Math.pow(1 - k, 3);
+      window.scrollTo({ top: Math.round(from * (1 - e)), behavior: 'instant' as ScrollBehavior });
+      if (k < 1) topAnim.current = requestAnimationFrame(step); else done?.();
+    };
+    topAnim.current = requestAnimationFrame(step);
+  };
+  // Home icon: from any screen -> back to Home. On Home: scrolled down -> glide to the top, then refresh; at the top -> refresh at once (pill drops down, icon spins).
   const onHomeTap = () => {
     if (activeTab !== 'feed' || viewedUserId) {
       goTab('feed');
       window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }), 60);
       return;
     }
-    // Jump (not smooth) to the top: the feed re-renders while refreshing and a smooth scroll gets cancelled half way.
+    setHomeBounce(b => b + 1);
+    if (window.scrollY > 4) {
+      setHomeRefreshing(true); // show the animation right away while gliding up
+      glideToTop(() => { refreshHome(); window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }), 120); });
+      return;
+    }
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-    document.documentElement.scrollTop = 0; document.body.scrollTop = 0;
     refreshHome();
     window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }), 120);
   };
@@ -7026,6 +7075,17 @@ export default function App() {
         </>
       </main>
 
+      {/* Home refresh: a pill drops from the top while the feed reloads */}
+      <style>{'@keyframes kanHomeSpin{0%{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.25)}100%{transform:rotate(360deg) scale(1)}}@keyframes kanHomePop{0%{transform:scale(1)}40%{transform:scale(1.35) translateY(-3px)}100%{transform:scale(1)}}@keyframes kanRing{to{transform:rotate(360deg)}}.kan-home-spin{animation:kanHomeSpin .9s ease-in-out infinite}.kan-home-pop{animation:kanHomePop .35s cubic-bezier(.2,.9,.3,1.4)}'}</style>
+      <div
+        aria-hidden
+        style={{ position: 'fixed', top: 'max(0.75rem, env(safe-area-inset-top))', left: '50%', transform: homeRefreshing ? 'translate(-50%, 0) scale(1)' : 'translate(-50%, -140%) scale(.85)', opacity: homeRefreshing ? 1 : 0, transition: 'transform .45s cubic-bezier(.2,.9,.3,1.2), opacity .3s ease' }}
+        className="z-[60] pointer-events-none flex items-center gap-2 px-4 py-2 rounded-full bg-gray-900/95 border border-cyan-400/40 shadow-[0_8px_30px_-6px_rgba(34,211,238,0.55)] backdrop-blur-xl"
+      >
+        <span className="block w-4 h-4 rounded-full border-2 border-cyan-300/30 border-t-cyan-300" style={{ animation: 'kanRing .7s linear infinite' }} />
+        <span className="text-xs font-bold text-white">{t('جاري التحديث')}</span>
+      </div>
+
       {/* Bottom Nav */}
       <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} className="z-50 bg-gray-950/95 backdrop-blur-xl border-t border-white/10 shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
         <div className="w-full grid grid-cols-[1fr_auto_1fr] items-end gap-1 px-[max(0.5rem,env(safe-area-inset-left))] md:px-6 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
@@ -7046,7 +7106,7 @@ export default function App() {
                   onClick={() => (tab === 'feed' ? onHomeTap() : goTab(tab))}
                   className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-0.5 py-2 rounded-2xl transition-colors active:scale-95 ${active ? 'text-white' : 'text-gray-300 hover:text-white'}`}
                 >
-                  <Icon size={tab === 'reels' ? 31 : 24} strokeWidth={active ? 2.4 : 2} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'animate-spin' : ''}`} />
+                  <Icon key={tab === 'feed' ? `hb${homeBounce}` : undefined} size={tab === 'reels' ? 31 : 24} strokeWidth={active ? 2.4 : 2} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'kan-home-spin' : tab === 'feed' && homeBounce > 0 ? 'kan-home-pop' : ''}`} />
                   <span className={`text-[12px] leading-tight max-w-full ${active ? "font-bold text-white" : "font-semibold"}`}>{label}</span>
                   <span className={`h-0.5 w-5 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
                 </button>
@@ -10520,10 +10580,12 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
     });
   };
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files ?? []) as File[];
-    e.target.value = '';
-    if (picked.length === 0) return;
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const rawPicked = Array.from(input.files ?? []) as File[];
+    if (rawPicked.length === 0) { input.value = ''; return; }
+    const picked = await Promise.all(rawPicked.map(normalizePickedMedia));
+    input.value = '';
     setError('');
     const usable = picked.filter(f => f.size <= maxMbFor(f) * 1024 * 1024);
     if (usable.length < picked.length) setError(`تم تجاهل ${picked.length - usable.length} ملف لتجاوزه ${MAX_FILE_MB} ميجابايت`);
