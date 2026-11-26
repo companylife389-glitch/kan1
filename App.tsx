@@ -6812,22 +6812,31 @@ export default function App() {
   const topAnim = useRef(0);
   const glideToTop = (done?: () => void) => {
     cancelAnimationFrame(topAnim.current);
-    if (window.scrollY < 4) { done?.(); return; }
-    // Each frame starts from where the page really is NOW (post cards change height while they scroll into view, so a fixed start point never reaches the top).
+    // The page can be scrolled by the window, <html> or <body> depending on the phone/browser: read and set all of them.
+    // Every element above <main> that really scrolls (an inner wrapper can be the scroller on some phones).
+    const scrollers = () => { const out: HTMLElement[] = []; let el: HTMLElement | null = document.querySelector('main'); while (el) { if (el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) out.push(el); el = el.parentElement; } return out; };
+    const getY = () => Math.max(window.scrollY || 0, document.scrollingElement?.scrollTop ?? 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0, ...scrollers().map(e => e.scrollTop));
+    const setY = (v: number) => { window.scrollTo(0, v); if (document.scrollingElement) document.scrollingElement.scrollTop = v; document.documentElement.scrollTop = v; document.body.scrollTop = v; for (const e of scrollers()) e.scrollTop = v; };
+    if (getY() < 4) { done?.(); return; }
+    const root = document.documentElement;
+    const prevAnchor = root.style.overflowAnchor;
+    root.style.overflowAnchor = 'none'; // images loading above must not push the page back down while we glide
     const t0 = performance.now();
-    const hardTop = () => { window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; document.body.scrollTop = 0; };
-    const stop = () => cancelAnimationFrame(topAnim.current);
-    window.addEventListener('touchstart', stop, { once: true, passive: true });
+    const end = () => { cancelAnimationFrame(topAnim.current); window.removeEventListener('touchstart', stop); window.removeEventListener('wheel', stop); root.style.overflowAnchor = prevAnchor; };
+    const stop = () => end();
+    // Only a NEW touch / wheel cancels the glide (listeners start a moment later so the tap itself can't cancel it).
+    const arm = window.setTimeout(() => { window.addEventListener('touchstart', stop, { passive: true, once: true }); window.addEventListener('wheel', stop, { passive: true, once: true }); }, 150);
     const step = (now: number) => {
-      const y = window.scrollY;
+      const y = getY();
       if (y <= 1 || now - t0 > 900) {
-        hardTop();
-        window.setTimeout(() => { if (window.scrollY > 0) hardTop(); }, 90); // late layout shifts
-        window.removeEventListener('touchstart', stop);
+        setY(0);
+        window.setTimeout(() => { if (getY() > 0) setY(0); }, 90); // late layout shifts
+        window.clearTimeout(arm);
+        end();
         done?.();
         return;
       }
-      window.scrollTo({ top: Math.floor(y * 0.78), behavior: 'instant' as ScrollBehavior });
+      setY(Math.floor(y * 0.78));
       topAnim.current = requestAnimationFrame(step);
     };
     topAnim.current = requestAnimationFrame(step);
@@ -6837,7 +6846,7 @@ export default function App() {
   const onHomeTap = () => {
     if (activeTab !== 'feed' || viewedUserId) {
       goTab('feed');
-      window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }), 60);
+      window.setTimeout(() => glideToTop(), 60);
       return;
     }
     const now = Date.now();
