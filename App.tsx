@@ -4520,7 +4520,9 @@ function TextStoryComposer({ onClose, onNext }: { onClose: () => void; onNext: (
 function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId, initialMusic }: { file: File; currentUser: User; users: User[]; onClose: () => void; onDone: () => void; sharedPostId?: string; initialMusic?: { url: string; name: string; start: number; end: number; file?: File } | null }) {
   useBackLayer(true, onClose);
   const [previewUrl, setPreviewUrl] = useState('');
-  useEffect(() => { const u = URL.createObjectURL(file); setPreviewUrl(u); return () => URL.revokeObjectURL(u); }, [file]);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const fbTried = useRef(0);
+  useEffect(() => { fbTried.current = 0; setPreviewFailed(false); const u = URL.createObjectURL(file); setPreviewUrl(u); return () => URL.revokeObjectURL(u); }, [file]);
   const isVideo = file.type.startsWith('video/');
   const [caption, setCaption] = useState('');
   const [pct, setPct] = useState(0);
@@ -4865,8 +4867,9 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
       <div className="relative flex-1 min-h-0 flex items-center justify-center">
         <div style={{ background: isVideo ? undefined : bgc }} className="relative h-full w-full sm:w-auto sm:max-w-full sm:aspect-[9/16] bg-black sm:rounded-[32px] overflow-hidden sm:ring-2 ring-violet-400/40 sm:shadow-[0_0_60px_-10px_rgba(139,92,246,0.6)] flex items-center justify-center">
           {isVideo
-            ? (previewUrl ? <video key={previewUrl} src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay preload="auto" /> : null)
-            : <>{blurBg && previewUrl && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}{previewUrl && <img key={previewUrl} src={previewUrl} alt="" draggable={false} style={{ filter: fk >= 100 ? STORY_FILTERS[flt].f : undefined, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} onError={() => { const r = new FileReader(); r.onload = () => { if (typeof r.result === 'string') setPreviewUrl(r.result); }; r.readAsDataURL(file); }} className="relative w-full h-full object-contain select-none pointer-events-none" />}{fk < 100 && flt > 0 && <img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, opacity: fk / 100, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none" />}</>}
+            ? (previewUrl ? <video key={previewUrl} src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay preload="auto" onError={() => setPreviewFailed(true)} /> : null)
+            : <>{blurBg && previewUrl && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}{previewUrl && <img key={previewUrl} src={previewUrl} alt="" draggable={false} style={{ filter: fk >= 100 ? STORY_FILTERS[flt].f : undefined, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} onError={() => { if (fbTried.current >= 2) { setPreviewFailed(true); return; } const step = ++fbTried.current; if (step === 1) { const r = new FileReader(); r.onload = () => { if (typeof r.result === 'string') setPreviewUrl(r.result); else setPreviewFailed(true); }; r.onerror = () => setPreviewFailed(true); r.readAsDataURL(file); } else { void normalizePickedMedia(file).then(nf => setPreviewUrl(URL.createObjectURL(nf))).catch(() => setPreviewFailed(true)); } }} className="relative w-full h-full object-contain select-none pointer-events-none" />}{fk < 100 && flt > 0 && <img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, opacity: fk / 100, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none" />}</>}
+          {previewFailed && <div className="absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 px-8 text-center text-white"><span className="text-sm font-bold">تعذّر عرض هذا الملف على جهازك</span><span className="text-xs text-white/70">جرّب صورة أخرى أو خد لقطة شاشة للصورة واختارها</span></div>}
           {!isVideo && tool !== 'draw' && <div className="absolute inset-0 z-[4] touch-none cursor-grab"
             onPointerDown={e => { tapStart.current = { x: e.clientX, y: e.clientY }; setMoreOpen(false); e.currentTarget.setPointerCapture(e.pointerId); bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); setSel(-1); setXsel(''); if (bp.current.size === 2) { const [p, q] = [...bp.current.values()]; bz.current = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI, r: rot }; } }}
             onPointerMove={e => {
@@ -5062,14 +5065,27 @@ async function normalizePickedMedia(f: File): Promise<File> {
     let data: Blob = f;
     if (f.size <= 48 * 1024 * 1024) { try { data = new Blob([await f.arrayBuffer()], { type }); } catch { data = f; } }
     let out = new File([data], f.name || `media.${ext || 'bin'}`, { type, lastModified: f.lastModified });
-    if (type.startsWith('image/') && !/^image\/(jpeg|png|webp|gif)$/.test(type)) {
-      try {
-        const bmp = await createImageBitmap(out);
-        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
-        c.getContext('2d')!.drawImage(bmp, 0, 0);
-        const jb: Blob | null = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
-        if (jb) out = new File([jb], (f.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
-      } catch { /* keep the original */ }
+    if (type.startsWith('image/') && type !== 'image/gif') {
+      const standard = /^image\/(jpeg|png|webp)$/.test(type);
+      // Phone cameras (50-200 MP) make files that a phone browser often cannot decode in <img> -> black screen + broken-image icon.
+      // Decode them downscaled (createImageBitmap can do that without loading the full bitmap) and re-encode.
+      if (!standard || out.size > 1_500_000) {
+        try {
+          let bmp: ImageBitmap;
+          try { bmp = await createImageBitmap(out); } catch { bmp = await createImageBitmap(out, { resizeWidth: 1600, resizeQuality: 'medium' }); }
+          const k = Math.min(1, 2048 / Math.max(bmp.width, bmp.height));
+          const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+          c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
+          bmp.close?.();
+          const keepAlpha = type === 'image/png' || type === 'image/webp';
+          const mime = keepAlpha && out.size > 4_000_000 ? 'image/webp' : keepAlpha ? type : 'image/jpeg';
+          const jb: Blob | null = await new Promise(r => c.toBlob(r, mime, 0.9));
+          if (jb && jb.size > 0 && (!standard || jb.size < out.size || mime !== type)) {
+            const nx = mime === 'image/jpeg' ? '.jpg' : mime === 'image/webp' ? '.webp' : '.png';
+            out = new File([jb], (f.name || 'photo').replace(/\.[^.]+$/, '') + nx, { type: mime });
+          }
+        } catch { /* keep the original */ }
+      }
     }
     return out;
   } catch { return f; }
@@ -5779,10 +5795,10 @@ function ReactionSheet({ current, onPick, onClose }: { current?: string; onPick:
       <div data-msg-ui {...stop} onPointerDown={e => e.stopPropagation()} dir="ltr" className="fixed inset-x-0 z-[159] flex justify-end px-3 pointer-events-none transition-[bottom] duration-150" style={{ bottom: `calc(${kb}px + 0.75rem + env(safe-area-inset-bottom))` }}>
         <div dir={DIR} className="pointer-events-auto w-full max-w-md rounded-[28px] bg-gray-900/95 backdrop-blur-2xl ring-1 ring-white/15 shadow-2xl shadow-black/60 overflow-hidden kan-pop" onPointerDown={e => { e.stopPropagation(); e.preventDefault(); }} onMouseDown={e => e.preventDefault()}>
           <div className="flex items-center gap-1 p-2 overflow-x-auto no-scrollbar">
+            <button onClick={() => { setMore(m => !m); (document.activeElement as HTMLElement | null)?.blur?.(); }} aria-label="كل الإيموجي" className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-all ${more ? 'bg-white text-black rotate-45' : 'bg-white/12 text-white'}`}><Plus size={22} /></button>
             {QUICK_REACTIONS.map(e => (
               <button key={e} onClick={() => onPick(e)} className={`shrink-0 w-11 h-11 text-[26px] rounded-full flex items-center justify-center active:scale-125 transition-transform ${current === e ? 'bg-violet-500/30 ring-1 ring-violet-300/60' : 'hover:bg-white/10'}`}>{e}</button>
             ))}
-            <button onClick={() => { setMore(m => !m); (document.activeElement as HTMLElement | null)?.blur?.(); }} aria-label="كل الإيموجي" className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-all ${more ? 'bg-white text-black rotate-45' : 'bg-white/12 text-white'}`}><Plus size={22} /></button>
           </div>
           {more && <EmojiPicker docked onPick={onPick} onClose={() => setMore(false)} />}
         </div>
@@ -6777,7 +6793,6 @@ export default function App() {
     setHomeRefreshing(true);
     void Promise.race([loadFeedFirst(), new Promise<void>(r => window.setTimeout(r, 12000))]).finally(() => { feedBusy.current = false; setFeedLoading(false); window.setTimeout(() => setHomeRefreshing(false), 400); });
   };
-  // Home icon: from any screen -> back to Home. On Home: scrolled down -> top; already at the top -> refresh the feed (the icon spins).
   // Animated glide to the very top (ease-out). Not the browser's smooth scroll: the feed re-renders while refreshing and cancels that one.
   const topAnim = useRef(0);
   const glideToTop = (done?: () => void) => {
@@ -6794,22 +6809,20 @@ export default function App() {
     };
     topAnim.current = requestAnimationFrame(step);
   };
-  // Home icon: from any screen -> back to Home. On Home: scrolled down -> glide to the top, then refresh; at the top -> refresh at once (pill drops down, icon spins).
+  // Home icon: from any other screen -> back to Home. On Home: ONE tap = animated glide to the top; DOUBLE tap = refresh the feed (pill + spinning icon).
+  const lastHomeTap = useRef(0);
   const onHomeTap = () => {
     if (activeTab !== 'feed' || viewedUserId) {
       goTab('feed');
       window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }), 60);
       return;
     }
-    setHomeBounce(b => b + 1);
-    if (window.scrollY > 4) {
-      setHomeRefreshing(true); // show the animation right away while gliding up
-      glideToTop(() => { refreshHome(); window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }), 120); });
-      return;
-    }
-    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-    refreshHome();
-    window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }), 120);
+    const now = Date.now();
+    const dbl = now - lastHomeTap.current < 420;
+    lastHomeTap.current = dbl ? 0 : now;
+    setHomeBounce(n => n + 1);
+    if (dbl) { refreshHome(); glideToTop(); return; }
+    glideToTop();
   };
   const openProfile = (id: string) => {
     if (id === currentUserId) {
