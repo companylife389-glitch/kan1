@@ -36,7 +36,7 @@ const EN: Record<string, string> = {
   'الصورة الشخصية': 'Profile picture', 'النبذة التعريفية': 'Bio', 'الموقع': 'Location', 'الموقع الإلكتروني': 'Website',
   'حفظ التغييرات': 'Save changes', 'تم الحفظ': 'Saved', 'تسجيل الخروج': 'Log out', 'تثبيت التطبيق': 'Install app', 'تثبيت': 'Install', 'مثبّت': 'Installed',
   'الإشعارات والصوت': 'Notifications & sound', 'صوت الرسائل': 'Message sound', 'مفعّل': 'On', 'متوقف': 'Off', 'تفعيل': 'Enable', 'إيقاف': 'Turn off',
-  'منشوراتي': 'My posts', 'إعجاباتي': 'My likes', 'محفوظاتي': 'Saved', 'متابِع': 'Followers', 'متابَع': 'Following', 'متابعة': 'Follow', 'راسل': 'Message', 'رجوع': 'Back',
+  'منشوراتي': 'My posts', 'إعجاباتي': 'My likes', 'محفوظاتي': 'Saved', 'متابِع': 'Followers', 'متابَع': 'Following', 'متابعة': 'Follow', 'متابعة بالمثل': 'Follow back', 'راسل': 'Message', 'رجوع': 'Back',
   'مشاركة': 'Share', 'تحميل': 'Download', 'حذف': 'Delete', 'تعديل': 'Edit', 'رد': 'Reply', 'تفاعل': 'React', 'حفظ': 'Save', 'إلغاء': 'Cancel',
   'لا توجد محادثات بعد': 'No chats yet', 'ابحث عن أشخاص وابدأ المحادثة!': 'Find people and start chatting!', 'ابدأ المحادثة': 'Start chatting',
   'الإشعارات الفورية': 'Push notifications', 'لا توجد إشعارات بعد': 'No notifications yet', 'تحديد الكل كمقروء': 'Mark all as read', 'جديد': 'New', 'سابقاً': 'Earlier',
@@ -107,6 +107,8 @@ Object.assign(EN, {
   "يتابعك": "Follows you", "يرجى اختيار صورة فقط": "Please choose a photo only", "يرجى تأكيد بريدك الإلكتروني أولاً": "Please confirm your email first",
   "↪️ منشور مني": "↪️ A post from me", "🎤 رسالة صوتية": "🎤 Voice message", "🎥 فيديو": "🎥 Video", "🎬 ريل": "🎬 Reel", "🏷️ ملصق": "🏷️ Sticker", "💡 اقترح رد": "💡 Suggest a reply", "📎 ملف": "📎 File", "📝 لخّص الشات": "📝 Summarize chat", "📷 صورة": "📷 Photo", "📷 وسائط": "📷 Media", "🔍 المطلوب مني؟": "🔍 What's expected of me?",
   "أضف تعليقاً...": "Add a comment...", "متابعة": "Follow", "متابَع": "Following", "الصوت": "Sound", "كتم الصوت": "Mute", "تشغيل الصوت": "Unmute", "إيقاف مؤقت": "Pause", "تشغيل": "Play",
+  "📚 المكتبة": "📚 Library", "⏱ شاهد لاحقاً": "⏱ Watch later", "👍 فيديوهات أعجبتني": "👍 Liked videos", "🕘 سجل المشاهدة": "🕘 Watch history", "قوائم التشغيل": "Playlists", "قائمة تشغيل جديدة": "New playlist", "إنشاء": "Create", "تشغيل الكل": "Play all", "حذف القائمة": "Delete playlist", "مسح السجل": "Clear history", "قائمة تشغيل": "Playlist", "حفظ في قائمة تشغيل": "Save to playlist", "اسم القائمة الجديدة": "New playlist name", "لسه مفيش فيديوهات هنا": "No videos here yet", "🔔 مشترك ✓": "🔔 Subscribed ✓", "إزالة من القائمة": "Remove from playlist",
+  "📍 موقع": "📍 Location", "📊 استطلاع": "📊 Poll", "موقع": "Location", "ملف": "File", "صورة / فيديو": "Photo / Video", "استطلاع": "Poll", "اسأل KIX": "Ask KIX", "العب": "Play", "📍 مشاركة موقع": "📍 Share location", "ابعت موقعي الحالي": "Send my current location", "اختار مكان من الخريطة": "Pick a place on the map", "أماكن محفوظة": "Saved places", "محفوظ": "Saved", "اتحفظ ✓": "Saved ✓", "اتشال من المحفوظات": "Removed from saved", "اتنسخ الرابط ✓": "Link copied ✓", "موقعي الحالي": "My current location", "عرض على الخريطة": "View on map",
 });
 const EN_RULES: [RegExp, (m: RegExpExecArray) => string][] = [
   [/^منذ (\d+) د$/, m => `${m[1]}m ago`], [/^منذ (\d+) س$/, m => `${m[1]}h ago`], [/^منذ (\d+) ي$/, m => `${m[1]}d ago`], [/^منذ (\d+) يوم$/, m => `${m[1]}d ago`],
@@ -194,7 +196,7 @@ interface Reply {
 }
 
 interface Post {
-  music?: { url: string; name: string; start?: number; end?: number; vv?: number; mv?: number };
+  music?: { url: string; name: string; start?: number; end?: number; vv?: number; mv?: number; ly?: StoryLy };
   id: string;
   userId: string;
   text: string;
@@ -496,7 +498,7 @@ function rowToPost(row: PostRow): Post {
       : undefined,
     music: (() => {
       const m = (Array.isArray(row.media_extra) ? row.media_extra : []).find(x => (x.name ?? '').startsWith('kan-music|'));
-      return m ? { url: m.url, name: (m.name ?? '').slice(10) || 'موسيقى', start: typeof (m as { start?: number }).start === 'number' ? (m as { start?: number }).start : undefined, end: typeof (m as { end?: number }).end === 'number' ? (m as { end?: number }).end : undefined, vv: typeof (m as { vv?: number }).vv === 'number' ? (m as { vv?: number }).vv : undefined, mv: typeof (m as { mv?: number }).mv === 'number' ? (m as { mv?: number }).mv : undefined } : undefined;
+      return m ? { url: m.url, name: (m.name ?? '').slice(10) || 'موسيقى', start: typeof (m as { start?: number }).start === 'number' ? (m as { start?: number }).start : undefined, end: typeof (m as { end?: number }).end === 'number' ? (m as { end?: number }).end : undefined, vv: typeof (m as { vv?: number }).vv === 'number' ? (m as { vv?: number }).vv : undefined, mv: typeof (m as { mv?: number }).mv === 'number' ? (m as { mv?: number }).mv : undefined, ly: (() => { const q = (m as { ly?: StoryLy }).ly; return q && Array.isArray(q.l) && q.l.length > 0 ? q : undefined; })() } : undefined;
     })(),
     isReel: row.is_reel,
     isVideo: row.is_video,
@@ -1198,7 +1200,7 @@ const B2_PART_MB = 6;
 const B2_PARALLEL = 16;
 
 // Background publishing: uploads keep running while you move around; the progress shows inside the publish box.
-type PubExtra = { type: 'image' | 'video' | 'file'; url: string; name: string; size: number; start?: number; end?: number; vv?: number; mv?: number };
+type PubExtra = { type: 'image' | 'video' | 'file'; url: string; name: string; size: number; start?: number; end?: number; vv?: number; mv?: number; ly?: StoryLy };
 type PubJob = { id: string; label: string; pct: number; size?: number; status: 'run' | 'done' | 'fail'; postId?: string; extra: PubExtra[]; music: PubExtra | null };
 let pubList: PubJob[] = [];
 const pubSubs = new Set<() => void>();
@@ -1786,7 +1788,7 @@ function KanAIModal({ messages, me, other, nameOf, chatKey, onClose, onUseReply 
     for (const f of Array.from(files).slice(0, Math.max(0, 4 - imgs.length))) {
       if (!f.type.startsWith('image/')) continue;
       const d = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('read')); r.readAsDataURL(f); });
-      try { out.push(await shrinkImage(d, 1024)); } catch { out.push(d); }
+      try { out.push(await shrinkImage(d, 896)); } catch { out.push(d); }
     }
     setImgs(p => [...p, ...out].slice(0, 4));
   };
@@ -1819,6 +1821,10 @@ function KanAIModal({ messages, me, other, nameOf, chatKey, onClose, onUseReply 
           timezone: 'Africa/Cairo',
           platform: 'KIX',
           creator: 'Khaled Sharaf',
+          chat_key: chatKey,
+          webSearch: true,
+          vision: sendImgs.length > 0,
+          fast: true,
           instructions: 'Speak naturally and freely in the user language, as long or as short as the question deserves, in your own style. When images are attached, inspect them carefully (objects, visible text, people, colors, place, numbers) and answer exactly what was asked. You are KIX, the assistant of the KIX platform, created by Khaled Sharaf. Be exact with numbers, dates and facts. Use live web search for anything that can change (news, prices, scores, dates) and never guess; say so if you are not sure. If images are attached, look at them carefully and do what the user asks. Answer in the language of the question.',
         },
       });
@@ -2541,6 +2547,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const [error, setError] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [locSheet, setLocSheet] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
   const [limit, setLimit] = useState(60);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -2814,7 +2821,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                         <Download size={16} className="shrink-0" />
                       </button>
                     )}
-                    {m.text && (parsePoll(m.text) ? <ChatPoll id={m.id} text={m.text} all={group.messages} meId={currentUser.id} onVote={i => void send({ text: VOTE_TAG + JSON.stringify({ p: m.id, i }) })} /> : <p className="whitespace-pre-wrap" dir="auto"><Linkified text={m.text} /></p>)}
+                    {m.text && (parseLocMsg(m.text) ? <ChatLocation loc={parseLocMsg(m.text)!} /> : parsePoll(m.text) ? <ChatPoll id={m.id} text={m.text} all={group.messages} meId={currentUser.id} onVote={i => void send({ text: VOTE_TAG + JSON.stringify({ p: m.id, i }) })} /> : <p className="whitespace-pre-wrap" dir="auto"><Linkified text={m.text} /></p>)}
                   </div>
                   <span className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
                     {formatTime(m.timestamp)}{m.editedAt ? ' · معدّلة' : ''}
@@ -2901,26 +2908,11 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             )}
             <AnimatePresence>
               {pollOpen && <PollComposer onClose={() => setPollOpen(false)} onSend={(q, o) => { setPollOpen(false); void send({ text: POLL_TAG + JSON.stringify({ q, o }) }); }} />}
-              {toolsOpen && (
-                <motion.div initial={{ opacity: 0, y: 10, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.94 }} transition={{ type: 'spring', damping: 22, stiffness: 420 }} className="absolute bottom-full right-2 mb-2 z-20 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur border border-white/10 shadow-xl origin-bottom-right">
-                  <button onClick={() => { setPollOpen(true); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs active:scale-95">📊 استطلاع</button>
-                  <button onClick={() => { fileRef.current?.click(); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95"><Paperclip size={16} /> صورة / فيديو / ملف</button>
-                  <button
-                    onPointerDown={e => e.preventDefault()}
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => { setAiOpen(true); setToolsOpen(false); }}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gradient-to-r from-violet-600/30 to-cyan-500/20 border border-violet-400/30 text-white text-xs active:scale-95"
-                    aria-label="اسأل KIX"
-                  >
-                    <Sparkles size={16} className="text-violet-300" /> اسأل KIX
-                  </button>
-                </motion.div>
-              )}
             </AnimatePresence>
             {queue.length > 0 && <QueueChip count={queue.length} onClear={() => setQueue([])} />}
             {Object.keys(ups).length > 0 && <UploadBar ups={ups} />}
             <div className="flex items-center gap-1.5">
-              <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => setToolsOpen(o => !o)} className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${toolsOpen ? 'bg-violet-600 text-white rotate-45' : 'bg-gray-800 text-gray-300 hover:text-white'}`} aria-label="المزيد"><Plus size={20} /></button>
+              <button onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => { if (toolsOpen) { setToolsOpen(false); inputRef.current?.focus(); } else { setEmojiOpen(false); inputRef.current?.blur(); setToolsOpen(true); } }} className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${toolsOpen ? 'bg-violet-600 text-white rotate-45' : 'bg-gray-800 text-gray-300 hover:text-white'}`} aria-label="المزيد"><Plus size={20} /></button>
               <button
                 onPointerDown={e => e.preventDefault()}
                 onMouseDown={e => e.preventDefault()}
@@ -2936,7 +2928,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 onChange={e => setText(e.target.value)}
                 placeholder="اكتب رسالة للمجموعة..."
                 className="flex-1 min-w-0 h-10 px-4 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                onFocus={() => setEmojiOpen(false)}
+                onFocus={() => { setEmojiOpen(false); setToolsOpen(false); }}
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && void sendMessage()}
               />
               {text.trim() || media || queue.length > 0 ? (
@@ -2949,6 +2941,8 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 </motion.button>
               )}
             </div>
+          <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }} />}</AnimatePresence>
+          {locSheet && <LocationShareSheet onClose={() => setLocSheet(false)} onSend={l => { setLocSheet(false); void send({ text: locMsgText(l) }); }} />}
           {emojiOpen && <EmojiPicker docked onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `${st.gif ? 'kix-gif' : 'kan-sticker'}.${stkExt(st.blob, st.kind)}` }); }} />}
           </div>
         )}
@@ -3783,295 +3777,59 @@ const STORY_BGS = ['linear-gradient(135deg,#6d28d9,#c026d3,#06b6d4)', 'linear-gr
 // fx layers on top of the CSS filter: t = flat tint [colour, blend, opacity], v = vignette, g = linear gradient [from, to, blend, opacity, angle],
 // lk = light leak [colour, opacity, corner], gr = film grain, fd = faded blacks, bl = soft glow.
 type StoryFx = { v?: number; t?: [string, string, number]; g?: [string, string, string, number, number]; lk?: [string, number, 'tr' | 'tl' | 'br' | 'bl']; gr?: number; fd?: number; bl?: number };
-const STORY_FILTERS: { n: string; f: string; fx?: StoryFx }[] = [{ n: 'عادي', f: 'none' }, { n: 'دافئ', f: 'sepia(0.35) saturate(1.4) contrast(1.05)' }, { n: 'بارد', f: 'hue-rotate(185deg) saturate(1.1) brightness(1.05)' }, { n: 'أبيض وأسود', f: 'grayscale(1) contrast(1.1)' }, { n: 'ساطع', f: 'brightness(1.2) saturate(1.3)' }, { n: 'كلاسيك', f: 'sepia(0.7) contrast(0.95) brightness(1.05)' }, { n: 'دراما', f: 'contrast(1.4) saturate(0.9) brightness(0.92)' }, { n: 'سينمائي', f: 'contrast(1.25) sepia(0.2) hue-rotate(-12deg) saturate(1.2) brightness(0.95)' }, { n: 'نيون', f: 'saturate(2.1) contrast(1.2) hue-rotate(320deg) brightness(1.05)' }, { n: 'غروب', f: 'sepia(0.5) saturate(1.9) hue-rotate(-18deg) brightness(1.08)' }, { n: 'ذهبي', f: 'sepia(0.6) saturate(2) hue-rotate(-8deg) brightness(1.1) contrast(1.05)' }, { n: 'شتوي', f: 'hue-rotate(200deg) saturate(0.8) brightness(1.12) contrast(1.05)' }, { n: 'بوب', f: 'saturate(2.3) contrast(1.15) brightness(1.03)' }, { n: 'ليلي', f: 'brightness(0.82) contrast(1.3) hue-rotate(210deg) saturate(1.3)' }, { n: 'حلم', f: 'brightness(1.12) contrast(0.88) saturate(1.35) sepia(0.12)' }, { n: 'فيلم', f: 'contrast(1.15) sepia(0.15) saturate(0.85) brightness(0.97)' }, { n: 'مضيء', f: 'brightness(1.18) contrast(0.95) saturate(1.1)' }, { n: 'عميق', f: 'contrast(1.35) saturate(1.25) brightness(0.9)' }, { n: 'ربيع', f: 'hue-rotate(-10deg) saturate(1.5) brightness(1.08)' }, { n: 'ريترو', f: 'sepia(0.45) contrast(1.1) saturate(0.8) hue-rotate(-15deg)' }, { n: 'جليد', f: 'hue-rotate(170deg) saturate(0.7) brightness(1.15) contrast(1.1)' }, { n: 'قوي', f: 'contrast(1.5) saturate(1.5)' }, { n: 'فينتج', f: 'sepia(0.3) contrast(1.1) saturate(1.3) hue-rotate(-8deg) brightness(1.05)' }, { n: 'بورتريه', f: 'brightness(1.08) contrast(1.05) saturate(1.15) sepia(0.08)' }, { n: 'تباين', f: 'contrast(1.6) brightness(0.95)' }, { n: 'باستيل', f: 'saturate(0.7) brightness(1.2) contrast(0.9)' }, { n: 'سايبر', f: 'hue-rotate(260deg) saturate(1.8) contrast(1.15)' }, { n: 'فجر', f: 'sepia(0.25) hue-rotate(-30deg) saturate(1.6) brightness(1.1)' }, { n: 'غابة', f: 'hue-rotate(60deg) saturate(1.3) contrast(1.05) brightness(0.98)' }, { n: 'محيط', f: 'hue-rotate(150deg) saturate(1.4) brightness(1.05)' }, { n: 'توهج', f: 'brightness(1.25) contrast(0.9) saturate(1.4)' }, { n: 'ظلام', f: 'brightness(0.7) contrast(1.4) saturate(0.8)' }, { n: 'نقي', f: 'contrast(1.08) saturate(1.1) brightness(1.04)' }, { n: 'رمادي ناعم', f: 'grayscale(0.7) brightness(1.08) contrast(0.95)' }, { n: 'كرز', f: 'hue-rotate(-25deg) saturate(1.7) contrast(1.1)' }, { n: 'ليمون', f: 'hue-rotate(35deg) saturate(1.6) brightness(1.1)' }, { n: 'بنفسج', f: 'hue-rotate(250deg) saturate(1.4) brightness(1.02)' }, { n: 'كودك', f: 'sepia(0.35) saturate(1.5) contrast(1.15) brightness(1.02) hue-rotate(-6deg)' }, { n: 'نوار', f: 'grayscale(1) contrast(1.6) brightness(0.9)' }, { n: 'صيف', f: 'saturate(1.6) brightness(1.12) sepia(0.15)' }, { n: 'خريف', f: 'sepia(0.5) hue-rotate(-20deg) saturate(1.5) contrast(1.05)' },
-  { n: 'سينما+', f: 'contrast(1.2) saturate(1.1) brightness(0.96)', fx: { v: 0.55, t: ['#ff8a3d', 'soft-light', 0.35] } },
-  { n: 'بولارويد', f: 'sepia(0.25) contrast(0.95) brightness(1.08) saturate(1.2)', fx: { v: 0.35, t: ['#ffd9a8', 'soft-light', 0.45] } },
-  { n: 'غروب ذهبي', f: 'saturate(1.35) contrast(1.08) brightness(1.04)', fx: { v: 0.3, t: ['#ff9a3c', 'overlay', 0.4] } },
-  { n: 'حلم وردي', f: 'brightness(1.1) contrast(0.92) saturate(1.2)', fx: { t: ['#ff9ecf', 'screen', 0.28] } },
-  { n: 'نيون ليلي', f: 'contrast(1.25) saturate(1.5) brightness(0.9)', fx: { v: 0.5, t: ['#7c3aed', 'overlay', 0.45] } },
-  { n: 'ثلجي', f: 'brightness(1.12) saturate(0.85) contrast(1.05)', fx: { t: ['#7cc8ff', 'soft-light', 0.4] } },
-  { n: 'ذهب وردي', f: 'saturate(1.25) brightness(1.06) contrast(1.04)', fx: { v: 0.25, t: ['#ff8fa3', 'soft-light', 0.45] } },
-  { n: 'مسرحي', f: 'contrast(1.35) saturate(1.2) brightness(0.9)', fx: { v: 0.7 } },
-  { n: 'ضباب', f: 'contrast(0.85) brightness(1.1) saturate(0.9)', fx: { t: ['#ffffff', 'soft-light', 0.5] } },
-  { n: 'تيل وبرتقالي', f: 'contrast(1.15) saturate(1.3)', fx: { v: 0.3, t: ['#0fb5ae', 'overlay', 0.3] } },
-  // ---- Instagram-style looks (strong on purpose) ----
-  { n: 'كلارندون', f: 'contrast(1.25) saturate(1.45) brightness(1.08)', fx: { g: ['#2b6cff', '#ff9a3c', 'soft-light', 0.38, 180], v: 0.22 } },
-  { n: 'جينجهام', f: 'contrast(.9) brightness(1.1) saturate(.85) hue-rotate(-6deg)', fx: { fd: 0.14, t: ['#cfd8ff', 'soft-light', 0.35] } },
-  { n: 'جونو', f: 'contrast(1.15) saturate(1.7) brightness(1.04) sepia(.1)', fx: { g: ['#ffd36b', '#2a7bff', 'overlay', 0.3, 160], lk: ['#ffb347', 0.35, 'tr'] } },
-  { n: 'لارك', f: 'contrast(.92) brightness(1.18) saturate(1.3)', fx: { t: ['#a8ffe8', 'soft-light', 0.35], bl: 0.2 } },
-  { n: 'لودفيج', f: 'contrast(1.1) brightness(1.02) saturate(1.1) sepia(.12)', fx: { g: ['#ffe9c7', '#3b2f50', 'overlay', 0.38, 170], gr: 0.12, v: 0.35 } },
-  { n: 'فالنسيا', f: 'contrast(1.05) brightness(1.1) saturate(1.2) sepia(.28)', fx: { t: ['#ffd9a0', 'soft-light', 0.5], fd: 0.1 } },
-  { n: 'إكس برو', f: 'contrast(1.4) saturate(1.35) sepia(.2) hue-rotate(-8deg)', fx: { v: 0.65, g: ['#ffd54f', '#2b1b6b', 'overlay', 0.35, 165] } },
-  { n: 'لو فاي', f: 'contrast(1.55) saturate(1.7) brightness(.96)', fx: { v: 0.6, gr: 0.1 } },
-  { n: 'ناشفيل', f: 'sepia(.25) contrast(1.15) brightness(1.08) saturate(1.3) hue-rotate(-12deg)', fx: { g: ['#ff8fb1', '#2d3a8c', 'soft-light', 0.45, 180], v: 0.25 } },
-  { n: 'ريس', f: 'sepia(.35) contrast(.88) brightness(1.15) saturate(.75)', fx: { fd: 0.2, t: ['#ffcfa3', 'soft-light', 0.4] } },
-  { n: 'مون', f: 'grayscale(1) contrast(1.1) brightness(1.1)', fx: { v: 0.4, bl: 0.15 } },
-  { n: 'عدن', f: 'contrast(.88) brightness(1.2) saturate(.85) hue-rotate(-18deg)', fx: { t: ['#a9ffc9', 'soft-light', 0.3], fd: 0.12 } },
-  { n: 'سلمبر', f: 'saturate(.65) contrast(1.15) brightness(1.02)', fx: { g: ['#a6c8ff', '#ffb7c8', 'soft-light', 0.4, 150], fd: 0.12 } },
-  { n: 'كريما', f: 'sepia(.25) contrast(.95) brightness(1.1) saturate(.9)', fx: { t: ['#d7c4a3', 'soft-light', 0.45] } },
-  { n: 'هدسون', f: 'contrast(1.2) brightness(1.2) saturate(1.1) hue-rotate(-10deg)', fx: { t: ['#7aa8ff', 'soft-light', 0.4], v: 0.3 } },
-  { n: 'ويلو', f: 'grayscale(.55) contrast(.95) brightness(1.12) sepia(.15)', fx: { fd: 0.15, g: ['#ffd1e8', '#2f3b6b', 'soft-light', 0.3, 170] } },
-  { n: 'إيرلي بيرد', f: 'sepia(.45) contrast(1.15) brightness(1.1) saturate(1.2)', fx: { v: 0.5, t: ['#ffbf6b', 'soft-light', 0.35], gr: 0.08 } },
-  { n: 'توستر', f: 'sepia(.3) contrast(1.35) brightness(1.1) saturate(1.45)', fx: { lk: ['#ff7a30', 0.55, 'tl'], v: 0.55 } },
-  { n: 'برانان', f: 'sepia(.35) contrast(1.3) brightness(.95) saturate(1.1)', fx: { g: ['#e6e0a6', '#1c2a1c', 'overlay', 0.35, 170], v: 0.35 } },
-  { n: 'إنك ويل', f: 'grayscale(1) contrast(1.9) brightness(.95)', fx: { v: 0.35, gr: 0.14 } },
-  // ---- colour grading ----
-  { n: 'تيل وبرتقال+', f: 'contrast(1.25) saturate(1.35)', fx: { g: ['#0e8c9e', '#ff8a3d', 'overlay', 0.55, 180], v: 0.3 } },
-  { n: 'فابور ويف', f: 'contrast(1.1) saturate(1.6) brightness(1.05)', fx: { g: ['#ff4fd8', '#33d1ff', 'color', 0.45, 160], bl: 0.2 } },
-  { n: 'سايبر بانك', f: 'contrast(1.35) saturate(1.8) brightness(.95)', fx: { g: ['#00f0ff', '#ff2bd6', 'overlay', 0.55, 150], v: 0.45, bl: 0.2 } },
-  { n: 'دو تون ذهبي', f: 'grayscale(1) contrast(1.2) brightness(1.05)', fx: { g: ['#2a1200', '#ffc86b', 'color', 0.9, 180], v: 0.3 } },
-  { n: 'دو تون أزرق', f: 'grayscale(1) contrast(1.25)', fx: { g: ['#08124a', '#7cc8ff', 'color', 0.9, 180], v: 0.3 } },
-  { n: 'دو تون وردي', f: 'grayscale(1) contrast(1.15) brightness(1.05)', fx: { g: ['#3a0a4a', '#ff8fc7', 'color', 0.9, 180], v: 0.25 } },
-  { n: 'ماتريكس+', f: 'grayscale(1) contrast(1.4) brightness(.9)', fx: { t: ['#00ff66', 'color', 0.85], v: 0.5, gr: 0.1 } },
-  { n: 'كوداك 400', f: 'sepia(.2) contrast(1.15) saturate(1.35) brightness(1.04)', fx: { g: ['#1b4d3a', '#ffd9a0', 'soft-light', 0.5, 180], gr: 0.16, v: 0.3 } },
-  { n: 'فوجي', f: 'contrast(1.1) saturate(1.2) hue-rotate(8deg) brightness(1.04)', fx: { g: ['#3aa876', '#e65a8a', 'soft-light', 0.38, 170], gr: 0.1 } },
-  { n: 'وايك Y2K', f: 'contrast(1.2) saturate(1.5) brightness(1.15)', fx: { bl: 0.35, t: ['#ffc2f0', 'screen', 0.22], fd: 0.08 } },
-  { n: 'نوار ملون', f: 'contrast(1.7) saturate(.5) brightness(.85)', fx: { g: ['#0a0f3a', '#a8192b', 'overlay', 0.5, 170], v: 0.7 } },
-  { n: 'ساعة ذهبية', f: 'contrast(1.1) saturate(1.45) brightness(1.1) sepia(.2)', fx: { lk: ['#ffb347', 0.6, 'tr'], g: ['#ffd27a', '#ff6a3d', 'soft-light', 0.45, 190] } },
-  { n: 'ليل مطر', f: 'contrast(1.3) saturate(.9) brightness(.82) hue-rotate(205deg)', fx: { g: ['#06143a', '#1c7bbf', 'overlay', 0.5, 180], v: 0.55, bl: 0.15 } },
-  { n: 'حلم باستيل', f: 'contrast(.85) brightness(1.22) saturate(.95)', fx: { g: ['#ffc6e8', '#bfe4ff', 'soft-light', 0.55, 160], bl: 0.35, fd: 0.14 } },
-  { n: 'حرق ضوء', f: 'contrast(1.1) saturate(1.3) brightness(1.1)', fx: { lk: ['#ff5a2a', 0.65, 'tr'], gr: 0.12, v: 0.3 } },
-  { n: 'سينما أزرق', f: 'contrast(1.3) saturate(.85) brightness(.92)', fx: { t: ['#1d5fa8', 'soft-light', 0.5], v: 0.55 } },
-  { n: 'ظل وردي', f: 'contrast(1.05) saturate(1.2) brightness(1.08)', fx: { g: ['#ff7aa8', '#ffe0c2', 'soft-light', 0.5, 200], bl: 0.2 } },
-  { n: 'كلين جيرل', f: 'brightness(1.08) contrast(0.96) saturate(1.08)', fx: { bl: 0.12, t: ['#ffe6d5', 'soft-light', 0.3] } },
-  { n: 'سوفت بينك', f: 'brightness(1.1) contrast(0.93) saturate(1.15)', fx: { t: ['#ffb3d1', 'soft-light', 0.38], bl: 0.1 } },
-  { n: 'كوري', f: 'brightness(1.14) contrast(0.9) saturate(0.95)', fx: { t: ['#ffd6e8', 'screen', 0.22], bl: 0.18 } },
-  { n: 'جولدن جلو', f: 'saturate(1.25) contrast(1.05) brightness(1.06)', fx: { lk: ['#ffb347', 0.5, 'tr'], t: ['#ffc27a', 'soft-light', 0.28] } },
-  { n: 'خوخي', f: 'saturate(1.2) brightness(1.07) contrast(0.97)', fx: { t: ['#ff9a8b', 'soft-light', 0.34] } },
-  { n: 'دريمي', f: 'brightness(1.1) contrast(0.88) saturate(1.2)', fx: { bl: 0.3, t: ['#c9b6ff', 'soft-light', 0.3] } },
-  { n: 'صن كيسد', f: 'saturate(1.35) contrast(1.06) brightness(1.06)', fx: { lk: ['#ffcf70', 0.6, 'tl'], g: ['#ff9a3c', '#ffe9b0', 'soft-light', 0.35, 20] } },
-  { n: 'ماتشا', f: 'saturate(0.8) contrast(1.02) brightness(1.04) hue-rotate(15deg)', fx: { t: ['#b7d79a', 'soft-light', 0.4], gr: 0.03 } },
-  { n: 'بحر', f: 'saturate(1.25) contrast(1.08) brightness(1.04)', fx: { g: ['#00c2c7', '#ffd9a0', 'soft-light', 0.45, 180] } },
-  { n: 'دارك أكاديميا', f: 'sepia(0.35) contrast(1.15) brightness(0.88) saturate(0.85)', fx: { v: 0.55, t: ['#6b4a2b', 'soft-light', 0.35], gr: 0.05 } },
-  { n: 'تويلايت', f: 'contrast(1.1) saturate(1.3) brightness(0.97)', fx: { g: ['#5b2bd9', '#ff8a4d', 'overlay', 0.45, 180], v: 0.3 } },
-  { n: 'ستريت', f: 'contrast(1.2) saturate(0.75) brightness(0.96)', fx: { gr: 0.09, v: 0.35 } },
-  { n: 'فلاش', f: 'brightness(1.22) contrast(1.15) saturate(1.05)', fx: { bl: 0.2, v: 0.1 } },
-  { n: 'أورورا', f: 'saturate(1.4) contrast(1.1) brightness(0.98)', fx: { g: ['#00ffa3', '#a855f7', 'screen', 0.28, 200], v: 0.3 } },
-  { n: 'ميامي', f: 'saturate(1.45) contrast(1.05) brightness(1.04)', fx: { g: ['#ff4fa3', '#22d3ee', 'soft-light', 0.55, 150] } },
-  { n: 'ريد روم', f: 'contrast(1.2) saturate(1.2) brightness(0.9)', fx: { t: ['#ff1f3d', 'overlay', 0.35], v: 0.5 } },
-  { n: 'واي٢كي', f: 'saturate(1.5) contrast(1.08) brightness(1.05)', fx: { g: ['#ff5fd2', '#5fe1ff', 'overlay', 0.3, 135], gr: 0.04 } },
-  { n: 'سايبر نيون', f: 'contrast(1.2) saturate(1.7) brightness(0.92)', fx: { g: ['#7c3aed', '#06b6d4', 'overlay', 0.4, 160], v: 0.4 } },
-  { n: 'مون لايت', f: 'brightness(0.95) contrast(1.12) saturate(0.9)', fx: { t: ['#5b7cff', 'soft-light', 0.38], v: 0.45 } },
-  { n: 'تيل مودي', f: 'contrast(1.18) saturate(1.1) brightness(0.95)', fx: { t: ['#1f8a8a', 'soft-light', 0.35], v: 0.4, gr: 0.05 } },
-  { n: 'فيلم ٣٥', f: 'contrast(1.1) saturate(1.15) sepia(0.12)', fx: { gr: 0.1, v: 0.35, t: ['#ffd9a8', 'soft-light', 0.2] } },
-  { n: 'في إتش إس', f: 'saturate(1.3) contrast(1.05)', fx: { gr: 0.14, lk: ['#ff3d6e', 0.3, 'tl'], v: 0.25 } },
-  { n: 'نيو نوار', f: 'grayscale(1) contrast(1.35) brightness(0.95)', fx: { gr: 0.1, v: 0.5 } },
-  { n: 'سبيا ذهبي', f: 'sepia(0.75) saturate(1.3) contrast(1.05) brightness(1.04)', fx: { t: ['#ffb347', 'soft-light', 0.3], v: 0.3 } },
-  { n: 'كاندي بوب', f: 'saturate(1.6) contrast(1.08) brightness(1.08)', fx: { g: ['#ff6ec7', '#7afcff', 'soft-light', 0.4, 120] } },
-  // ---- New looks (2026): shown first in the strip ----
-  { n: 'بيتش فزّ', f: 'brightness(1.08) saturate(1.22) contrast(.95)', fx: { t: ['#ffb199', 'soft-light', 0.45], bl: 0.3 } },
-  { n: 'لافندر هيز', f: 'brightness(1.08) contrast(.92) saturate(1.1)', fx: { t: ['#c9b6ff', 'soft-light', 0.5], bl: 0.35, v: 0.15 } },
-  { n: 'مينت فريش', f: 'brightness(1.08) saturate(1.2) hue-rotate(-8deg)', fx: { t: ['#9ff5d1', 'soft-light', 0.4] } },
-  { n: 'أمبر', f: 'contrast(1.15) saturate(1.3) sepia(.25)', fx: { g: ['#5a2a00', '#ffc86b', 'soft-light', 0.5, 180], lk: ['#ff9a3c', 0.45, 'tr'] } },
-  { n: 'ستوديو بارد', f: 'contrast(1.15) saturate(.85) brightness(1.04)', fx: { t: ['#9cc7ff', 'soft-light', 0.35], v: 0.2 } },
-  { n: 'كريستال', f: 'brightness(1.15) contrast(1.1) saturate(.9)', fx: { g: ['#0a3d62', '#e8f6ff', 'soft-light', 0.4, 180], bl: 0.3 } },
-  { n: 'رمان', f: 'contrast(1.2) saturate(1.3) brightness(.96)', fx: { g: ['#4a0d3a', '#ff5d7d', 'soft-light', 0.5, 160], gr: 0.06, v: 0.35 } },
-  { n: 'غبار ذهبي', f: 'brightness(1.06) saturate(1.2) contrast(1.04)', fx: { t: ['#ffe0a0', 'soft-light', 0.35], lk: ['#ffd27a', 0.5, 'tl'], bl: 0.3 } },
-  { n: 'أزرق ملكي', f: 'contrast(1.2) saturate(1.3)', fx: { g: ['#0a1f6b', '#8fb4ff', 'soft-light', 0.5, 180], v: 0.4 } },
-  { n: 'نيون أخضر', f: 'contrast(1.25) saturate(1.6) brightness(.95)', fx: { g: ['#003b2a', '#39ff88', 'soft-light', 0.5, 150], bl: 0.3 } },
-  { n: 'ثلجي ناعم', f: 'brightness(1.2) contrast(.9) saturate(.8)', fx: { t: ['#e8f1ff', 'soft-light', 0.4], bl: 0.45 } },
-  { n: 'موكا', f: 'sepia(.4) contrast(1.1) saturate(1.1) brightness(.98)', fx: { t: ['#8a5a3c', 'soft-light', 0.35], fd: 0.15, v: 0.3 } },
-  { n: 'عسل', f: 'sepia(0.08) saturate(1.05) contrast(1.0) brightness(0.96)', fx: { t: ['#ffc15e', 'soft-light', 0.28], g: ['#7a3e00', '#ffc15e', 'soft-light', 0.3, 160], lk: ['#ffc15e', 0.3, 'tr'] } },
-  { n: 'كراميل', f: 'sepia(0.12) saturate(1.1) contrast(1.03) brightness(0.98)', fx: { v: 0.24, t: ['#d98a3d', 'overlay', 0.32], bl: 0.29 } },
-  { n: 'قرفة', f: 'sepia(0.16) saturate(1.15) contrast(1.06) brightness(1.0)', fx: { t: ['#b5651d', 'soft-light', 0.36], g: ['#3d1a00', '#b5651d', 'soft-light', 0.38, 200], gr: 0.05 } },
-  { n: 'شاي', f: 'sepia(0.2) saturate(1.2) contrast(1.09) brightness(1.02)', fx: { t: ['#c79a5b', 'color', 0.18], lk: ['#c79a5b', 0.39, 'bl'] } },
-  { n: 'تمر', f: 'sepia(0.24) saturate(1.25) contrast(1.12) brightness(1.04)', fx: { t: ['#8a4b2a', 'soft-light', 0.44], g: ['#2b1000', '#8a4b2a', 'soft-light', 0.46, 120], bl: 0.25 } },
-  { n: 'رمل', f: 'sepia(0.28) saturate(1.3) contrast(1.0) brightness(0.96)', fx: { v: 0.2, t: ['#e3c08d', 'soft-light', 0.48] } },
-  { n: 'نحاس', f: 'sepia(0.08) saturate(1.35) contrast(1.03) brightness(0.98)', fx: { t: ['#d0794a', 'overlay', 0.28], g: ['#552200', '#d0794a', 'soft-light', 0.34, 180], lk: ['#d0794a', 0.36, 'br'] } },
-  { n: 'برونزي', f: 'sepia(0.12) saturate(1.05) contrast(1.06) brightness(1.0)', fx: { t: ['#c28a4a', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
-  { n: 'شروق', f: 'sepia(0.16) saturate(1.1) contrast(1.09) brightness(1.02)', fx: { t: ['#ffb36b', 'color', 0.18], g: ['#7a2a3a', '#ffb36b', 'soft-light', 0.42, 140] } },
-  { n: 'أصيل', f: 'sepia(0.2) saturate(1.15) contrast(1.12) brightness(1.04)', fx: { v: 0.36, t: ['#ff9a52', 'soft-light', 0.4], lk: ['#ff9a52', 0.33, 'tl'] } },
-  { n: 'مشمش', f: 'sepia(0.24) saturate(1.2) contrast(1.0) brightness(0.96)', fx: { t: ['#ffb27a', 'soft-light', 0.44], g: ['#a04a2a', '#ffb27a', 'soft-light', 0.3, 160], bl: 0.33 } },
-  { n: 'خوخ', f: 'sepia(0.28) saturate(1.25) contrast(1.03) brightness(0.98)', fx: { t: ['#ffa58f', 'overlay', 0.48] } },
-  { n: 'عنبر دافئ', f: 'sepia(0.08) saturate(1.3) contrast(1.06) brightness(1.0)', fx: { t: ['#ffb000', 'soft-light', 0.28], g: ['#5a2a00', '#ffb000', 'soft-light', 0.38, 200], lk: ['#ffb000', 0.3, 'tr'], gr: 0.05 } },
-  { n: 'قهوة', f: 'sepia(0.12) saturate(1.35) contrast(1.09) brightness(1.02)', fx: { v: 0.32, t: ['#9a6a45', 'color', 0.18], bl: 0.29 } },
-  { n: 'دفء المساء', f: 'sepia(0.16) saturate(1.05) contrast(1.12) brightness(1.04)', fx: { t: ['#ff8c42', 'soft-light', 0.36], g: ['#3a1030', '#ff8c42', 'soft-light', 0.46, 120] } },
-  { n: 'غروب صحراء', f: 'sepia(0.2) saturate(1.1) contrast(1.0) brightness(0.96)', fx: { t: ['#f0a05a', 'soft-light', 0.4], lk: ['#f0a05a', 0.39, 'bl'] } },
-  { n: 'جمر', f: 'sepia(0.24) saturate(1.15) contrast(1.03) brightness(0.98)', fx: { t: ['#ff6a3a', 'overlay', 0.44], g: ['#400a00', '#ff6a3a', 'soft-light', 0.34, 180], bl: 0.25 } },
-  { n: 'شمس الظهيرة', f: 'sepia(0.28) saturate(1.2) contrast(1.06) brightness(1.0)', fx: { v: 0.28, t: ['#ffd27a', 'soft-light', 0.48], gr: 0.05 } },
-  { n: 'أزرق جليدي', f: 'hue-rotate(190deg) saturate(1.05) contrast(1.0) brightness(0.96)', fx: { t: ['#9ccaff', 'soft-light', 0.28], g: ['#0a2a5a', '#9ccaff', 'soft-light', 0.3, 160], lk: ['#9ccaff', 0.3, 'tr'] } },
-  { n: 'فيروز', f: 'hue-rotate(190deg) saturate(1.1) contrast(1.03) brightness(0.98)', fx: { v: 0.24, t: ['#4fe3d6', 'overlay', 0.32], bl: 0.29 } },
-  { n: 'سماوي', f: 'hue-rotate(190deg) saturate(1.15) contrast(1.06) brightness(1.0)', fx: { t: ['#7fd6ff', 'soft-light', 0.36], g: ['#06385a', '#7fd6ff', 'soft-light', 0.38, 200], gr: 0.05 } },
-  { n: 'نعناع بارد', f: 'hue-rotate(190deg) saturate(1.2) contrast(1.09) brightness(1.02)', fx: { t: ['#9affd0', 'color', 0.18], lk: ['#9affd0', 0.39, 'bl'] } },
-  { n: 'ضباب أزرق', f: 'hue-rotate(190deg) saturate(1.25) contrast(1.12) brightness(1.04)', fx: { t: ['#a5b8d8', 'soft-light', 0.44], g: ['#1a2a44', '#a5b8d8', 'soft-light', 0.46, 120], bl: 0.25 } },
-  { n: 'قطب شمالي', f: 'hue-rotate(190deg) saturate(1.3) contrast(1.0) brightness(0.96)', fx: { v: 0.2, t: ['#bfe6ff', 'soft-light', 0.48] } },
-  { n: 'عمق البحر', f: 'hue-rotate(190deg) saturate(1.35) contrast(1.03) brightness(0.98)', fx: { t: ['#2f7fb0', 'overlay', 0.28], g: ['#001a30', '#2f7fb0', 'soft-light', 0.34, 180], lk: ['#2f7fb0', 0.36, 'br'] } },
-  { n: 'لازورد', f: 'hue-rotate(190deg) saturate(1.05) contrast(1.06) brightness(1.0)', fx: { t: ['#4a6cff', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
-  { n: 'بحيرة', f: 'hue-rotate(190deg) saturate(1.1) contrast(1.09) brightness(1.02)', fx: { t: ['#5fb7c9', 'color', 0.18], g: ['#0a3a44', '#5fb7c9', 'soft-light', 0.42, 140] } },
-  { n: 'صقيع', f: 'hue-rotate(190deg) saturate(1.15) contrast(1.12) brightness(1.04)', fx: { v: 0.36, t: ['#d4ecff', 'soft-light', 0.4], lk: ['#d4ecff', 0.33, 'tl'] } },
-  { n: 'شفق أزرق', f: 'hue-rotate(190deg) saturate(1.2) contrast(1.0) brightness(0.96)', fx: { t: ['#6a8cff', 'soft-light', 0.44], g: ['#2a0a5a', '#6a8cff', 'soft-light', 0.3, 160], bl: 0.33 } },
-  { n: 'موج', f: 'hue-rotate(190deg) saturate(1.25) contrast(1.03) brightness(0.98)', fx: { t: ['#38b6d8', 'overlay', 0.48] } },
-  { n: 'ثلج الصباح', f: 'hue-rotate(190deg) saturate(1.3) contrast(1.06) brightness(1.0)', fx: { t: ['#e2f1ff', 'soft-light', 0.28], g: ['#6a8aaa', '#e2f1ff', 'soft-light', 0.38, 200], lk: ['#e2f1ff', 0.3, 'tr'], gr: 0.05 } },
-  { n: 'أزرق ليلي', f: 'hue-rotate(190deg) saturate(1.35) contrast(1.09) brightness(1.02)', fx: { v: 0.32, t: ['#3a5acf', 'color', 0.18], bl: 0.29 } },
-  { n: 'ندى', f: 'hue-rotate(190deg) saturate(1.05) contrast(1.12) brightness(1.04)', fx: { t: ['#a8f0e0', 'soft-light', 0.36], g: ['#2a6a6a', '#a8f0e0', 'soft-light', 0.46, 120] } },
-  { n: 'أرجواني بارد', f: 'hue-rotate(190deg) saturate(1.1) contrast(1.0) brightness(0.96)', fx: { t: ['#8a7cff', 'soft-light', 0.4], lk: ['#8a7cff', 0.39, 'bl'] } },
-  { n: 'رذاذ', f: 'hue-rotate(190deg) saturate(1.15) contrast(1.03) brightness(0.98)', fx: { t: ['#9fd8f0', 'overlay', 0.44], g: ['#2a5a7a', '#9fd8f0', 'soft-light', 0.34, 180], bl: 0.25 } },
-  { n: 'كوبالت', f: 'hue-rotate(190deg) saturate(1.2) contrast(1.06) brightness(1.0)', fx: { v: 0.28, t: ['#2a56c8', 'soft-light', 0.48], gr: 0.05 } },
-  { n: 'كوداك 200', f: 'contrast(1.0) saturate(1.05) sepia(0.08) brightness(0.96)', fx: { t: ['#ffb866', 'soft-light', 0.28], g: ['#3a2a10', '#ffb866', 'soft-light', 0.3, 160], lk: ['#ffb866', 0.3, 'tr'] } },
-  { n: 'كوداك جولد', f: 'contrast(1.03) saturate(1.1) sepia(0.12) brightness(0.98)', fx: { v: 0.24, t: ['#ffc94a', 'overlay', 0.32], bl: 0.29 } },
-  { n: 'فوجي بارد', f: 'contrast(1.06) saturate(1.15) sepia(0.16) brightness(1.0)', fx: { t: ['#6ad0a0', 'soft-light', 0.36], g: ['#0a3a2a', '#6ad0a0', 'soft-light', 0.38, 200], gr: 0.05 } },
-  { n: 'فوجي 400', f: 'contrast(1.09) saturate(1.2) sepia(0.2) brightness(1.02)', fx: { t: ['#7acaa8', 'color', 0.18], lk: ['#7acaa8', 0.39, 'bl'] } },
-  { n: 'تيل وبرتقال', f: 'contrast(1.12) saturate(1.25) sepia(0.24) brightness(1.04)', fx: { t: ['#ff9a4a', 'soft-light', 0.44], g: ['#0a5a6a', '#ff9a4a', 'soft-light', 0.46, 120], bl: 0.25 } },
-  { n: 'هوليوود', f: 'contrast(1.0) saturate(1.3) sepia(0.28) brightness(0.96)', fx: { v: 0.2, t: ['#ffae5a', 'soft-light', 0.48] } },
-  { n: 'أفلام السبعينات', f: 'contrast(1.03) saturate(1.35) sepia(0.08) brightness(0.98)', fx: { t: ['#d98a4a', 'overlay', 0.28], g: ['#4a3a1a', '#d98a4a', 'soft-light', 0.34, 180], lk: ['#d98a4a', 0.36, 'br'] } },
-  { n: 'نوفمبر سينما', f: 'contrast(1.06) saturate(1.05) sepia(0.12) brightness(1.0)', fx: { t: ['#8aa8b8', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
-  { n: 'ظلال زرقاء', f: 'contrast(1.09) saturate(1.1) sepia(0.16) brightness(1.02)', fx: { t: ['#6a8ac8', 'color', 0.18], g: ['#3a2a10', '#6a8ac8', 'soft-light', 0.42, 140] } },
-  { n: 'بروفيل سينمائي', f: 'contrast(1.12) saturate(1.15) sepia(0.2) brightness(1.04)', fx: { v: 0.36, t: ['#e6a060', 'soft-light', 0.4], lk: ['#e6a060', 0.33, 'tl'] } },
-  { n: 'مشهد ليلي', f: 'contrast(1.0) saturate(1.2) sepia(0.24) brightness(0.96)', fx: { t: ['#4a6aa8', 'soft-light', 0.44], g: ['#0a0a1a', '#4a6aa8', 'soft-light', 0.3, 160], bl: 0.33 } },
-  { n: 'دراما دافئة', f: 'contrast(1.03) saturate(1.25) sepia(0.28) brightness(0.98)', fx: { t: ['#e8a070', 'overlay', 0.48] } },
-  { n: 'فيلم أخضر', f: 'contrast(1.06) saturate(1.3) sepia(0.08) brightness(1.0)', fx: { t: ['#7ab88a', 'soft-light', 0.28], g: ['#1a3a2a', '#7ab88a', 'soft-light', 0.38, 200], lk: ['#7ab88a', 0.3, 'tr'], gr: 0.05 } },
-  { n: 'سينما بيضاء', f: 'contrast(1.09) saturate(1.35) sepia(0.12) brightness(1.02)', fx: { v: 0.32, t: ['#f0e0c8', 'color', 0.18], bl: 0.29 } },
-  { n: 'مخرج', f: 'contrast(1.12) saturate(1.05) sepia(0.16) brightness(1.04)', fx: { t: ['#c08050', 'soft-light', 0.36], g: ['#102030', '#c08050', 'soft-light', 0.46, 120] } },
-  { n: 'بلوكباستر', f: 'contrast(1.0) saturate(1.1) sepia(0.2) brightness(0.96)', fx: { t: ['#ff8a3a', 'soft-light', 0.4], lk: ['#ff8a3a', 0.39, 'bl'] } },
-  { n: 'ويسترن', f: 'contrast(1.03) saturate(1.15) sepia(0.24) brightness(0.98)', fx: { t: ['#d09a55', 'overlay', 0.44], g: ['#4a2a10', '#d09a55', 'soft-light', 0.34, 180], bl: 0.25 } },
-  { n: 'نيو سينما', f: 'contrast(1.06) saturate(1.2) sepia(0.28) brightness(1.0)', fx: { v: 0.28, t: ['#7aa0b8', 'soft-light', 0.48], gr: 0.05 } },
-  { n: 'بولارويد ✦', f: 'sepia(0.08) contrast(1.0) saturate(1.05) brightness(0.96) hue-rotate(-6deg)', fx: { t: ['#f0d890', 'soft-light', 0.28], g: ['#3a2a4a', '#f0d890', 'soft-light', 0.3, 160], lk: ['#f0d890', 0.3, 'tr'] } },
-  { n: 'ريترو 80', f: 'sepia(0.12) contrast(1.03) saturate(1.1) brightness(0.98) hue-rotate(-6deg)', fx: { v: 0.24, t: ['#ff7ac8', 'overlay', 0.32], bl: 0.29 } },
-  { n: 'فاكس', f: 'sepia(0.16) contrast(1.06) saturate(1.15) brightness(1.0) hue-rotate(-6deg)', fx: { t: ['#c8b890', 'soft-light', 0.36], g: ['#3a3020', '#c8b890', 'soft-light', 0.38, 200], gr: 0.05 } },
-  { n: 'صورة قديمة', f: 'sepia(0.2) contrast(1.09) saturate(1.2) brightness(1.02) hue-rotate(-6deg)', fx: { t: ['#d8c090', 'color', 0.18], lk: ['#d8c090', 0.39, 'bl'] } },
-  { n: 'ألبوم الجدة', f: 'sepia(0.24) contrast(1.12) saturate(1.25) brightness(1.04) hue-rotate(-6deg)', fx: { t: ['#c8a878', 'soft-light', 0.44], g: ['#3a2a18', '#c8a878', 'soft-light', 0.46, 120], bl: 0.25 } },
-  { n: 'كاسيت', f: 'sepia(0.28) contrast(1.0) saturate(1.3) brightness(0.96) hue-rotate(-6deg)', fx: { v: 0.2, t: ['#e0b860', 'soft-light', 0.48] } },
-  { n: 'مجلة 70', f: 'sepia(0.08) contrast(1.03) saturate(1.35) brightness(0.98) hue-rotate(-6deg)', fx: { t: ['#e8a860', 'overlay', 0.28], g: ['#2a4a3a', '#e8a860', 'soft-light', 0.34, 180], lk: ['#e8a860', 0.36, 'br'] } },
-  { n: 'سيبيا ناعم', f: 'sepia(0.12) contrast(1.06) saturate(1.05) brightness(1.0) hue-rotate(-6deg)', fx: { t: ['#c89a60', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
-  { n: 'ورق أصفر', f: 'sepia(0.16) contrast(1.09) saturate(1.1) brightness(1.02) hue-rotate(-6deg)', fx: { t: ['#e8d090', 'color', 0.18], g: ['#7a6a3a', '#e8d090', 'soft-light', 0.42, 140] } },
-  { n: 'ديسكو', f: 'sepia(0.2) contrast(1.12) saturate(1.15) brightness(1.04) hue-rotate(-6deg)', fx: { v: 0.36, t: ['#b86aff', 'soft-light', 0.4], lk: ['#b86aff', 0.33, 'tl'] } },
-  { n: 'فلاش قديم', f: 'sepia(0.24) contrast(1.0) saturate(1.2) brightness(0.96) hue-rotate(-6deg)', fx: { t: ['#fff0c0', 'soft-light', 0.44], g: ['#6a5a3a', '#fff0c0', 'soft-light', 0.3, 160], bl: 0.33 } },
-  { n: 'كاميرا يابانية', f: 'sepia(0.28) contrast(1.03) saturate(1.25) brightness(0.98) hue-rotate(-6deg)', fx: { t: ['#ffc0a0', 'overlay', 0.48] } },
-  { n: 'طبعة باهتة', f: 'sepia(0.08) contrast(1.06) saturate(1.3) brightness(1.0) hue-rotate(-6deg)', fx: { t: ['#d8c8b0', 'soft-light', 0.28], g: ['#6a5a4a', '#d8c8b0', 'soft-light', 0.38, 200], lk: ['#d8c8b0', 0.3, 'tr'], gr: 0.05 } },
-  { n: 'تسعينات', f: 'sepia(0.12) contrast(1.09) saturate(1.35) brightness(1.02) hue-rotate(-6deg)', fx: { v: 0.32, t: ['#ff9ab0', 'color', 0.18], bl: 0.29 } },
-  { n: 'نوستالجيا', f: 'sepia(0.16) contrast(1.12) saturate(1.05) brightness(1.04) hue-rotate(-6deg)', fx: { t: ['#e8b890', 'soft-light', 0.36], g: ['#4a3a5a', '#e8b890', 'soft-light', 0.46, 120] } },
-  { n: 'زمن جميل', f: 'sepia(0.2) contrast(1.0) saturate(1.1) brightness(0.96) hue-rotate(-6deg)', fx: { t: ['#d0a870', 'soft-light', 0.4], lk: ['#d0a870', 0.39, 'bl'] } },
-  { n: 'فيديو VHS', f: 'sepia(0.24) contrast(1.03) saturate(1.15) brightness(0.98) hue-rotate(-6deg)', fx: { t: ['#ff6a9a', 'overlay', 0.44], g: ['#2a6aff', '#ff6a9a', 'soft-light', 0.34, 180], bl: 0.25 } },
-  { n: 'صيف 85', f: 'sepia(0.28) contrast(1.06) saturate(1.2) brightness(1.0) hue-rotate(-6deg)', fx: { v: 0.28, t: ['#ffb070', 'soft-light', 0.48], gr: 0.05 } },
-  { n: 'نيون وردي', f: 'saturate(1.7) contrast(1.0) brightness(0.96)', fx: { t: ['#ff3ac8', 'soft-light', 0.28], g: ['#2a003a', '#ff3ac8', 'soft-light', 0.3, 160], lk: ['#ff3ac8', 0.3, 'tr'] } },
-  { n: 'نيون أزرق', f: 'saturate(1.7) contrast(1.03) brightness(0.98)', fx: { v: 0.24, t: ['#2ad4ff', 'overlay', 0.32], bl: 0.29 } },
-  { n: 'نيون بنفسجي', f: 'saturate(1.7) contrast(1.06) brightness(1.0)', fx: { t: ['#a63aff', 'soft-light', 0.36], g: ['#10003a', '#a63aff', 'soft-light', 0.38, 200], gr: 0.05 } },
-  { n: 'نيون أصفر', f: 'saturate(1.7) contrast(1.09) brightness(1.02)', fx: { t: ['#fff23a', 'color', 0.18], lk: ['#fff23a', 0.39, 'bl'] } },
-  { n: 'نيون برتقالي', f: 'saturate(1.7) contrast(1.12) brightness(1.04)', fx: { t: ['#ff8a1a', 'soft-light', 0.44], g: ['#3a0a00', '#ff8a1a', 'soft-light', 0.46, 120], bl: 0.25 } },
-  { n: 'سايبربانك', f: 'saturate(1.7) contrast(1.0) brightness(0.96)', fx: { v: 0.2, t: ['#ff2a8a', 'soft-light', 0.48] } },
-  { n: 'طوكيو ليلاً', f: 'saturate(1.7) contrast(1.03) brightness(0.98)', fx: { t: ['#ff5ac0', 'overlay', 0.28], g: ['#0a1a5a', '#ff5ac0', 'soft-light', 0.34, 180], lk: ['#ff5ac0', 0.36, 'br'] } },
-  { n: 'لاس فيغاس', f: 'saturate(1.7) contrast(1.06) brightness(1.0)', fx: { t: ['#ff4a6a', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
-  { n: 'ليزر', f: 'saturate(1.7) contrast(1.09) brightness(1.02)', fx: { t: ['#3aff8a', 'color', 0.18], g: ['#2a003a', '#3aff8a', 'soft-light', 0.42, 140] } },
-  { n: 'إلكتريك', f: 'saturate(1.7) contrast(1.12) brightness(1.04)', fx: { v: 0.36, t: ['#4a8aff', 'soft-light', 0.4], lk: ['#4a8aff', 0.33, 'tl'] } },
-  { n: 'ميامي ✦', f: 'saturate(1.7) contrast(1.0) brightness(0.96)', fx: { t: ['#ff7ad0', 'soft-light', 0.44], g: ['#00d0c0', '#ff7ad0', 'soft-light', 0.3, 160], bl: 0.33 } },
-  { n: 'فابورواف', f: 'saturate(1.7) contrast(1.03) brightness(0.98)', fx: { t: ['#c06aff', 'overlay', 0.48] } },
-  { n: 'تكنو', f: 'saturate(1.7) contrast(1.06) brightness(1.0)', fx: { t: ['#2affc0', 'soft-light', 0.28], g: ['#2a0a5a', '#2affc0', 'soft-light', 0.38, 200], lk: ['#2affc0', 0.3, 'tr'], gr: 0.05 } },
-  { n: 'غلوم', f: 'saturate(1.7) contrast(1.09) brightness(1.02)', fx: { v: 0.32, t: ['#ff3a5a', 'color', 0.18], bl: 0.29 } },
-  { n: 'أشعة', f: 'saturate(1.7) contrast(1.12) brightness(1.04)', fx: { t: ['#7aff3a', 'soft-light', 0.36], g: ['#003a2a', '#7aff3a', 'soft-light', 0.46, 120] } },
-  { n: 'بلازما', f: 'saturate(1.7) contrast(1.0) brightness(0.96)', fx: { t: ['#ff3aff', 'soft-light', 0.4], lk: ['#ff3aff', 0.39, 'bl'] } },
-  { n: 'هولوغرام', f: 'saturate(1.7) contrast(1.03) brightness(0.98)', fx: { t: ['#6affff', 'overlay', 0.44], g: ['#a03aff', '#6affff', 'soft-light', 0.34, 180], bl: 0.25 } },
-  { n: 'ألعاب', f: 'saturate(1.7) contrast(1.06) brightness(1.0)', fx: { v: 0.28, t: ['#3aff6a', 'soft-light', 0.48], gr: 0.05 } },
-  { n: 'وردي ناعم', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffc8d8', 'soft-light', 0.28], g: ['#8a4a6a', '#ffc8d8', 'soft-light', 0.3, 160], lk: ['#ffc8d8', 0.3, 'tr'] } },
-  { n: 'كريمي', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { v: 0.24, t: ['#fff0d8', 'overlay', 0.32], bl: 0.29 } },
-  { n: 'حرير', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffe8e0', 'soft-light', 0.36], g: ['#8a6a6a', '#ffe8e0', 'soft-light', 0.38, 200], gr: 0.05 } },
-  { n: 'بشرة مشرقة', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffd8c0', 'color', 0.18], lk: ['#ffd8c0', 0.39, 'bl'] } },
-  { n: 'لافندر', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#d8c0ff', 'soft-light', 0.44], g: ['#6a4a9a', '#d8c0ff', 'soft-light', 0.46, 120], bl: 0.25 } },
-  { n: 'سحابة', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { v: 0.2, t: ['#f0f4ff', 'soft-light', 0.48] } },
-  { n: 'وردة', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffb0c8', 'overlay', 0.28], g: ['#7a2a4a', '#ffb0c8', 'soft-light', 0.34, 180], lk: ['#ffb0c8', 0.36, 'br'] } },
-  { n: 'نقاء', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffffff', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
-  { n: 'بودرة', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#f8e8f0', 'color', 0.18], g: ['#9a7a8a', '#f8e8f0', 'soft-light', 0.42, 140] } },
-  { n: 'مارشميلو', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { v: 0.36, t: ['#ffd0e8', 'soft-light', 0.4], lk: ['#ffd0e8', 0.33, 'tl'] } },
-  { n: 'لبن', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#fff8f0', 'soft-light', 0.44], g: ['#a89a8a', '#fff8f0', 'soft-light', 0.3, 160], bl: 0.33 } },
-  { n: 'ضوء ناعم', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#fffae0', 'overlay', 0.48] } },
-  { n: 'زهري باستيل', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffc0d0', 'soft-light', 0.28], g: ['#9a6a8a', '#ffc0d0', 'soft-light', 0.38, 200], lk: ['#ffc0d0', 0.3, 'tr'], gr: 0.05 } },
-  { n: 'أخضر باستيل', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { v: 0.32, t: ['#c8f0d0', 'color', 0.18], bl: 0.29 } },
-  { n: 'أزرق باستيل', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#c0e0ff', 'soft-light', 0.36], g: ['#6a8aaa', '#c0e0ff', 'soft-light', 0.46, 120] } },
-  { n: 'خوخي ناعم', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffd0b8', 'soft-light', 0.4], lk: ['#ffd0b8', 0.39, 'bl'] } },
-  { n: 'وجه مشرق', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { t: ['#ffe0d0', 'overlay', 0.44], g: ['#a08070', '#ffe0d0', 'soft-light', 0.34, 180], bl: 0.25 } },
-  { n: 'حلم وردي ✦', f: 'brightness(1.1) contrast(.94) saturate(.9) sepia(.06)', fx: { v: 0.28, t: ['#ffb8e0', 'soft-light', 0.48], gr: 0.05 } },
-  { n: 'غموض', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#4a3a6a', 'soft-light', 0.28], g: ['#05030a', '#4a3a6a', 'soft-light', 0.3, 160], lk: ['#4a3a6a', 0.3, 'tr'] } },
-  { n: 'ظلال عميقة', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { v: 0.24, t: ['#2a2a4a', 'overlay', 0.32], bl: 0.29 } },
-  { n: 'ليل المدينة', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#3a4a8a', 'soft-light', 0.36], g: ['#05050f', '#3a4a8a', 'soft-light', 0.38, 200], gr: 0.05 } },
-  { n: 'عاصفة', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#5a6a7a', 'color', 0.18], lk: ['#5a6a7a', 0.39, 'bl'] } },
-  { n: 'رماد', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#6a6a70', 'soft-light', 0.44], g: ['#101012', '#6a6a70', 'soft-light', 0.46, 120], bl: 0.25 } },
-  { n: 'فحم', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { v: 0.2, t: ['#3a3a3a', 'soft-light', 0.48] } },
-  { n: 'غابة مظلمة', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#1a4a3a', 'overlay', 0.28], g: ['#020a06', '#1a4a3a', 'soft-light', 0.34, 180], lk: ['#1a4a3a', 0.36, 'br'] } },
-  { n: 'دم', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#8a1a2a', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
-  { n: 'شبح', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#8a8a9a', 'color', 0.18], g: ['#0a0a14', '#8a8a9a', 'soft-light', 0.42, 140] } },
-  { n: 'كآبة زرقاء', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { v: 0.36, t: ['#2a4a7a', 'soft-light', 0.4], lk: ['#2a4a7a', 0.33, 'tl'] } },
-  { n: 'مطر', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#5a7a8a', 'soft-light', 0.44], g: ['#0a1218', '#5a7a8a', 'soft-light', 0.3, 160], bl: 0.33 } },
-  { n: 'هالووين', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#e8701a', 'overlay', 0.48] } },
-  { n: 'جوثيك', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#4a2a5a', 'soft-light', 0.28], g: ['#050008', '#4a2a5a', 'soft-light', 0.38, 200], lk: ['#4a2a5a', 0.3, 'tr'], gr: 0.05 } },
-  { n: 'ظل أحمر', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { v: 0.32, t: ['#a02a3a', 'color', 0.18], bl: 0.29 } },
-  { n: 'نصف قمر', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#5a6aa0', 'soft-light', 0.36], g: ['#05050f', '#5a6aa0', 'soft-light', 0.46, 120] } },
-  { n: 'ضباب كثيف', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#9aa0a8', 'soft-light', 0.4], lk: ['#9aa0a8', 0.39, 'bl'] } },
-  { n: 'قتامة ذهبية', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { t: ['#8a6a2a', 'overlay', 0.44], g: ['#0a0600', '#8a6a2a', 'soft-light', 0.34, 180], bl: 0.25 } },
-  { n: 'بنفسج داكن', f: 'contrast(1.25) saturate(.85) brightness(.88) sepia(.1)', fx: { v: 0.28, t: ['#4a1a7a', 'soft-light', 0.48], gr: 0.05 } },
-  { n: 'عشب', f: 'saturate(1.05) contrast(1.0) brightness(0.96) hue-rotate(8deg)', fx: { t: ['#7ad050', 'soft-light', 0.28], g: ['#0a3a0a', '#7ad050', 'soft-light', 0.3, 160], lk: ['#7ad050', 0.3, 'tr'] } },
-  { n: 'ورق شجر', f: 'saturate(1.1) contrast(1.03) brightness(0.98) hue-rotate(8deg)', fx: { v: 0.24, t: ['#5ac060', 'overlay', 0.32], bl: 0.29 } },
-  { n: 'غابة مطيرة', f: 'saturate(1.15) contrast(1.06) brightness(1.0) hue-rotate(8deg)', fx: { t: ['#3aa070', 'soft-light', 0.36], g: ['#022a1a', '#3aa070', 'soft-light', 0.38, 200], gr: 0.05 } },
-  { n: 'ربيع زاهي', f: 'saturate(1.2) contrast(1.09) brightness(1.02) hue-rotate(8deg)', fx: { t: ['#a8e060', 'color', 0.18], lk: ['#a8e060', 0.39, 'bl'] } },
-  { n: 'حقل قمح', f: 'saturate(1.25) contrast(1.12) brightness(1.04) hue-rotate(8deg)', fx: { t: ['#e8d060', 'soft-light', 0.44], g: ['#6a5a1a', '#e8d060', 'soft-light', 0.46, 120], bl: 0.25 } },
-  { n: 'جبال', f: 'saturate(1.3) contrast(1.0) brightness(0.96) hue-rotate(8deg)', fx: { v: 0.2, t: ['#7a9ab8', 'soft-light', 0.48] } },
-  { n: 'شاطئ', f: 'saturate(1.35) contrast(1.03) brightness(0.98) hue-rotate(8deg)', fx: { t: ['#ffe0a8', 'overlay', 0.28], g: ['#1a8ab0', '#ffe0a8', 'soft-light', 0.34, 180], lk: ['#ffe0a8', 0.36, 'br'] } },
-  { n: 'بحر هادئ', f: 'saturate(1.05) contrast(1.06) brightness(1.0) hue-rotate(8deg)', fx: { t: ['#5ac0d0', 'soft-light', 0.32], gr: 0.05, bl: 0.37 } },
-  { n: 'سماء صافية', f: 'saturate(1.1) contrast(1.09) brightness(1.02) hue-rotate(8deg)', fx: { t: ['#7ac8ff', 'color', 0.18], g: ['#1a5aaa', '#7ac8ff', 'soft-light', 0.42, 140] } },
-  { n: 'خريف ذهبي', f: 'saturate(1.15) contrast(1.12) brightness(1.04) hue-rotate(8deg)', fx: { v: 0.36, t: ['#e0902a', 'soft-light', 0.4], lk: ['#e0902a', 0.33, 'tl'] } },
-  { n: 'زهور', f: 'saturate(1.2) contrast(1.0) brightness(0.96) hue-rotate(8deg)', fx: { t: ['#ff8ac0', 'soft-light', 0.44], g: ['#4a8a3a', '#ff8ac0', 'soft-light', 0.3, 160], bl: 0.33 } },
-  { n: 'صحراء', f: 'saturate(1.25) contrast(1.03) brightness(0.98) hue-rotate(8deg)', fx: { t: ['#e8b868', 'overlay', 0.48] } },
-  { n: 'شلال', f: 'saturate(1.3) contrast(1.06) brightness(1.0) hue-rotate(8deg)', fx: { t: ['#8ae0d8', 'soft-light', 0.28], g: ['#0a4a4a', '#8ae0d8', 'soft-light', 0.38, 200], lk: ['#8ae0d8', 0.3, 'tr'], gr: 0.05 } },
-  { n: 'أخضر زيتوني', f: 'saturate(1.35) contrast(1.09) brightness(1.02) hue-rotate(8deg)', fx: { v: 0.32, t: ['#8aa050', 'color', 0.18], bl: 0.29 } },
-  { n: 'ثلج الجبل', f: 'saturate(1.05) contrast(1.12) brightness(1.04) hue-rotate(8deg)', fx: { t: ['#e8f4ff', 'soft-light', 0.36], g: ['#5a8ab0', '#e8f4ff', 'soft-light', 0.46, 120] } },
-  { n: 'حديقة', f: 'saturate(1.1) contrast(1.0) brightness(0.96) hue-rotate(8deg)', fx: { t: ['#78d078', 'soft-light', 0.4], lk: ['#78d078', 0.39, 'bl'] } },
-  { n: 'واحة', f: 'saturate(1.15) contrast(1.03) brightness(0.98) hue-rotate(8deg)', fx: { t: ['#58d098', 'overlay', 0.44], g: ['#a8802a', '#58d098', 'soft-light', 0.34, 180], bl: 0.25 } },
-  { n: 'ضوء الصباح', f: 'saturate(1.2) contrast(1.06) brightness(1.0) hue-rotate(8deg)', fx: { v: 0.28, t: ['#fff0b0', 'soft-light', 0.48], gr: 0.05 } },
-  { n: 'رمادي كلاسيك', f: 'grayscale(1) contrast(1.1) brightness(1)', fx: { v: 0.15, gr: 0.09 } },
-  { n: 'رمادي فاتح', f: 'grayscale(1) contrast(0.95) brightness(1.15)', fx: { v: 0.19, t: ['#4a3a2a', 'soft-light', 0.3] } },
-  { n: 'رمادي داكن', f: 'grayscale(1) contrast(1.3) brightness(0.85)', fx: { v: 0.23 } },
-  { n: 'أبيض وأسود حاد', f: 'grayscale(1) contrast(1.6) brightness(0.95)', fx: { v: 0.27, t: ['#1a2a4a', 'soft-light', 0.3], gr: 0.09 } },
-  { n: 'مات بلاك', f: 'grayscale(1) contrast(1.05) brightness(0.9)', fx: { v: 0.31 } },
-  { n: 'ضباب رمادي', f: 'grayscale(0.9) contrast(0.9) brightness(1.1)', fx: { v: 0.35, t: ['#2a2a2a', 'soft-light', 0.3] } },
-  { n: 'مونو ناعم', f: 'grayscale(1) contrast(0.9) brightness(1.05)', fx: { v: 0.15, gr: 0.09 } },
-  { n: 'ستريت ✦', f: 'grayscale(1) contrast(1.45) brightness(0.92)', fx: { v: 0.19, t: ['#4a3a2a', 'soft-light', 0.3] } },
-  { n: 'نوار فاخر', f: 'grayscale(1) contrast(1.7) brightness(0.85)', fx: { v: 0.23 } },
-  { n: 'تصوير صحفي', f: 'grayscale(1) contrast(1.25) brightness(1)', fx: { v: 0.27, t: ['#1a2a4a', 'soft-light', 0.3], gr: 0.09 } },
-  { n: 'فضي', f: 'grayscale(1) contrast(1.1) brightness(1.12)', fx: { v: 0.31 } },
-  { n: 'لوح فحم', f: 'grayscale(1) contrast(1.4) brightness(0.8)', fx: { v: 0.35, t: ['#2a2a2a', 'soft-light', 0.3] } },
-  { n: 'أبيض مضيء', f: 'grayscale(1) contrast(0.85) brightness(1.25)', fx: { v: 0.15, gr: 0.09 } },
-  { n: 'وثائقي', f: 'grayscale(1) contrast(1.2) brightness(0.95)', fx: { v: 0.19, t: ['#4a3a2a', 'soft-light', 0.3] } },
-  { n: 'دو توون وردي', f: 'grayscale(.55) contrast(1.15) saturate(1.3) brightness(1.02)', fx: { v: 0.15, t: ['#ff3a9a', 'soft-light', 0.25], g: ['#2a0a6a', '#ff3a9a', 'color', 0.55, 160] } },
-  { n: 'دو توون أزرق', f: 'grayscale(.55) contrast(1.15) saturate(1.35) brightness(1.02)', fx: { v: 0.18, t: ['#3ad0ff', 'soft-light', 0.25], g: ['#1a0a5a', '#3ad0ff', 'color', 0.58, 180] } },
-  { n: 'دو توون أخضر', f: 'grayscale(.55) contrast(1.15) saturate(1.4) brightness(1.02)', fx: { v: 0.21, t: ['#6aff9a', 'soft-light', 0.25], g: ['#0a2a4a', '#6aff9a', 'color', 0.61, 200] } },
-  { n: 'دو توون برتقالي', f: 'grayscale(.55) contrast(1.15) saturate(1.45) brightness(1.02)', fx: { v: 0.24, t: ['#ffa03a', 'soft-light', 0.25], g: ['#3a0a4a', '#ffa03a', 'color', 0.64, 140] } },
-  { n: 'دو توون أحمر', f: 'grayscale(.55) contrast(1.15) saturate(1.5) brightness(1.02)', fx: { v: 0.15, t: ['#ff4a4a', 'soft-light', 0.25], g: ['#1a0a3a', '#ff4a4a', 'color', 0.55, 160] } },
-  { n: 'دو توون بنفسجي', f: 'grayscale(.55) contrast(1.15) saturate(1.3) brightness(1.02)', fx: { v: 0.18, t: ['#c08aff', 'soft-light', 0.25], g: ['#0a0a3a', '#c08aff', 'color', 0.58, 180] } },
-  { n: 'دو توون ذهبي', f: 'grayscale(.55) contrast(1.15) saturate(1.35) brightness(1.02)', fx: { v: 0.21, t: ['#ffd24a', 'soft-light', 0.25], g: ['#3a0a2a', '#ffd24a', 'color', 0.61, 200] } },
-  { n: 'دو توون تيل', f: 'grayscale(.55) contrast(1.15) saturate(1.4) brightness(1.02)', fx: { v: 0.24, t: ['#3affd0', 'soft-light', 0.25], g: ['#3a0a4a', '#3affd0', 'color', 0.64, 140] } },
-  { n: 'صنسيت', f: 'grayscale(.55) contrast(1.15) saturate(1.45) brightness(1.02)', fx: { v: 0.15, t: ['#ff7a5a', 'soft-light', 0.25], g: ['#6a1a8a', '#ff7a5a', 'color', 0.55, 160] } },
-  { n: 'أورورا ✦', f: 'grayscale(.55) contrast(1.15) saturate(1.5) brightness(1.02)', fx: { v: 0.18, t: ['#6affc0', 'soft-light', 0.25], g: ['#3a1a8a', '#6affc0', 'color', 0.58, 180] } },
-  { n: 'كاندي', f: 'grayscale(.55) contrast(1.15) saturate(1.3) brightness(1.02)', fx: { v: 0.21, t: ['#ff8ad8', 'soft-light', 0.25], g: ['#6ad0ff', '#ff8ad8', 'color', 0.61, 200] } },
-  { n: 'مجرة', f: 'grayscale(.55) contrast(1.15) saturate(1.35) brightness(1.02)', fx: { v: 0.24, t: ['#9a6aff', 'soft-light', 0.25], g: ['#0a1a4a', '#9a6aff', 'color', 0.64, 140] } },
-  { n: 'لافا', f: 'grayscale(.55) contrast(1.15) saturate(1.4) brightness(1.02)', fx: { v: 0.15, t: ['#ff5a1a', 'soft-light', 0.25], g: ['#2a0a3a', '#ff5a1a', 'color', 0.55, 160] } },
-  { n: 'أوشن دو', f: 'grayscale(.55) contrast(1.15) saturate(1.45) brightness(1.02)', fx: { v: 0.18, t: ['#1ab0ff', 'soft-light', 0.25], g: ['#0a0a2a', '#1ab0ff', 'color', 0.58, 180] } },
-  { n: 'باندا', f: 'grayscale(.55) contrast(1.15) saturate(1.5) brightness(1.02)', fx: { v: 0.21, t: ['#ffffff', 'soft-light', 0.25], g: ['#101018', '#ffffff', 'color', 0.61, 200] } },
-  { n: 'رمادي أزرق', f: 'grayscale(.55) contrast(1.15) saturate(1.3) brightness(1.02)', fx: { v: 0.24, t: ['#a0c0e0', 'soft-light', 0.25], g: ['#101828', '#a0c0e0', 'color', 0.64, 140] } },
-  { n: 'تفتيح خفيف', f: 'brightness(1.12)' },
-  { n: 'تفتيح قوي', f: 'brightness(1.3) contrast(.95)' },
-  { n: 'تغميق خفيف', f: 'brightness(.88)' },
-  { n: 'تباين ناعم', f: 'contrast(1.12)' },
-  { n: 'تباين حاد', f: 'contrast(1.45)' },
-  { n: 'تشبع خفيف', f: 'saturate(1.25)' },
-  { n: 'تشبع قوي', f: 'saturate(1.9) contrast(1.05)' },
-  { n: 'باهت', f: 'saturate(.55) brightness(1.08)' },
-  { n: 'نصف رمادي', f: 'grayscale(.5)' },
-  { n: 'ألوان زاهية', f: 'saturate(1.5) brightness(1.06) contrast(1.08)' },
-  { n: 'شفاف', f: 'brightness(1.15) saturate(.8) contrast(.92)' },
-  { n: 'حدة', f: 'contrast(1.2) saturate(1.2) brightness(1.02)' },
-  { n: 'عكس لوني خفيف', f: 'hue-rotate(180deg) saturate(.8)' },
-  { n: 'دوران لوني 1', f: 'hue-rotate(40deg) saturate(1.2)' },
-  { n: 'دوران لوني 2', f: 'hue-rotate(90deg) saturate(1.2)' },
-  { n: 'دوران لوني 3', f: 'hue-rotate(140deg) saturate(1.2)' },
-  { n: 'دوران لوني 4', f: 'hue-rotate(230deg) saturate(1.2)' },
-  { n: 'دوران لوني 5', f: 'hue-rotate(290deg) saturate(1.2)' },
+const STORY_FILTERS: { n: string; f: string; fx?: StoryFx }[] = [
+  { n: 'عادي', f: 'none' },
+  { n: 'Clarendon', f: 'contrast(1.18) saturate(1.3) brightness(1.03)', fx: { g:['#071a3a','#bfe3ff','soft-light',.3,180] } },
+  { n: 'Juno', f: 'contrast(1.1) saturate(1.4) brightness(1.04) sepia(.06)', fx: { t:['#ffd98a','soft-light',.2],lk:['#7fffd4',.1,'bl'] } },
+  { n: 'Lark', f: 'brightness(1.1) contrast(.95) saturate(1.2)', fx: { t:['#a8d8ff','soft-light',.16],bl:.2 } },
+  { n: 'Ludwig', f: 'contrast(1.06) saturate(1.1) brightness(1.03) sepia(.08)', fx: { t:['#ffe6c8','soft-light',.22],v:.15 } },
+  { n: 'Gingham', f: 'brightness(1.05) hue-rotate(-6deg) contrast(.9) saturate(.88)', fx: { t:['#e6e6fa','soft-light',.3],fd:.06 } },
+  { n: 'Valencia', f: 'contrast(1.08) brightness(1.08) sepia(.1) saturate(1.1)', fx: { t:['#ffcf9a','soft-light',.3],fd:.05 } },
+  { n: 'X-Pro II', f: 'contrast(1.3) saturate(1.3) sepia(.1)', fx: { v:.45,t:['#e6c27a','overlay',.16] } },
+  { n: 'Aden', f: 'hue-rotate(-18deg) contrast(.9) saturate(.88) brightness(1.15)', fx: { t:['#ff9ab5','soft-light',.22],v:.1 } },
+  { n: 'Perpetua', f: 'contrast(1.1) brightness(1.08) saturate(1.1)', fx: { g:['#0f6e9e','#ffb3c8','soft-light',.38,160] } },
+  { n: 'Reyes', f: 'sepia(.22) brightness(1.1) contrast(.85) saturate(.75)', fx: { fd:.1 } },
+  { n: 'Slumber', f: 'saturate(.7) brightness(1.05) contrast(1.02)', fx: { t:['#7d6bb3','soft-light',.22],bl:.2 } },
+  { n: 'Crema', f: 'sepia(.25) contrast(1.1) brightness(1.08) saturate(.9)', fx: { t:['#ffd9b0','soft-light',.24] } },
+  { n: 'Moon', f: 'grayscale(1) contrast(1.1) brightness(1.1)', fx: { t:['#dfe7ff','soft-light',.14],v:.25 } },
+  { n: 'Inkwell', f: 'grayscale(1) contrast(1.2) brightness(1.08)', fx: { v:.15 } },
+  { n: 'Amaro', f: 'hue-rotate(-10deg) contrast(.92) brightness(1.1) saturate(1.45)', fx: { v:.2,lk:['#ffe8a8',.28,'tr'] } },
+  { n: 'Mayfair', f: 'contrast(1.1) saturate(1.1) brightness(1.04)', fx: { t:['#ff9ec8','soft-light',.2],v:.3 } },
+  { n: 'Rise', f: 'brightness(1.05) sepia(.2) contrast(.92) saturate(.92)', fx: { bl:.35,t:['#ffd8a0','soft-light',.26] } },
+  { n: 'Hudson', f: 'brightness(1.18) contrast(.92) saturate(1.1)', fx: { t:['#9ccaff','soft-light',.26],v:.25 } },
+  { n: 'Sierra', f: 'sepia(.2) contrast(1.05) brightness(.97) saturate(1.1)', fx: { fd:.1,t:['#b0a0ff','soft-light',.12] } },
+  { n: 'Willow', f: 'grayscale(.5) contrast(.95) brightness(.95)', fx: { t:['#d4a9af','soft-light',.3],fd:.1 } },
+  { n: 'Lo-Fi', f: 'saturate(1.25) contrast(1.3) brightness(.98)', fx: { v:.5 } },
+  { n: 'Earlybird', f: 'contrast(.9) sepia(.22) brightness(1.04)', fx: { t:['#d0ba8e','overlay',.3],v:.4 } },
+  { n: 'Brannan', f: 'sepia(.3) contrast(1.25) saturate(1.1)', fx: { t:['#a0a050','soft-light',.2] } },
+  { n: 'Nashville', f: 'sepia(.2) contrast(1.2) brightness(1.05) saturate(1.2)', fx: { t:['#f7b2c2','soft-light',.26],g:['#20243f','#ffb88c','soft-light',.2,180] } },
+  { n: 'Walden', f: 'brightness(1.08) sepia(.2) saturate(1.3) hue-rotate(-6deg)', fx: { lk:['#ffe060',.22,'tr'],t:['#6fb0ff','soft-light',.12] } },
+  { n: 'Toaster', f: 'contrast(1.25) brightness(.97) saturate(1.1)', fx: { t:['#ff9a40','overlay',.3],v:.5 } },
+  { n: 'Kelvin', f: 'saturate(1.6) contrast(1.1) sepia(.12) brightness(1.02)', fx: { t:['#ff8a00','overlay',.3] } },
+  { n: '1977', f: 'contrast(1.1) brightness(1.1) saturate(1.3)', fx: { t:['#f3106c','soft-light',.3] } },
+  { n: 'Hefe', f: 'contrast(1.2) saturate(1.3) sepia(.1)', fx: { v:.4,lk:['#ffd070',.25,'tl'] } },
+  { n: 'Sutro', f: 'sepia(.3) contrast(1.1) saturate(.8) brightness(.95)', fx: { v:.55,t:['#5a3a6a','soft-light',.2] } },
+  { n: 'Maven', f: 'sepia(.25) saturate(1.5) contrast(.95) brightness(.97)', fx: { t:['#e8d56a','soft-light',.2] } },
+  { n: 'Portra', f: 'contrast(.96) saturate(1.08) brightness(1.06) sepia(.1)', fx: { t:['#ffd2b0','soft-light',.22],gr:.04,fd:.06 } },
+  { n: 'Fuji', f: 'contrast(1.08) saturate(1.18) brightness(1.02) hue-rotate(4deg)', fx: { t:['#7fd6a8','soft-light',.12],gr:.05 } },
+  { n: 'Teal & Orange', f: 'contrast(1.15) saturate(1.2)', fx: { g:['#0f4a5a','#ff9a4a','soft-light',.38,180],v:.2 } },
+  { n: 'Golden Hour', f: 'brightness(1.06) saturate(1.3) contrast(1.05) sepia(.12)', fx: { lk:['#ffb347',.3,'tr'],t:['#ffc277','soft-light',.22],bl:.25 } },
+  { n: 'Matte', f: 'contrast(.9) saturate(.9) brightness(1.06)', fx: { fd:.14 } },
+  { n: 'Vivid', f: 'contrast(1.12) saturate(1.55) brightness(1.02)' },
+  { n: 'Noir', f: 'grayscale(1) contrast(1.4) brightness(.92)', fx: { v:.5,gr:.05 } },
+  { n: 'Sunset', f: 'saturate(1.35) contrast(1.08) brightness(1.03)', fx: { g:['#3a0a4a','#ff8a5a','soft-light',.4,180],lk:['#ffb070',.2,'tr'] } },
 ];
 // Picker order + categories. Newer filters are always appended at the END of STORY_FILTERS so stored extra.filter indices stay valid.
-const STORY_FILTER_NEW0 = STORY_FILTERS.findIndex(f => f.n === 'عسل');
-const STORY_FILTER_ORDER: number[] = (() => { const first = STORY_FILTERS.findIndex(f => f.n === 'كلارندون'); const nw = STORY_FILTERS.findIndex(f => f.n === 'بيتش فزّ'); const rng = (a: number, b: number) => Array.from({ length: Math.max(0, b - a) }, (_, k) => a + k); return [0, ...rng(nw, STORY_FILTER_NEW0), ...rng(STORY_FILTER_NEW0, STORY_FILTERS.length), ...rng(first, nw)]; })();
-const STORY_FILTER_CATS: { id: string; l: string; list: number[] }[] = (() => {
-  const first = STORY_FILTERS.findIndex(f => f.n === 'كلارندون'); const nw = STORY_FILTERS.findIndex(f => f.n === 'بيتش فزّ'); const rng = (a: number, b: number) => Array.from({ length: Math.max(0, b - a) }, (_, k) => a + k);
-  const defs: { id: string; l: string; r: [number, number] }[] = [{ id: 'warm', l: 'دافئ', r: [0, 18] },{ id: 'cool', l: 'بارد', r: [18, 36] },{ id: 'film', l: 'سينمائي', r: [36, 54] },{ id: 'vintage', l: 'ريترو', r: [54, 72] },{ id: 'neon', l: 'نيون', r: [72, 90] },{ id: 'soft', l: 'ناعم', r: [90, 108] },{ id: 'moody', l: 'داكن', r: [108, 126] },{ id: 'nature', l: 'طبيعة', r: [126, 144] },{ id: 'bw', l: 'أبيض وأسود', r: [144, 158] },{ id: 'duo', l: 'دو توون', r: [158, 174] },{ id: 'basic', l: 'أساسي', r: [174, 192] }];
-  return [{ id: 'all', l: 'الكل', list: STORY_FILTER_ORDER }, { id: 'top', l: 'مميّز', list: [0, ...rng(nw, STORY_FILTER_NEW0), ...rng(first, nw)] }, ...defs.map(d => ({ id: d.id, l: d.l, list: [0, ...rng(STORY_FILTER_NEW0 + d.r[0], STORY_FILTER_NEW0 + d.r[1])] }))];
-})();
+const fIdx = (names: string[]) => names.map(n => STORY_FILTERS.findIndex(f => f.n === n)).filter(i => i >= 0);
+const STORY_FILTER_ORDER: number[] = STORY_FILTERS.map((_, i) => i);
+const STORY_FILTER_CATS: { id: string; l: string; list: number[] }[] = [
+  { id: 'all', l: 'الكل', list: STORY_FILTER_ORDER },
+  { id: 'top', l: 'الأشهر', list: [0, ...fIdx(['Clarendon', 'Juno', 'Lark', 'Ludwig', 'Gingham', 'Valencia', 'X-Pro II', 'Aden', 'Mayfair', 'Amaro', 'Rise', 'Hudson'])] },
+  { id: 'warm', l: 'دافئ', list: [0, ...fIdx(['Juno', 'Valencia', 'Crema', 'Rise', 'Earlybird', 'Walden', 'Kelvin', 'Toaster', 'Golden Hour', 'Sunset', 'Portra', 'Hefe'])] },
+  { id: 'cool', l: 'بارد', list: [0, ...fIdx(['Clarendon', 'Lark', 'Hudson', 'Slumber', 'Fuji', 'Teal & Orange', 'Perpetua', 'Aden'])] },
+  { id: 'film', l: 'فيلم', list: [0, ...fIdx(['Portra', 'Fuji', 'Reyes', 'Sierra', 'Brannan', 'Nashville', '1977', 'Maven', 'Sutro', 'Matte'])] },
+  { id: 'bw', l: 'أبيض وأسود', list: [0, ...fIdx(['Moon', 'Inkwell', 'Willow', 'Noir'])] },
+];
 const GRAIN_URL = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 1.1 -.1'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")";
 function FilterFx({ i, k = 1 }: { i: number; k?: number }) {
   const fx = STORY_FILTERS[i]?.fx;
@@ -4537,7 +4295,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   useEffect(() => { if (!music && !remoteM) return; const len = mEnd > mStart ? mEnd - mStart : 30; setDur(Math.max(3, Math.min(60, Math.round(len)))); }, [music, remoteM, mStart, mEnd]);
   const [mStyle, setMStyle] = useState<'cover' | 'text' | 'none'>('none');
   const [tp, setTp] = useState<Pct | undefined>(undefined);
-  const [ly, setLy] = useState<LyState>({ on: false, raw: [], off: 0, st: 0, c: '#ffffff', p: { x: 50, y: 42, s: 1 } });
+  const [ly, setLy] = useState<LyState>({ on: false, raw: [], off: 0, st: 0, c: '#ffffff', p: { x: 50, y: 42, s: 1 }, f: 0 });
   const patchLy = (o: Partial<LyState>) => setLy(v => ({ ...v, ...o }));
   const [musicUrl, setMusicUrl] = useState('');
   useEffect(() => { if (!music) { setMusicUrl(''); return; } const u = URL.createObjectURL(music); setMusicUrl(u); return () => URL.revokeObjectURL(u); }, [music]);
@@ -4573,7 +4331,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
     let dead = false;
     const ctl = new AbortController();
     const tm = window.setTimeout(() => ctl.abort(), 9000);
-    setLy(v => ({ ...v, raw: [], on: false, off: 0 }));
+    setLy(v => ({ ...v, raw: [], on: false, off: 0, msg: '' }));
     void (async () => {
       try {
         const q = nm.replace(/\.[^.]+$/, '').replace(/\s[-–]\s/g, ' ').replace(/_+/g, ' ').slice(0, 100);
@@ -4583,6 +4341,12 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
         const lrc = hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
         if (dead || !lrc.length) return;
         setLy(v => ({ ...v, raw: lrc, off: music ? 0 : Math.round((mStartRef.current - lrc[0][0]) * 10) / 10 }));
+        // Library previews are 30 s of the song: find where the chosen verse sits so the words start with it.
+        if (!music && remoteM?.url) {
+          setLy(v => ({ ...v, msg: 'بظبط الكلمات على الكوبليه...' }));
+          const d = await syncLyricsDelta(remoteM.url, lrc);
+          if (!dead) setLy(v => (d !== null ? { ...v, off: Math.round(-d * 10) / 10, msg: 'الكلمات اتظبطت تلقائي على الكوبليه ✓' } : { ...v, msg: 'مقدرتش أظبط التوقيت تلقائي، اضغط على السطر اللي بيبدأ عنده المقطع' }));
+        }
       } catch { /* no lyrics found: the manual editor is still there */ }
     })();
     return () => { dead = true; window.clearTimeout(tm); ctl.abort(); };
@@ -4767,7 +4531,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
       let lyPack: StoryLy | undefined;
       if (ly.on && lyLines.length > 0 && (music || remoteM)) {
         const l = lyLines.filter(([t]) => Number.isFinite(t) && t >= mStart - 0.4 && t <= lyEnd).slice(0, 80).map(([t, tx]) => [Math.round(t * 100) / 100, tx.slice(0, 140)] as [number, string]);
-        if (l.length) lyPack = { l, st: ly.st, c: ly.c, p: ly.p };
+        if (l.length) lyPack = { l, st: ly.st, c: ly.c, p: ly.p, f: ly.f };
       }
       let mObj: StoryExtra['m'] = undefined;
       if (music) {
@@ -4891,7 +4655,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent pointer-events-none z-[5]" />
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
           {remoteM && !music && musicMode === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={q => setTp(o => ({ ...q, r: o?.r, s: o?.s }))} />}
-          {(music || remoteM) && ly.on && lyShown.length > 0 && <StoryLyrics ly={{ l: lyShown, st: ly.st, c: ly.c, p: ly.p }} idx={lyIdx} onMove={tool === 'music' ? (q => patchLy({ p: { ...ly.p, x: q.x, y: q.y } })) : undefined} />}
+          {(music || remoteM) && ly.on && lyShown.length > 0 && <StoryLyrics ly={{ l: lyShown, st: ly.st, c: ly.c, p: ly.p, f: ly.f }} idx={lyIdx} onMove={tool === 'music' ? (q => patchLy({ p: { ...ly.p, x: q.x, y: q.y } })) : undefined} onScale={tool === 'music' ? (sc => patchLy({ p: { ...ly.p, s: sc } })) : undefined} />}
           <FilterFx i={flt} k={isVideo ? 1 : fk / 100} />
           {IS_TOUCH && selItem && tool !== 'draw' && (
             <div className="absolute top-14 inset-x-0 z-[32] flex justify-center pointer-events-none">
@@ -4948,7 +4712,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <div className="flex gap-2 overflow-x-auto no-scrollbar items-center">
             <button onClick={() => itemPick.current?.click()} className="shrink-0 h-12 px-4 rounded-full bg-white/15 ring-1 ring-white/30 text-white text-sm font-semibold flex items-center gap-2 active:scale-95"><ImageIcon size={18} color="#fff" /> صورة</button>
             <button onClick={() => setStoreOpen(true)} className="shrink-0 h-12 px-4 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold flex items-center gap-2 active:scale-95"><Sparkles size={18} color="#fff" /> متجر KIX</button>
-            {['😍', '🔥', '😂', '🎉', '❤️', '😎', '🙏', '💯', '⭐', '👏', '🥰', '😭', '🤩', '😘', '🤝', '💪', '🌹', '☀️', '🌙', '✨', '🎶', '🥳', '😅', '🤔'].map(e => <button key={e} onClick={() => addItem('e', e)} className="text-3xl shrink-0 w-12 h-12 rounded-full bg-white/10 active:scale-90 transition-transform">{e}</button>)}
+            {['😍', '🔥', '😂', '🎉', '❤️', '😎', '🙏', '💯', '⭐', '👏', '🥰', '😭', '🤩', '😘', '🤝', '💪', '🌹', '☀️', '🌙', '✨', '🎶', '🥳', '😅', '🤔', '🫶', '🤭', '😴', '🤤', '😱', '🥺', '😡', '🤯', '🫡', '🤌', '👀', '💔', '💖', '💫', '🌈', '🍕', '🍔', '☕', '🎂', '🎁', '🏆', '⚽', '🚀', '👑', '💎', '🦋', '🐱', '🐶', '🌸', '🌴', '🏖️', '📸', '🎧', '🕌', '🤲', '☪️', '🌟'].map(e => <button key={e} onClick={() => addItem('e', e)} className="text-3xl shrink-0 w-12 h-12 rounded-full bg-white/10 active:scale-90 transition-transform">{e}</button>)}
           </div>
           {selControls}
         </div>}
@@ -4992,7 +4756,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
                 : <MusicLibrary onDevice={() => musicPick.current?.click()} onClose={remoteM ? () => setLibOpen(false) : undefined} onPick={t => { setMusic(null); setRemoteM(t); setMStart(t.start ?? 0); setMEnd(t.end ?? 0); setMStyle(t.cover ? 'cover' : 'none'); setLibOpen(false); }} />}
             </div>}
           <input ref={musicPick} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setMusic(f); setRemoteM(null); setMStart(0); setMEnd(0); } }} />
-          {(music || remoteM) && musicMode === 'lyrics' && <StoryLyricsEditor ly={ly} patch={patchLy} name={music ? music.name : remoteM?.name ?? ''} isFile={!!music} start={mStart} end={mEnd} playing={lyPlay} setPlaying={setLyPlay} />}</div>}
+          {(music || remoteM) && musicMode === 'lyrics' && <StoryLyricsEditor ly={ly} patch={patchLy} name={music ? music.name : remoteM?.name ?? ''} isFile={!!music} start={mStart} end={mEnd} playing={lyPlay} setPlaying={setLyPlay} srcUrl={remoteM?.url} />}</div>}
         {tool === 'tags' && <div className="space-y-2 mb-2">{([[MapPin, loc, setLoc, 'أضف موقعاً'], [AtSign, men, setMen, 'منشن لصديق (اسم المستخدم)'], [LinkIcon, lnk, setLnk, 'رابط أو هاشتاج']] as const).map(([Ic, v, set, ph]) => <div key={ph} className="flex items-center gap-2 bg-white/10 rounded-full ps-3"><Ic size={18} color="#fff" strokeWidth={2.2} /><input value={v} onChange={e => set(e.target.value)} placeholder={ph} className="flex-1 min-w-0 px-2 py-2 bg-transparent text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>)}
           {menHints.length > 0 && <div className="flex gap-2 overflow-x-auto no-scrollbar">{menHints.map(u => <button key={u.id} onClick={() => setMen(u.username)} className="shrink-0 flex items-center gap-2 pe-3 ps-1 py-1 rounded-full bg-white/10 text-white text-xs active:scale-95"><Avatar userId={u.id} src={u.avatar} name={u.displayName} size="sm" />@{u.username}</button>)}</div>}
           {menName && !menUser && menHints.length === 0 && <p className="text-[11px] text-amber-300 px-2">مفيش مستخدم بالاسم ده، اختار حد من المقترحات</p>}
@@ -5119,8 +4883,31 @@ function pctDrag(onMove?: (p: Pct) => void) {
   };
 }
 
-type StoryLy = { l: [number, string][]; st: number; c: string; p?: Pct };
-type LyState = { on: boolean; raw: [number, string][]; off: number; st: number; c: string; p: Pct };
+type StoryLy = { l: [number, string][]; st: number; c: string; p?: Pct; f?: number };
+type LyState = { on: boolean; raw: [number, string][]; off: number; st: number; c: string; p: Pct; f?: number; msg?: string };
+// Fonts for the lyrics (Arabic + Latin). They load from Google Fonts; the fallbacks keep working offline.
+const LY_FONTS: { n: string; css: string }[] = [
+  { n: 'افتراضي', css: 'inherit' }, { n: 'القاهرة', css: "'Cairo',sans-serif" }, { n: 'تجوال', css: "'Tajawal',sans-serif" },
+  { n: 'أميري', css: "'Amiri','Times New Roman',serif" }, { n: 'كوفي', css: "'Reem Kufi',sans-serif" }, { n: 'لالزار', css: "'Lalezar',sans-serif" },
+  { n: 'رقعة', css: "'Aref Ruqaa',serif" }, { n: 'رقّاص', css: "'Rakkas',sans-serif" }, { n: 'شانجا', css: "'Changa',sans-serif" }, { n: 'المسيري', css: "'El Messiri',sans-serif" },
+  { n: 'Bebas', css: "'Bebas Neue',Impact,sans-serif" }, { n: 'Pacifico', css: "'Pacifico',cursive" }, { n: 'Playfair', css: "'Playfair Display',Georgia,serif" }, { n: 'Mono', css: "'Courier Prime','Courier New',monospace" },
+];
+function loadLyFonts() {
+  if (typeof document === 'undefined' || document.getElementById('ky-fonts')) return;
+  const l = document.createElement('link'); l.id = 'ky-fonts'; l.rel = 'stylesheet';
+  l.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@700;900&family=Tajawal:wght@700;900&family=Amiri:wght@700&family=Reem+Kufi:wght@700&family=Lalezar&family=Aref+Ruqaa:wght@700&family=Rakkas&family=Changa:wght@700&family=El+Messiri:wght@700&family=Bebas+Neue&family=Pacifico&family=Playfair+Display:wght@700;900&family=Courier+Prime:wght@700&display=swap';
+  document.head.appendChild(l);
+}
+// The library songs are 30 s previews while their lyrics are timed on the whole song: the server listens to the
+// preview and finds where it sits in the song. Returns delta (song time = preview time + delta) or null.
+async function syncLyricsDelta(url: string, lrc: [number, string][]): Promise<number | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('kan-lyric-sync', { body: { url, lines: lrc.slice(0, 400) } });
+    if (error) return null;
+    const d = data as { ok?: boolean; delta?: number } | null;
+    return d?.ok && typeof d.delta === 'number' && Number.isFinite(d.delta) ? d.delta : null;
+  } catch { return null; }
+}
 const LY_STYLES = ['كلاسيك', 'كاريوكي', 'صندوق', 'نيون', 'كلمة كلمة', 'ملصق', 'تدرّج', 'زجاج'];
 const LY_COLORS = ['#ffffff', '#ffd23f', '#ff5d8f', '#4cc9f0', '#80ed99', '#b388ff', '#ff9e00', '#111111'];
 function lyInk(hex: string): string {
@@ -5147,8 +4934,10 @@ function lyActive(l: [number, string][], t: number): number {
 }
 
 // Song lyrics shown over a story, in step with the music (Instagram style), with 6 looks and any colour.
-function StoryLyrics({ ly, idx, onMove }: { ly: StoryLy; idx: number; onMove?: (p: Pct) => void }) {
+function StoryLyrics({ ly, idx, onMove, onScale }: { ly: StoryLy; idx: number; onMove?: (p: Pct) => void; onScale?: (s: number) => void }) {
   const p = ly.p ?? { x: 50, y: 42, s: 1 };
+  const pin = useRef<{ d: number; s: number } | null>(null);
+  useEffect(() => { loadLyFonts(); }, []);
   const c = ly.c || '#ffffff';
   const ink = lyInk(c);
   const cur = idx >= 0 ? ly.l[idx]?.[1] ?? '' : '';
@@ -5174,7 +4963,11 @@ function StoryLyrics({ ly, idx, onMove }: { ly: StoryLy; idx: number; onMove?: (
   else if (ly.st === 6) body = cur && <div key={idx} className="text-[28px] font-black leading-tight" style={{ backgroundImage: `linear-gradient(100deg, ${c}, #ff5d8f 55%, #4cc9f0)`, WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 2px 10px rgba(0,0,0,.45))', ...anim }}>{cur}</div>;
   else body = cur && <div key={idx} style={anim}><span className="inline-block text-[21px] font-bold leading-snug px-5 py-3 rounded-[26px]" style={{ background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(16px) saturate(1.6)', WebkitBackdropFilter: 'blur(16px) saturate(1.6)', border: '1px solid rgba(255,255,255,.38)', boxShadow: '0 8px 30px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.4)', color: c }}>{cur}</span></div>;
   return (
-    <div onPointerDown={pctDrag(onMove)} style={{ left: `${p.x}%`, top: `${p.y}%`, transform: `translate(-50%,-50%) scale(${p.s ?? 1})`, touchAction: onMove ? 'none' : undefined, color: '#fff' }}
+    <div onPointerDown={pctDrag(onMove)}
+      onTouchStart={e => { if (onScale && e.touches.length === 2) pin.current = { d: Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY) || 1, s: p.s ?? 1 }; }}
+      onTouchMove={e => { if (onScale && pin.current && e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); onScale(Math.max(0.4, Math.min(3, Math.round(pin.current.s * (d / pin.current.d) * 100) / 100))); } }}
+      onTouchEnd={e => { if (e.touches.length < 2) pin.current = null; }}
+      style={{ left: `${p.x}%`, top: `${p.y}%`, transform: `translate(-50%,-50%) scale(${p.s ?? 1})`, touchAction: onMove ? 'none' : undefined, color: '#fff', fontFamily: LY_FONTS[ly.f ?? 0]?.css ?? 'inherit' }}
       className={`absolute z-10 w-[88%] text-center kan-always-white break-words ${onMove ? 'min-h-[3rem] cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-2xl p-1' : 'pointer-events-none'}`}>
       <style>{'@keyframes kyIn{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}@keyframes kyWord{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}'}</style>
       {body || (onMove ? <div className="text-sm opacity-60">كلمات الأغنية</div> : null)}
@@ -5197,9 +4990,18 @@ function MusicModeBar({ mode, onMode, hasCover, hasLyrics }: { mode: 'lyrics' | 
   );
 }
 
-function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPlaying }: {
-  ly: LyState; patch: (o: Partial<LyState>) => void; name: string; isFile: boolean; start: number; end: number; playing: boolean; setPlaying: (b: boolean) => void;
+function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPlaying, srcUrl }: {
+  ly: LyState; patch: (o: Partial<LyState>) => void; name: string; isFile: boolean; start: number; end: number; playing: boolean; setPlaying: (b: boolean) => void; srcUrl?: string;
 }) {
+  useEffect(() => { loadLyFonts(); }, []);
+  const autoSync = async (lrc: [number, string][]): Promise<boolean> => {
+    if (isFile || !srcUrl || !lrc.length) return false;
+    setMsg('بظبط الكلمات على الكوبليه اللي اخترته...');
+    const d = await syncLyricsDelta(srcUrl, lrc);
+    if (d === null) return false;
+    patch({ off: Math.round(-d * 10) / 10 });
+    return true;
+  };
   const [msg, setMsg] = useState('');
   const [txt, setTxt] = useState('');
   const [open, setOpen] = useState(false);
@@ -5224,7 +5026,8 @@ function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPl
       const lrc = hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
       if (lrc.length) {
         patch({ raw: lrc, on: true, off: isFile ? 0 : Math.round((start - lrc[0][0]) * 10) / 10 });
-        setMsg(isFile ? 'لقيت الكلمات متزامنة' : 'لقيت الكلمات. اضغط على السطر اللي بيبدأ عنده المقطع عشان تظبط التزامن');
+        if (isFile) setMsg('لقيت الكلمات متزامنة');
+        else setMsg((await autoSync(lrc)) ? 'لقيت الكلمات وظبطتها على الكوبليه ✓' : 'لقيت الكلمات. اضغط على السطر اللي بيبدأ عنده المقطع عشان تظبط التزامن');
       } else {
         const plain = j.find(x => x.plainLyrics)?.plainLyrics;
         if (plain) { applyText(plain); setMsg('لقيت الكلمات من غير توقيت، وزّعتها على المقطع. عدّل التوقيت يدوي لو محتاج'); }
@@ -5245,7 +5048,8 @@ function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPl
           <button onClick={() => void find()} disabled={busy} className="flex-1 min-w-0 py-2 rounded-full bg-white text-black text-xs font-bold disabled:opacity-60 truncate">{busy ? 'بدوّر...' : 'بحث تلقائي عن الكلمات'}</button>
           <button onClick={() => setOpen(o => !o)} className="flex-1 min-w-0 py-2 rounded-full bg-white/10 text-white text-xs font-semibold truncate">اكتب أو الصق الكلمات</button>
         </div>
-        {msg && <p className="mt-1.5 px-1 text-[11px] text-white/80">{msg}</p>}
+        {(msg || ly.msg) && <p className="mt-1.5 px-1 text-[11px] text-white/80">{msg || ly.msg}</p>}
+        {!isFile && srcUrl && ly.raw.length > 0 && <button onClick={async () => { const ok = await autoSync(ly.raw); setMsg(ok ? 'الكلمات اتظبطت على الكوبليه ✓' : 'ماقدرتش أظبطها تلقائي. اضغط على السطر اللي بيبدأ عنده المقطع'); }} className="mt-1.5 w-full py-2 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 text-white text-xs font-bold active:scale-95">ضبط تلقائي على الكوبليه المختار</button>}
         {open && (
           <div className="mt-2">
             <textarea value={txt} onChange={e => setTxt(e.target.value)} rows={5} placeholder="اكتب سطور الكوبليه، كل سطر لوحده. أو الصق كلمات بصيغة LRC فيها التوقيت" className="w-full rounded-xl bg-white/10 p-2 text-base text-white placeholder-white/40 outline-none resize-none" />
@@ -5258,13 +5062,15 @@ function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPl
             {LY_COLORS.map(col => <button key={col} onClick={() => patch({ c: col })} aria-label="لون الكلمات" className={`shrink-0 w-7 h-7 rounded-full border-2 ${ly.c === col ? 'border-white scale-110' : 'border-white/30'}`} style={{ background: col }} />)}
             <input type="color" value={/^#[0-9a-f]{6}$/i.test(ly.c) ? ly.c : '#ffffff'} onChange={e => patch({ c: e.target.value })} aria-label="لون مخصص" className="shrink-0 w-7 h-7 rounded-full bg-transparent border-2 border-white/30 p-0" />
           </div>
-          <div className="mt-2 flex items-center gap-2 px-1"><span className="text-[11px] text-gray-300 shrink-0">الحجم · اسحب الكلمات لتحريكها</span><input type="range" min={0.6} max={1.6} step={0.05} value={ly.p.s ?? 1} onChange={e => patch({ p: { ...ly.p, s: Number(e.target.value) } })} className="flex-1 min-w-0 accent-white" /></div>
+          <div className="mt-2 flex items-center gap-2 px-1"><span className="text-[11px] text-gray-300 shrink-0">الحجم</span><button onClick={() => patch({ p: { ...ly.p, s: Math.max(0.4, Math.round(((ly.p.s ?? 1) - 0.1) * 100) / 100) } })} className="shrink-0 w-8 h-8 rounded-full bg-white/10 text-white text-base font-bold active:scale-90">−</button><input type="range" min={0.4} max={3} step={0.05} value={ly.p.s ?? 1} onChange={e => patch({ p: { ...ly.p, s: Number(e.target.value) } })} className="flex-1 min-w-0 accent-white" /><button onClick={() => patch({ p: { ...ly.p, s: Math.min(3, Math.round(((ly.p.s ?? 1) + 0.1) * 100) / 100) } })} className="shrink-0 w-8 h-8 rounded-full bg-white/10 text-white text-base font-bold active:scale-90">+</button></div>
+          <p className="px-1 text-[10.5px] text-white/55">اسحب الكلمات لتحريكها، وبإصبعين كبّرها أو صغّرها على الصورة</p>
+          <div className="mt-2 flex gap-2 overflow-x-auto no-scrollbar">{LY_FONTS.map((f, i) => <button key={f.n} onClick={() => patch({ f: i })} style={{ fontFamily: f.css }} className={chip((ly.f ?? 0) === i)}>{f.n}</button>)}</div>
           <div className="mt-2 flex items-center gap-2">
             <button onClick={() => setPlaying(!playing)} className="shrink-0 px-3 h-8 rounded-full bg-white text-black text-xs font-bold flex items-center gap-1.5">{playing ? <Pause size={13} /> : <Play size={13} />}{playing ? 'إيقاف' : 'جرّب مع الصوت'}</button>
             <div className="flex-1 min-w-0 flex items-center justify-end gap-1.5">
-              <button onClick={() => patch({ off: Math.round((ly.off - 0.5) * 10) / 10 })} className="px-2.5 h-8 rounded-full bg-white/10 text-white text-[11px]">أبكر</button>
+              <button onClick={() => patch({ off: Math.round((ly.off - 0.2) * 10) / 10 })} className="px-2.5 h-8 rounded-full bg-white/10 text-white text-[11px]">أبكر</button>
               <span className="text-[11px] text-white tabular-nums w-12 text-center" dir="ltr">{ly.off.toFixed(1)}s</span>
-              <button onClick={() => patch({ off: Math.round((ly.off + 0.5) * 10) / 10 })} className="px-2.5 h-8 rounded-full bg-white/10 text-white text-[11px]">أبطأ</button>
+              <button onClick={() => patch({ off: Math.round((ly.off + 0.2) * 10) / 10 })} className="px-2.5 h-8 rounded-full bg-white/10 text-white text-[11px]">أبطأ</button>
             </div>
           </div>
           <p className="mt-2 px-1 text-[11px] text-white/70">اختار الكوبليه: الكلمات هتبدأ من أول سطر تدوس عليه وتكمّل لحد آخر المقطع بس</p>
@@ -5952,6 +5758,127 @@ function formatBytes(bytes?: number): string {
 }
 
 // Short text shown when a message is quoted in a reply.
+// ============ Chat "+" panel (opens above the keyboard, in its place) + shared locations ============
+const LOC_MSG = '⟦loc⟧';
+const locMsgText = (l: GeoLoc) => LOC_MSG + geoTag(l);
+const parseLocMsg = (t?: string | null): GeoLoc | null => (t && t.startsWith(LOC_MSG) ? parseGeo(t.slice(LOC_MSG.length)).loc : null);
+const chatPreviewText = (t?: string | null) => (parseLocMsg(t) ? '📍 موقع' : parsePoll(t) ? '📊 استطلاع' : (t ?? ''));
+const PLACES_KEY = 'kix_saved_places';
+const readPlaces = (): GeoLoc[] => { try { const v = JSON.parse(localStorage.getItem(PLACES_KEY) || '[]') as GeoLoc[]; return Array.isArray(v) ? v.filter(x => x && Number.isFinite(x.lat) && Number.isFinite(x.lng)) : []; } catch { return []; } };
+const writePlaces = (l: GeoLoc[]) => { try { localStorage.setItem(PLACES_KEY, JSON.stringify(l.slice(0, 200))); } catch { /* ignore */ } };
+const samePlace = (a: GeoLoc, b: GeoLoc) => Math.abs(a.lat - b.lat) < 1e-5 && Math.abs(a.lng - b.lng) < 1e-5;
+const mapsUrl = (l: GeoLoc) => `https://www.google.com/maps?q=${l.lat},${l.lng}`;
+const osmTile = (l: GeoLoc, z = 15) => {
+  const n = 2 ** z; const r = (l.lat * Math.PI) / 180;
+  const x = Math.max(0, Math.min(n - 1, Math.floor(((l.lng + 180) / 360) * n)));
+  const y = Math.max(0, Math.min(n - 1, Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n)));
+  return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+};
+
+// A location inside a chat bubble: tap for the map, save it for later, or pass it on straight away.
+function ChatLocation({ loc }: { loc: GeoLoc }) {
+  const [saved, setSaved] = useState(() => readPlaces().some(p => samePlace(p, loc)));
+  const [map, setMap] = useState(false);
+  const [note, setNote] = useState('');
+  const flash = (n: string) => { setNote(n); window.setTimeout(() => setNote(''), 1600); };
+  const toggleSave = () => {
+    const list = readPlaces(); const has = list.some(p => samePlace(p, loc));
+    writePlaces(has ? list.filter(p => !samePlace(p, loc)) : [loc, ...list]);
+    setSaved(!has); flash(has ? 'اتشال من المحفوظات' : 'اتحفظ ✓');
+  };
+  const share = async () => {
+    const url = mapsUrl(loc);
+    try {
+      if (navigator.share) { await navigator.share({ title: loc.name || 'موقع', text: loc.name || 'موقع', url }); return; }
+      await navigator.clipboard.writeText(url); flash('اتنسخ الرابط ✓');
+    } catch { /* cancelled */ }
+  };
+  const btn = 'flex-1 h-9 rounded-xl bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform';
+  return (
+    <div className="w-60 max-w-full" onClick={e => e.stopPropagation()}>
+      <button onClick={() => setMap(true)} aria-label="عرض على الخريطة" className="relative block w-full h-28 rounded-xl overflow-hidden bg-gray-700 active:scale-[0.98] transition-transform">
+        <img src={osmTile(loc)} alt="" loading="lazy" draggable={false} className="absolute inset-0 w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />
+        <span className="absolute inset-0 flex items-center justify-center text-4xl drop-shadow-lg" style={{ transform: 'translateY(-6px)' }}>📍</span>
+      </button>
+      <div className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-white"><MapPin size={14} color="#fff" className="shrink-0" /><span className="truncate" dir="auto">{loc.name || 'الموقع على الخريطة'}</span></div>
+      <div className="mt-2 flex gap-2">
+        <button onClick={toggleSave} className={btn}><Bookmark size={14} color="#fff" fill={saved ? '#fff' : 'none'} />{saved ? 'محفوظ' : 'حفظ'}</button>
+        <button onClick={() => void share()} className={btn}><Share2 size={14} color="#fff" />مشاركة</button>
+      </div>
+      {note && <div className="mt-1.5 text-[11px] text-white/80 text-center">{note}</div>}
+      {map && <LocationMapModal loc={loc} onClose={() => setMap(false)} />}
+    </div>
+  );
+}
+
+function LocationShareSheet({ onSend, onClose }: { onSend: (l: GeoLoc) => void; onClose: () => void }) {
+  const [pick, setPick] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [places, setPlaces] = useState<GeoLoc[]>(() => readPlaces());
+  useBackLayer(!pick, onClose);
+  const here = () => {
+    if (!navigator.geolocation) { setMsg('المتصفح لا يدعم تحديد الموقع'); return; }
+    setBusy(true); setMsg('');
+    navigator.geolocation.getCurrentPosition(
+      pos => { setBusy(false); onSend({ lat: pos.coords.latitude, lng: pos.coords.longitude, name: 'موقعي الحالي' }); },
+      () => { setBusy(false); setMsg('مقدرتش أحدد موقعك، اسمح للمتصفح بالوصول للموقع'); },
+      { enableHighAccuracy: true, timeout: 12000 },
+    );
+  };
+  if (pick) return <LocationPicker onClose={() => setPick(false)} onPick={onSend} />;
+  return createPortal(
+    <div dir={DIR} className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div className="kan-theme-text kan-pop relative w-full max-w-md bg-gray-900 rounded-t-3xl sm:rounded-3xl p-5 border border-white/10 max-h-[80svh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h4 className="text-center font-bold text-white mb-4">📍 مشاركة موقع</h4>
+        <button onClick={here} disabled={busy} className="w-full py-3 mb-2 rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 text-white font-bold disabled:opacity-60 flex items-center justify-center gap-2 active:scale-[0.98]"><MapPin size={18} color="#fff" />{busy ? 'بحدد موقعك...' : 'ابعت موقعي الحالي'}</button>
+        <button onClick={() => setPick(true)} className="w-full py-3 rounded-2xl bg-white/10 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98]"><Search size={18} color="#fff" />اختار مكان من الخريطة</button>
+        {msg && <p className="mt-2 text-center text-xs text-red-300">{msg}</p>}
+        {places.length > 0 && (
+          <>
+            <p className="mt-5 mb-2 text-xs font-bold text-gray-400">أماكن محفوظة</p>
+            <div className="space-y-1.5">
+              {places.map((p, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-xl bg-white/5 pe-1">
+                  <button onClick={() => onSend(p)} className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 text-start text-sm text-white"><Bookmark size={15} color="#fff" fill="#fff" className="shrink-0" /><span className="truncate" dir="auto">{p.name || 'مكان محفوظ'}</span></button>
+                  <button onClick={() => { const n = places.filter((_, k) => k !== i); setPlaces(n); writePlaces(n); }} aria-label="حذف" className="p-2 text-gray-400"><X size={15} /></button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function ChatPlusPanel({ onPickFiles, onPoll, onLocation, onAi, onGames }: { onPickFiles: (accept: string) => void; onPoll: () => void; onLocation: () => void; onAi: () => void; onGames?: () => void }) {
+  const tiles: { k: string; icon: React.ReactNode; label: string; bg: string; run: () => void }[] = [
+    { k: 'media', icon: <ImageIcon size={26} color="#fff" />, label: 'صورة / فيديو', bg: 'from-pink-500 to-rose-500', run: () => onPickFiles('image/*,video/*') },
+    { k: 'file', icon: <FileText size={26} color="#fff" />, label: 'ملف', bg: 'from-sky-500 to-indigo-500', run: () => onPickFiles('') },
+    { k: 'loc', icon: <MapPin size={26} color="#fff" />, label: 'موقع', bg: 'from-emerald-500 to-teal-500', run: onLocation },
+    { k: 'poll', icon: <span className="text-2xl leading-none">📊</span>, label: 'استطلاع', bg: 'from-amber-500 to-orange-500', run: onPoll },
+    ...(onGames ? [{ k: 'game', icon: <Gamepad2 size={26} color="#fff" />, label: 'العب', bg: 'from-fuchsia-500 to-purple-600', run: onGames }] : []),
+    { k: 'ai', icon: <Sparkles size={26} color="#fff" />, label: 'اسأل KIX', bg: 'from-violet-600 to-cyan-500', run: onAi },
+  ];
+  return (
+    <motion.div dir={DIR} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()}
+      initial={{ height: 0, opacity: 0 }} animate={{ height: 240, opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', damping: 28, stiffness: 340 }}
+      className="mt-2 w-full overflow-hidden bg-gray-900/70 border-t border-white/10">
+      <div className="grid grid-cols-3 min-[420px]:grid-cols-4 gap-x-3 gap-y-4 p-4">
+        {tiles.map((x, i) => (
+          <motion.button key={x.k} onClick={x.run} initial={{ opacity: 0, y: 22, scale: 0.85 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ delay: 0.04 + i * 0.035, type: 'spring', damping: 18, stiffness: 380 }} whileTap={{ scale: 0.92 }} className="flex flex-col items-center gap-1.5">
+            <span className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${x.bg} flex items-center justify-center shadow-lg`}>{x.icon}</span>
+            <span className="text-[11px] text-gray-200 text-center leading-tight">{x.label}</span>
+          </motion.button>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 const POLL_TAG = '⟦poll⟧';
 const VOTE_TAG = '⟦vote⟧';
 function parsePoll(t?: string | null): { q: string; o: string[] } | null {
@@ -6805,7 +6732,7 @@ export default function App() {
       const k = Math.min(1, (now - t0) / dur);
       const e = 1 - Math.pow(1 - k, 3);
       window.scrollTo({ top: Math.round(from * (1 - e)), behavior: 'instant' as ScrollBehavior });
-      if (k < 1) topAnim.current = requestAnimationFrame(step); else done?.();
+      if (k < 1) topAnim.current = requestAnimationFrame(step); else { window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; done?.(); }
     };
     topAnim.current = requestAnimationFrame(step);
   };
@@ -6912,7 +6839,7 @@ export default function App() {
 
   return (
     <div dir={LANG === 'en' ? 'ltr' : 'rtl'} className="min-h-[100dvh] bg-gray-950 text-white font-sans overflow-x-clip">
-      <style>{'html,body{-webkit-text-size-adjust:100%;overflow-x:hidden}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
+      <style>{'html,body{-webkit-text-size-adjust:100%;overflow-x:hidden;overscroll-behavior-y:none;scroll-behavior:auto;-webkit-tap-highlight-color:transparent}img,video{-webkit-user-drag:none}.post-card{transform:translateZ(0);backface-visibility:hidden}.no-scrollbar,[class*=overflow-y-auto],[class*=overflow-x-auto]{-webkit-overflow-scrolling:touch}button,a{touch-action:manipulation}@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
       <KanDialogHost />
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={popScreen} />}
@@ -7622,19 +7549,21 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
   useEffect(() => {
     if (!auto) return;
     const a = ref.current;
-    const box = (holder.current?.closest('.post-card') as HTMLElement | null) ?? holder.current;
+    const card = holder.current?.closest('.post-card') as HTMLElement | null;
+    // The sound belongs to the picture: it plays only while the picture is really on screen and stops the moment it is not.
+    const box = (card?.querySelector('img, video') as HTMLElement | null) ?? card ?? holder.current;
     if (!a || !box || typeof IntersectionObserver === 'undefined') return;
     let vis = false;
     const io = new IntersectionObserver(([en]) => {
-      vis = en.isIntersecting && en.intersectionRatio >= 0.5;
-      if (en.isIntersecting && en.intersectionRatio >= 0.5) {
+      vis = en.isIntersecting && en.intersectionRatio >= 0.4;
+      if (vis) {
         if (playingAudio && playingAudio !== a) playingAudio.pause();
         playingAudio = a;
         // Browsers can refuse sound before a tap: retry on the first touch while the post is on screen.
         const go = () => { if (a.currentTime < start || a.currentTime >= start + win) a.currentTime = start; void a.play().catch(() => { const r = () => { if (vis && a.paused) void a.play().catch(() => undefined); }; window.addEventListener('pointerdown', r, { once: true }); window.addEventListener('touchend', r, { once: true }); }); };
         if (a.readyState >= 1) go(); else { a.addEventListener('loadedmetadata', go, { once: true }); a.load(); }
       } else { a.pause(); }
-    }, { threshold: [0, 0.5, 1] });
+    }, { threshold: [0, 0.15, 0.4, 0.7, 1] });
     io.observe(box);
     const hide = () => { if (document.hidden) a.pause(); };
     document.addEventListener('visibilitychange', hide);
@@ -7846,7 +7775,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }} className="post-card bg-gray-900 border border-gray-800 rounded-2xl max-lg:bg-transparent max-lg:border-x-0 max-lg:border-t-0 max-lg:rounded-none overflow-hidden [contain:layout_paint] [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
+    <motion.div initial={false} className="post-card bg-gray-900 border border-gray-800 rounded-2xl max-lg:bg-transparent max-lg:border-x-0 max-lg:border-t-0 max-lg:rounded-none overflow-hidden [contain:layout_paint] [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
       <div className="p-4 flex items-center gap-3">
         <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
           <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="md" />
@@ -7869,7 +7798,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         {post.music && <MusicBar music={post.music} auto={post.media?.type === 'image'} />}
         {post.text && (
           <div className="px-4 pb-3">
-            <PostText text={post.text} hideLoc={!!post.media} className="text-white text-[16px] leading-7 whitespace-pre-wrap" />
+            <PostText text={post.text} hideLoc={!!post.media} expandable className="text-white text-[16px] leading-7 whitespace-pre-wrap" />
           </div>
         )}
 
@@ -7934,7 +7863,6 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         {post.media && post.text && <PostLoc text={post.text} />}
       </div>
 
-      {post.likes.length > 0 && <div className="px-4 pt-3"><LikedByLine likes={post.likes} users={users} currentUser={currentUser} onClick={() => setListModal({ title: 'الإعجابات', ids: post.likes })} /></div>}
       <div className="px-4 py-3 flex items-center gap-1 border-t border-gray-800/50">
         <div className="flex items-center">
           <button onClick={toggleLike} className={`p-2 rounded-full transition-all ${isLiked ? 'text-red-400' : 'text-gray-500 hover:text-red-400'}`}>
@@ -8116,7 +8044,7 @@ function EditPostSheet({ post, setPosts, onClose }: { post: Post; setPosts: Reac
         title: hasTitle ? (newTitle || undefined) : post.title,
         media: main ? { type: main.type, url: main.url, name: main.name, size: main.size } : undefined,
         extraMedia: rest.length ? rest.map(x => ({ type: x.type, url: x.url, name: x.name, size: x.size })) : undefined,
-        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10), start: musicItem.start, end: musicItem.end, vv: musicItem.vv, mv: musicItem.mv } : undefined,
+        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10), start: musicItem.start, end: musicItem.end, vv: musicItem.vv, mv: musicItem.mv, ly: musicItem.ly } : undefined,
       };
       const [shown] = await signPostsMedia([base]);
       setPosts(prev => prev.map(p => (p.id === post.id ? shown : p)));
@@ -8230,8 +8158,16 @@ function togglePostLike(post: Post, me: string, setPosts: React.Dispatch<React.S
   })();
 }
 
-function ReelMusic({ music, videoRef, muted }: { music: { url: string; start?: number; end?: number; vv?: number; mv?: number }; videoRef: React.RefObject<HTMLVideoElement | null>; muted: boolean }) {
+function ReelMusic({ music, videoRef, muted }: { music: { url: string; start?: number; end?: number; vv?: number; mv?: number; ly?: StoryLy }; videoRef: React.RefObject<HTMLVideoElement | null>; muted: boolean }) {
   const ref = useRef<HTMLAudioElement>(null);
+  const [lyIdx, setLyIdx] = useState(-1);
+  useEffect(() => {
+    const l = music.ly?.l; if (!l || l.length === 0) return;
+    let raf = 0;
+    const loop = () => { raf = requestAnimationFrame(loop); const a = ref.current; if (a && !a.paused) setLyIdx(lyActive(l, a.currentTime)); };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [music.ly]);
   const start = music.start ?? 0;
   const end = music.end && music.end > start ? music.end : start + 30;
   useEffect(() => {
@@ -8248,7 +8184,7 @@ function ReelMusic({ music, videoRef, muted }: { music: { url: string; start?: n
     if (!v.paused) go();
     return () => { v.removeEventListener('play', go); v.removeEventListener('pause', stop); v.removeEventListener('ended', stop); a.removeEventListener('timeupdate', tick); a.pause(); };
   }, [videoRef, start, end, music.url, music.vv, music.mv, muted]);
-  return <audio ref={ref} src={music.url} preload="auto" muted={muted || music.mv === 0} />;
+  return <><audio ref={ref} src={music.url} preload="auto" muted={muted || music.mv === 0} />{music.ly && <StoryLyrics ly={music.ly} idx={lyIdx} />}</>;
 }
 
 function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleMute, setPosts, onOpenProfile, onOpenComments, onShowLikes, autoNext, onNext }: {
@@ -8467,12 +8403,11 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
               onClick={() => toggleFollow(author.id)}
               className={`shrink-0 px-5 py-2 rounded-full text-sm font-extrabold active:scale-95 transition-all ${isFollowing ? 'bg-white/15 text-white border border-white/25' : 'bg-white/25 border border-white/40 text-white'}`}
             >
-              {isFollowing ? t('متابَع') : t('متابعة')}
+              {isFollowing ? t('متابَع') : author.following.includes(currentUser.id) ? t('متابعة بالمثل') : t('متابعة')}
             </button>
           )}
         </div>
-        {post.text && parseGeo(post.text).body && <p className="text-white text-sm leading-snug line-clamp-2 whitespace-pre-wrap" dir="auto"><MentionText text={parseGeo(post.text).body} /></p>}
-        {post.likes.length > 0 && <div className="mt-1.5"><LikedByLine light likes={post.likes} users={users} currentUser={currentUser} onClick={onShowLikes} /></div>}
+        {post.text && parseGeo(post.text).body && <div className="max-h-[38vh] overflow-y-auto overscroll-contain no-scrollbar" data-noswipe><ExpandableText light lines={2} text={parseGeo(post.text).body} className="text-white text-sm leading-snug whitespace-pre-wrap drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" /></div>}
         <div className="mt-1.5 flex items-center gap-1.5 text-white/80 text-xs max-w-full"><Music size={12} className="shrink-0" /><span className="truncate" dir="auto">{audioName}</span>{(post.music?.url ?? post.media?.url) && <SaveClipButton clip={{ url: post.music?.url ?? post.media!.url, name: audioName.slice(0, 80), start: post.music?.start, end: post.music?.end }} className="w-6 h-6" />}</div>
       </div>
 
@@ -8805,7 +8740,7 @@ function VideoCard({ post, author, onOpen, saved, onSave, onChannel, subs }: { p
   );
 }
 
-function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onOpenProfile, onOpenRelated, onBack, wl, onToggleWl, subsOf, onChannel }: {
+function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile, onOpenRelated, onBack, wl, onToggleWl, subsOf, onChannel, isSub, onToggleSub, pls, onTogglePl, onCreatePl }: {
   post: Post;
   users: User[];
   currentUser: User;
@@ -8819,15 +8754,20 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
   onToggleWl: (id: string) => void;
   subsOf: (id: string) => number;
   onChannel: (id: string) => void;
+  isSub: (id: string) => boolean;
+  onToggleSub: (id: string) => void;
+  pls: VidPlaylist[];
+  onTogglePl: (plId: string, postId: string) => void;
+  onCreatePl: (name: string, firstId?: string) => void;
 }) {
+  const [plOpen, setPlOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [autoNext, setAutoNext] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const author = users.find(u => u.id === post.userId);
-  const toggleFollow = makeToggleFollow(currentUser, setUsers);
   const isLiked = post.likes.includes(currentUser.id);
-  const isFollowing = author ? currentUser.following.includes(author.id) : false;
+  const isFollowing = author ? isSub(author.id) : false;
   const commentCount = post.comments.reduce((n, c) => n + 1 + c.replies.length, 0);
 
   useEffect(() => {
@@ -8852,12 +8792,12 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
                 <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="md" />
                 <div className="text-right min-w-0">
                   <div className="text-white font-semibold text-sm truncate">{author.displayName}</div>
-                  <div className="text-xs text-gray-500">{author.followers.length} مشترك</div>
+                  <div className="text-xs text-gray-500">{subsOf(author.id)} مشترك</div>
                 </div>
               </button>
               {author.id !== currentUser.id && (
                 <button
-                  onClick={() => toggleFollow(author.id)}
+                  onClick={() => onToggleSub(author.id)}
                   className={`mr-auto px-4 py-1.5 rounded-full text-sm font-medium ${isFollowing ? 'bg-gray-800 text-gray-300' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}
                 >
                   {isFollowing ? 'مشترك ✓' : 'اشتراك'}
@@ -8886,6 +8826,10 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
             <button onClick={() => onToggleWl(post.id)} className={`px-4 py-2 border rounded-full text-sm flex items-center gap-2 ${wl.includes(post.id) ? 'bg-violet-600 border-violet-500 text-white' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
               <BookmarkIcon size={16} className={wl.includes(post.id) ? 'fill-white' : ''} /> {wl.includes(post.id) ? 'محفوظ' : 'مشاهدة لاحقاً'}
             </button>
+            <button onClick={() => setPlOpen(true)} className={`px-4 py-2 border rounded-full text-sm flex items-center gap-2 ${pls.some(p => p.items.includes(post.id)) ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
+              <Plus size={16} /> قائمة تشغيل
+            </button>
+            {plOpen && <PlaylistSheet pls={pls} postId={post.id} onToggle={onTogglePl} onCreate={onCreatePl} onClose={() => setPlOpen(false)} />}
             <button onClick={() => setAutoNext(x => !x)} className={`px-4 py-2 border rounded-full text-sm ${autoNext ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
               ⏭ تشغيل تلقائي
             </button>
@@ -8917,6 +8861,110 @@ function VideoWatch({ post, users, currentUser, setUsers, setPosts, related, onO
   );
 }
 
+type VidPlaylist = { id: string; name: string; items: string[] };
+
+// "Save to playlist" sheet (like YouTube): tick the lists the video belongs to, or start a new one.
+function PlaylistSheet({ pls, postId, onToggle, onCreate, onClose }: { pls: VidPlaylist[]; postId: string; onToggle: (plId: string, postId: string) => void; onCreate: (name: string, firstId?: string) => void; onClose: () => void }) {
+  const [name, setName] = useState('');
+  useBackLayer(true, onClose);
+  return createPortal(
+    <div dir={DIR} className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div className="kan-theme-text kan-pop relative w-full max-w-md bg-gray-900 rounded-t-3xl sm:rounded-3xl p-5 border border-white/10 max-h-[80svh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h4 className="text-center font-bold text-white mb-3">حفظ في قائمة تشغيل</h4>
+        {pls.length === 0 && <p className="text-center text-sm text-gray-400 mb-3">لسه معندكش قوائم. اعمل أول قائمة 👇</p>}
+        <div className="space-y-1.5 mb-3">
+          {pls.map(p => {
+            const on = p.items.includes(postId);
+            return (
+              <button key={p.id} onClick={() => onToggle(p.id, postId)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/5 text-start active:scale-[0.98]">
+                <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${on ? 'bg-white border-white' : 'border-white/40'}`}>{on && <Check size={14} color="#000" />}</span>
+                <span className="flex-1 min-w-0 truncate text-sm text-white" dir="auto">{p.name}</span>
+                <span className="text-xs text-gray-400">{p.items.length}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex gap-2">
+          <input value={name} onChange={e => setName(e.target.value.slice(0, 80))} onKeyDown={e => { if (e.key === 'Enter' && name.trim()) { onCreate(name, postId); setName(''); } }} placeholder="اسم القائمة الجديدة" dir="auto" className="flex-1 min-w-0 px-4 py-2.5 bg-white/10 rounded-xl text-[16px] text-white placeholder-gray-400 outline-none" />
+          <button disabled={!name.trim()} onClick={() => { onCreate(name, postId); setName(''); }} className="px-4 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold disabled:opacity-40">إنشاء</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// The Videos library: watch later, liked videos, history and your playlists.
+function VideoLibrary({ posts, users, currentUser, wl, hist, pls, onOpen, onToggleWl, onCreatePl, onDeletePl, onTogglePl, onClearHist, subsOf, onChannel, onLoadPage }: {
+  posts: Post[]; users: User[]; currentUser: User; wl: string[]; hist: string[]; pls: VidPlaylist[];
+  onOpen: (id: string) => void; onToggleWl: (id: string) => void; onCreatePl: (name: string) => void; onDeletePl: (id: string) => void;
+  onTogglePl: (plId: string, postId: string) => void; onClearHist: () => void; subsOf: (id: string) => number; onChannel: (id: string) => void;
+  onLoadPage: (opts: FetchPostsOptions) => Promise<Post[]>;
+}) {
+  const [view, setView] = useState('home');
+  const [name, setName] = useState('');
+  const tried = useRef<Set<string>>(new Set());
+  // Saved videos that are not on screen yet are fetched by id.
+  useEffect(() => {
+    const ids = [...wl, ...hist, ...pls.flatMap(p => p.items)].filter((id, i, a) => a.indexOf(id) === i && !posts.some(p => p.id === id) && !tried.current.has(id)).slice(0, 40);
+    if (ids.length === 0) return;
+    ids.forEach(id => tried.current.add(id));
+    void onLoadPage({ ids, limit: 40 }).catch(() => undefined);
+  }, [wl, hist, pls, posts, onLoadPage]);
+  const vids = (ids: string[]) => ids.map(id => posts.find(p => p.id === id)).filter((p): p is Post => !!p && p.media?.type === 'video');
+  const liked = posts.filter(p => p.isVideo && p.media?.type === 'video' && p.likes.includes(currentUser.id)).sort((a, b) => b.timestamp - a.timestamp);
+  const pl = view.startsWith('pl:') ? pls.find(p => p.id === view.slice(3)) : undefined;
+  const simple = view === 'later' || view === 'hist' || view === 'liked';
+  if (simple || pl) {
+    const list = view === 'later' ? vids(wl) : view === 'hist' ? vids(hist) : view === 'liked' ? liked : vids(pl?.items ?? []);
+    const title = view === 'later' ? '⏱ شاهد لاحقاً' : view === 'hist' ? '🕘 سجل المشاهدة' : view === 'liked' ? '👍 فيديوهات أعجبتني' : `▶ ${pl?.name ?? ''}`;
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <button onClick={() => setView('home')} className="p-1.5 text-gray-300" aria-label="رجوع"><ChevronRight size={20} /></button>
+          <h3 className="flex-1 min-w-0 truncate text-white font-bold" dir="auto">{title}</h3>
+          {list.length > 0 && <button onClick={() => onOpen(list[0].id)} className="px-3.5 h-8 rounded-full bg-white text-black text-xs font-bold flex items-center gap-1.5"><Play size={13} />تشغيل الكل</button>}
+          {pl && <button onClick={() => { onDeletePl(pl.id); setView('home'); }} className="px-3 h-8 rounded-full bg-white/10 text-red-300 text-xs font-semibold">حذف القائمة</button>}
+          {view === 'hist' && list.length > 0 && <button onClick={onClearHist} className="px-3 h-8 rounded-full bg-white/10 text-white text-xs font-semibold">مسح السجل</button>}
+        </div>
+        {list.length === 0 && <p className="text-center text-sm text-gray-400 py-12">لسه مفيش فيديوهات هنا</p>}
+        <div className="grid grid-cols-1 min-[560px]:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
+          {list.map(v => {
+            const a = users.find(u => u.id === v.userId);
+            return a ? (
+              <div key={v.id} className="relative">
+                <VideoCard post={v} author={a} onOpen={() => onOpen(v.id)} saved={wl.includes(v.id)} onSave={() => onToggleWl(v.id)} onChannel={() => onChannel(a.id)} subs={subsOf(a.id)} />
+                {pl && <button onClick={() => onTogglePl(pl.id, v.id)} aria-label="إزالة من القائمة" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/65 flex items-center justify-center"><X size={15} color="#fff" /></button>}
+              </div>
+            ) : null;
+          })}
+        </div>
+      </div>
+    );
+  }
+  const row = (key: string, label: string, n: number) => (
+    <button key={key} onClick={() => setView(key)} className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-white/5 border border-white/10 text-start active:scale-[0.99]">
+      <span className="flex-1 min-w-0 truncate text-sm font-semibold text-white" dir="auto">{label}</span>
+      <span className="text-xs text-gray-400">{n}</span>
+      <ChevronLeft size={16} className="text-gray-500" />
+    </button>
+  );
+  return (
+    <div className="space-y-2.5">
+      {row('later', '⏱ شاهد لاحقاً', wl.length)}
+      {row('liked', '👍 فيديوهات أعجبتني', liked.length)}
+      {row('hist', '🕘 سجل المشاهدة', hist.length)}
+      <p className="pt-3 pb-1 px-1 text-xs font-bold text-gray-400">قوائم التشغيل</p>
+      {pls.map(p => row(`pl:${p.id}`, `▶ ${p.name}`, p.items.length))}
+      <div className="flex gap-2 pt-1">
+        <input value={name} onChange={e => setName(e.target.value.slice(0, 80))} onKeyDown={e => { if (e.key === 'Enter' && name.trim()) { onCreatePl(name); setName(''); } }} placeholder="قائمة تشغيل جديدة" dir="auto" className="flex-1 min-w-0 px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 outline-none focus:border-violet-500" />
+        <button disabled={!name.trim()} onClick={() => { onCreatePl(name); setName(''); }} className="px-5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold disabled:opacity-40">إنشاء</button>
+      </div>
+    </div>
+  );
+}
+
 function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfile, onCreate, onLoadPage }: {
   posts: Post[];
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
@@ -8937,14 +8985,67 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const sentinel = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const videos = posts.filter(p => p.isVideo && p.media?.type === 'video').sort((a, b) => b.timestamp - a.timestamp);
-  const [vf, setVf] = useState<'all' | 'subs' | 'saved'>('all');
+  const [vf, setVf] = useState<'all' | 'subs' | 'saved' | 'lib'>('all');
   const [sort, setSort] = useState<'new' | 'top'>('new');
   const [channel, setChannel] = useState<string | null>(null);
   const wlKey = `kan_wl_${currentUser.id}`;
   const [wl, setWl] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(wlKey) || '[]'); } catch { return []; } });
   const toggleWl = (id: string) => setWl(l => { const n = l.includes(id) ? l.filter(x => x !== id) : [id, ...l]; try { localStorage.setItem(wlKey, JSON.stringify(n)); } catch { /* ignore */ } return n; });
-  const toggleFollow = makeToggleFollow(currentUser, setUsers);
-  const subsOf = (id: string) => users.filter(u => u.following.includes(id)).length;
+  // Subscribing to a channel is separate from following: following someone does not subscribe you to their videos.
+  const [subRows, setSubRows] = useState<{ user_id: string; channel_id: string }[]>([]);
+  useEffect(() => {
+    let dead = false;
+    void (async () => {
+      const { data } = await supabase.from('channel_subs').select('user_id, channel_id').limit(10000);
+      if (!dead && data) setSubRows(data as { user_id: string; channel_id: string }[]);
+    })();
+    return () => { dead = true; };
+  }, []);
+  const isSub = (id: string) => subRows.some(r => r.user_id === currentUser.id && r.channel_id === id);
+  const subsOf = (id: string) => subRows.filter(r => r.channel_id === id).length;
+  const toggleSub = async (id: string) => {
+    if (id === currentUser.id) return;
+    const had = isSub(id);
+    const mine = { user_id: currentUser.id, channel_id: id };
+    setSubRows(r => (had ? r.filter(x => !(x.user_id === mine.user_id && x.channel_id === id)) : [...r, mine]));
+    const { error } = had ? await supabase.from('channel_subs').delete().eq('user_id', currentUser.id).eq('channel_id', id) : await supabase.from('channel_subs').insert(mine);
+    if (error) setSubRows(r => (had ? [...r, mine] : r.filter(x => !(x.user_id === mine.user_id && x.channel_id === id))));
+  };
+  // Playlists (saved in the database) and the watch history (on this device).
+  const [pls, setPls] = useState<VidPlaylist[]>([]);
+  useEffect(() => {
+    let dead = false;
+    void (async () => {
+      const { data } = await supabase.from('playlists').select('id, name, playlist_items(post_id, added_at)').eq('user_id', currentUser.id).order('created_at', { ascending: true });
+      if (dead || !data) return;
+      setPls((data as unknown as { id: string; name: string; playlist_items: { post_id: string; added_at: string }[] }[]).map(r => ({ id: r.id, name: r.name, items: [...(r.playlist_items ?? [])].sort((a, b) => b.added_at.localeCompare(a.added_at)).map(i => i.post_id) })));
+    })();
+    return () => { dead = true; };
+  }, [currentUser.id]);
+  const createPl = async (name: string, firstId?: string) => {
+    const nm = name.trim().slice(0, 80); if (!nm) return;
+    const { data, error } = await supabase.from('playlists').insert({ user_id: currentUser.id, name: nm }).select('id').single();
+    if (error || !data) return;
+    const id = (data as { id: string }).id;
+    if (firstId) await supabase.from('playlist_items').insert({ playlist_id: id, post_id: firstId });
+    setPls(l => [...l, { id, name: nm, items: firstId ? [firstId] : [] }]);
+  };
+  const togglePl = async (plId: string, postId: string) => {
+    const pl = pls.find(p => p.id === plId); if (!pl) return;
+    const has = pl.items.includes(postId);
+    setPls(l => l.map(p => (p.id === plId ? { ...p, items: has ? p.items.filter(x => x !== postId) : [postId, ...p.items] } : p)));
+    const { error } = has ? await supabase.from('playlist_items').delete().eq('playlist_id', plId).eq('post_id', postId) : await supabase.from('playlist_items').insert({ playlist_id: plId, post_id: postId });
+    if (error) setPls(l => l.map(p => (p.id === plId ? { ...p, items: has ? [postId, ...p.items] : p.items.filter(x => x !== postId) } : p)));
+  };
+  const deletePl = async (plId: string) => {
+    const old = pls; setPls(l => l.filter(p => p.id !== plId));
+    const { error } = await supabase.from('playlists').delete().eq('id', plId);
+    if (error) setPls(old);
+  };
+  const histKey = `kan_hist_${currentUser.id}`;
+  const [hist, setHist] = useState<string[]>(() => { try { const v = JSON.parse(localStorage.getItem(histKey) || '[]') as unknown; return Array.isArray(v) ? v.map(String) : []; } catch { return []; } });
+  const openVid = (id: string) => { setWatchId(id); setHist(h => { const n = [id, ...h.filter(x => x !== id)].slice(0, 100); try { localStorage.setItem(histKey, JSON.stringify(n)); } catch { /* ignore */ } return n; }); };
+  const clearHist = () => { setHist([]); try { localStorage.removeItem(histKey); } catch { /* ignore */ } };
 
   const loadMore = async () => {
     if (loadingRef.current || !hasMore) return;
@@ -8998,8 +9099,8 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const chMatches = qn ? users.filter(u => u.displayName.toLowerCase().includes(qn) && videos.some(x => x.userId === u.id)) : [];
   const merged = results ? [...results, ...videos.filter(x => chMatches.some(u => u.id === x.userId) && !results.some(r => r.id === x.id))] : videos;
   const base = vf === 'saved' && !results ? posts.filter(p => wl.includes(p.id) && p.isVideo && p.media?.type === 'video') : fresh(merged);
-  const shown = base.filter(x => (channel ? x.userId === channel : vf === 'subs' ? currentUser.following.includes(x.userId) : true)).sort(sort === 'top' ? (x, y) => y.likes.length - x.likes.length : (x, y) => y.timestamp - x.timestamp);
-  const chStrip = qn ? chMatches : users.filter(u => currentUser.following.includes(u.id) && videos.some(x => x.userId === u.id));
+  const shown = base.filter(x => (channel ? x.userId === channel : vf === 'subs' ? isSub(x.userId) : true)).sort(sort === 'top' ? (x, y) => y.likes.length - x.likes.length : (x, y) => y.timestamp - x.timestamp);
+  const chStrip = qn ? chMatches : users.filter(u => isSub(u.id) && videos.some(x => x.userId === u.id));
   const channelUser = channel ? users.find(u => u.id === channel) : undefined;
   const watching = watchId ? posts.find(p => p.id === watchId) : undefined;
 
@@ -9015,9 +9116,14 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
         wl={wl}
         onToggleWl={toggleWl}
         subsOf={subsOf}
+        isSub={isSub}
+        onToggleSub={id => void toggleSub(id)}
+        pls={pls}
+        onTogglePl={(p, v) => void togglePl(p, v)}
+        onCreatePl={(n, f) => void createPl(n, f)}
         onChannel={id => { setWatchId(null); setQuery(''); setVf('all'); setChannel(id); }}
         onOpenProfile={onOpenProfile}
-        onOpenRelated={id => setWatchId(id)}
+        onOpenRelated={id => openVid(id)}
         onBack={() => setWatchId(null)}
       />
     );
@@ -9047,18 +9153,18 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
             <div className="font-bold text-white truncate">{channelUser.displayName}</div>
             <div className="text-xs text-gray-400">{subsOf(channelUser.id)} مشترك · {videos.filter(v => v.userId === channelUser.id).length} فيديو</div>
           </div>
-          {channelUser.id !== currentUser.id && <button onClick={() => toggleFollow(channelUser.id)} className={`px-4 py-1.5 rounded-full text-sm font-semibold ${currentUser.following.includes(channelUser.id) ? 'bg-white/10 text-white' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}>{currentUser.following.includes(channelUser.id) ? 'مشترك ✓' : 'اشتراك'}</button>}
+          {channelUser.id !== currentUser.id && <button onClick={() => void toggleSub(channelUser.id)} className={`px-4 py-1.5 rounded-full text-sm font-semibold ${isSub(channelUser.id) ? 'bg-white/10 text-white' : 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white'}`}>{isSub(channelUser.id) ? '🔔 مشترك ✓' : 'اشتراك'}</button>}
           <button onClick={() => setChannel(null)} className="p-1.5 text-gray-400" aria-label="إغلاق القناة"><X size={18} /></button>
         </div>
       ) : (
         <div className="flex gap-2 mb-5 overflow-x-auto no-scrollbar">
-          {([['all', 'الكل'], ['subs', 'اشتراكاتي'], ['saved', `⏱ لاحقاً${wl.length ? ` (${wl.length})` : ''}`]] as const).map(([k, l]) => (
+          {([['all', 'الكل'], ['subs', 'اشتراكاتي'], ['saved', `⏱ لاحقاً${wl.length ? ` (${wl.length})` : ''}`], ['lib', '📚 المكتبة']] as const).map(([k, l]) => (
             <button key={k} onClick={() => setVf(k)} className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold ${vf === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>
           ))}
         </div>
       )}
 
-      {!channelUser && chStrip.length > 0 && (
+      {!channelUser && vf !== 'lib' && chStrip.length > 0 && (
         <div className="flex gap-3 overflow-x-auto no-scrollbar mb-4">
           {chStrip.map(u => (
             <button key={u.id} onClick={() => { setChannel(u.id); setQuery(''); }} className="shrink-0 w-16 flex flex-col items-center gap-1">
@@ -9068,13 +9174,13 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
           ))}
         </div>
       )}
-      <div className="flex gap-2 mb-4 text-xs">
+      <div className={`flex gap-2 mb-4 text-xs ${vf === 'lib' && !channelUser ? 'hidden' : ''}`}>
         {([['new', 'الأحدث'], ['top', 'الأكثر إعجاباً']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setSort(k)} className={`px-3 py-1 rounded-full ${sort === k ? 'bg-violet-600 text-white' : 'bg-white/10 text-gray-300'}`}>{l}</button>
         ))}
       </div>
 
-      {shown.length === 0 && !loading && !searching && (
+      {!(vf === 'lib' && !channelUser) && shown.length === 0 && !loading && !searching && (
         <div className="text-center py-14">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl kan-fab flex items-center justify-center"><PlayCircle size={30} className="text-white" /></div>
           <p className="text-white font-semibold mb-1">{query ? 'لا توجد نتائج' : vf === 'saved' ? 'لا توجد فيديوهات محفوظة' : vf === 'subs' ? 'اشترك في قنوات لتظهر هنا' : 'لا توجد فيديوهات بعد'}</p>
@@ -9082,10 +9188,11 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
         </div>
       )}
 
-      <div className="grid grid-cols-1 min-[560px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-6">
+      {vf === 'lib' && !channelUser && <VideoLibrary posts={posts} users={users} currentUser={currentUser} wl={wl} hist={hist} pls={pls} onOpen={openVid} onToggleWl={toggleWl} onCreatePl={n => void createPl(n)} onDeletePl={id => void deletePl(id)} onTogglePl={(p, v) => void togglePl(p, v)} onClearHist={clearHist} subsOf={subsOf} onChannel={id => setChannel(id)} onLoadPage={onLoadPage} />}
+      <div className={`grid grid-cols-1 min-[560px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-6 ${vf === 'lib' && !channelUser ? 'hidden' : ''}`}>
         {shown.map(v => {
           const author = users.find(u => u.id === v.userId);
-          return author ? <VideoCard key={v.id} post={v} author={author} onOpen={() => setWatchId(v.id)} saved={wl.includes(v.id)} onSave={() => toggleWl(v.id)} onChannel={() => setChannel(author.id)} subs={subsOf(author.id)} /> : null;
+          return author ? <VideoCard key={v.id} post={v} author={author} onOpen={() => openVid(v.id)} saved={wl.includes(v.id)} onSave={() => toggleWl(v.id)} onChannel={() => setChannel(author.id)} subs={subsOf(author.id)} /> : null;
         })}
       </div>
       <div ref={sentinel} className="h-10 flex items-center justify-center text-xs text-gray-500 mt-4">
@@ -9334,6 +9441,81 @@ function MusicLibrary({ onPick, onDevice, onClose }: { onPick: (t: { url: string
   );
 }
 
+// Lyrics for a reel: the words follow the chosen verse (not the start of the song), with size / font / colour / look.
+function ReelLyricsStudio({ file, src, name, start, end, bgUrl, bgType, onPack }: { file?: File; src?: string; name: string; start: number; end: number; bgUrl: string; bgType: 'image' | 'video'; onPack: (p: StoryLy | null) => void }) {
+  const [url] = useState(() => src ?? URL.createObjectURL(file as File));
+  useEffect(() => () => { if (!src) URL.revokeObjectURL(url); }, [url, src]);
+  const [ly, setLy] = useState<LyState>({ on: false, raw: [], off: 0, st: 0, c: '#ffffff', p: { x: 50, y: 70, s: 1 }, f: 0 });
+  const patch = (o: Partial<LyState>) => setLy(v => ({ ...v, ...o }));
+  const [playing, setPlaying] = useState(false);
+  const [t, setT] = useState(0);
+  const packRef = useRef(onPack); packRef.current = onPack;
+  const startRef = useRef(start); startRef.current = start;
+  useEffect(() => () => packRef.current(null), []);
+  const endT = end > start ? end : start + 30;
+  // Looks the lyrics up by itself, then lines them up with the verse that was picked.
+  useEffect(() => {
+    let dead = false;
+    const ctl = new AbortController();
+    const tm = window.setTimeout(() => ctl.abort(), 9000);
+    setLy(v => ({ ...v, raw: [], on: false, off: 0, msg: '' }));
+    void (async () => {
+      try {
+        const q = name.replace(/\.[^.]+$/, '').replace(/\s[-–]\s/g, ' ').replace(/_+/g, ' ').slice(0, 100);
+        const r = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`, { signal: ctl.signal });
+        const j = await r.json() as { syncedLyrics?: string | null }[];
+        const hit = j.find(x => x.syncedLyrics);
+        const lrc = hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
+        if (dead || !lrc.length) return;
+        setLy(v => ({ ...v, raw: lrc, on: true, off: file ? 0 : Math.round((startRef.current - lrc[0][0]) * 10) / 10, msg: file ? 'لقيت الكلمات ✓' : 'بظبط الكلمات على الكوبليه...' }));
+        if (!file && src) {
+          const d = await syncLyricsDelta(src, lrc);
+          if (!dead) setLy(v => (d !== null ? { ...v, off: Math.round(-d * 10) / 10, msg: 'الكلمات اتظبطت تلقائي على الكوبليه ✓' } : { ...v, msg: 'مقدرتش أظبط التوقيت تلقائي، اضغط على السطر اللي بيبدأ عنده المقطع' }));
+        }
+      } catch { /* no lyrics found: the manual editor is still there */ }
+    })();
+    return () => { dead = true; window.clearTimeout(tm); ctl.abort(); };
+  }, [name, src, file]);
+  useEffect(() => {
+    if (!playing) return;
+    const a = new Audio(url);
+    a.addEventListener('loadedmetadata', () => { a.currentTime = start; }, { once: true });
+    void a.play().catch(() => setPlaying(false));
+    let raf = 0;
+    const loop = () => { raf = requestAnimationFrame(loop); if (a.currentTime >= endT) a.currentTime = start; setT(a.currentTime); };
+    raf = requestAnimationFrame(loop);
+    return () => { cancelAnimationFrame(raf); a.pause(); };
+  }, [playing, url, start, endT]);
+  const lines = useMemo(() => ly.raw.map(([x, q]) => [x + ly.off, q] as [number, string]), [ly.raw, ly.off]);
+  const first = Math.max(0, lines.findIndex(([x]) => x >= start - 0.4));
+  const shown = useMemo(() => lines.slice(first), [lines, first]);
+  const act = lyActive(lines, playing ? t : start + 0.05);
+  const idx = playing ? (act < first ? -1 : act - first) : 0;
+  useEffect(() => {
+    if (!ly.on || lines.length === 0) { packRef.current(null); return; }
+    const l = lines.filter(([x]) => Number.isFinite(x) && x >= start - 0.4 && x <= endT).slice(0, 80).map(([x, q]) => [Math.round(x * 100) / 100, q.slice(0, 140)] as [number, string]);
+    packRef.current(l.length ? { l, st: ly.st, c: ly.c, p: ly.p, f: ly.f } : null);
+  }, [ly.on, ly.st, ly.c, ly.p, ly.f, lines, start, endT]);
+  return (
+    <div className="mb-4 rounded-2xl bg-gray-800/60 border border-gray-700 p-3">
+      <div className="flex items-center gap-2">
+        <TypeIcon size={16} className="text-white shrink-0" />
+        <span className="flex-1 text-sm font-semibold text-white">كلمات الأغنية على الريل</span>
+        <button onClick={() => patch({ on: !ly.on })} className={`px-3 h-8 rounded-full text-xs font-bold ${ly.on ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{ly.on ? 'شغّالة' : 'إيقاف'}</button>
+      </div>
+      {ly.on && (
+        <>
+          <div className="relative mx-auto mt-3 w-40 aspect-[9/16] rounded-2xl overflow-hidden bg-black ring-1 ring-white/15">
+            {bgType === 'video' ? <video src={bgUrl} muted playsInline loop autoPlay className="absolute inset-0 w-full h-full object-cover opacity-80" /> : <img src={bgUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-80" />}
+            {shown.length > 0 && <StoryLyrics ly={{ l: shown, st: ly.st, c: ly.c, p: ly.p, f: ly.f }} idx={idx} onMove={q => patch({ p: { ...ly.p, x: q.x, y: q.y } })} onScale={sc => patch({ p: { ...ly.p, s: sc } })} />}
+          </div>
+          <StoryLyricsEditor ly={ly} patch={patch} name={name} isFile={!!file} start={start} end={end} playing={playing} setPlaying={setPlaying} srcUrl={src} />
+        </>
+      )}
+    </div>
+  );
+}
+
 function MusicTrimmer({ file, src, name, start, end, onStart, onEnd, onPreview }: { file?: File; src?: string; name?: string; start: number; end: number; onStart: (n: number) => void; onEnd: (n: number) => void; onPreview?: (playing: boolean) => void }) {
   const [url] = useState(() => src ?? URL.createObjectURL(file as File));
   const previewCb = useRef(onPreview);
@@ -9509,22 +9691,35 @@ function PostLoc({ text }: { text: string }) {
   const real = !!(loc.lat || loc.lng);
   return (
     <div className="px-4 pb-3">
-      <button onClick={e => { e.stopPropagation(); if (real) setMap(true); }} className="inline-flex max-w-full items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-sm active:scale-95 transition-transform">
-        <MapPin size={15} className="shrink-0" /><span className="truncate" dir="auto">{loc.name || 'الموقع على الخريطة'}</span>
+      <button onClick={e => { e.stopPropagation(); if (real) setMap(true); }} className="inline-flex max-w-full items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-white text-xs active:scale-95 transition-transform">
+        <MapPin size={12} color="#fff" className="shrink-0" /><span className="truncate" dir="auto">{loc.name || 'الموقع على الخريطة'}</span>
       </button>
       {map && real && <LocationMapModal loc={loc} onClose={() => setMap(false)} />}
     </div>
   );
 }
-function PostText({ text, className, clamp = false, hideLoc = false }: { text: string; className?: string; clamp?: boolean; hideLoc?: boolean }) {
+
+// Long caption: 5 lines, then a "عرض الكل" button (and "عرض أقل" to fold it back).
+function ExpandableText({ text, className, lines = 5, light = false }: { text: string; className?: string; lines?: number; light?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 220 || text.split('\n').length > lines;
+  const clamp = !open && long ? { display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' } : undefined;
+  return (
+    <>
+      <p className={className} dir="auto" style={clamp}><MentionText text={text} /></p>
+      {long && <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }} className={`mt-1 text-sm font-semibold ${light ? 'text-white/80' : 'text-cyan-300'}`}>{open ? 'عرض أقل' : 'عرض الكل'}</button>}
+    </>
+  );
+}
+function PostText({ text, className, clamp = false, hideLoc = false, expandable = false }: { text: string; className?: string; clamp?: boolean; hideLoc?: boolean; expandable?: boolean }) {
   const { body, loc } = parseGeo(text);
   const [map, setMap] = useState(false);
   return (
     <>
-      {body && <p className={className} dir="auto"><MentionText text={body} /></p>}
+      {body && (expandable ? <ExpandableText text={body} className={className} /> : <p className={className} dir="auto"><MentionText text={body} /></p>)}
       {loc && !clamp && !hideLoc && (
-        <button onClick={e => { e.stopPropagation(); if (loc.lat || loc.lng) setMap(true); }} className="mt-2 inline-flex max-w-full items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-sm active:scale-95 transition-transform">
-          <MapPin size={15} className="shrink-0" /><span className="truncate" dir="auto">{loc.name || 'الموقع على الخريطة'}</span>
+        <button onClick={e => { e.stopPropagation(); if (loc.lat || loc.lng) setMap(true); }} className="mt-2 inline-flex max-w-full items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-white text-xs active:scale-95 transition-transform">
+          <MapPin size={12} color="#fff" className="shrink-0" /><span className="truncate" dir="auto">{loc.name || 'الموقع على الخريطة'}</span>
         </button>
       )}
       {map && loc && <LocationMapModal loc={loc} onClose={() => setMap(false)} />}
@@ -9589,7 +9784,7 @@ function LocationMapModal({ loc, onClose }: { loc: GeoLoc; onClose: () => void }
         setInfo(`المسافة ${km >= 10 ? Math.round(km) : km.toFixed(1)} كم · حوالي ${min >= 60 ? `${Math.floor(min / 60)} س ${min % 60} د` : `${min} د`} بالسيارة`);
       } catch (e) { console.error(e); setInfo('تعذّر حساب الطريق، الموقع المشار ظاهر على الخريطة'); }
       finally { setBusy(false); }
-    }, () => { setBusy(false); setInfo('لم يتم السماح بمشاركة موقعك، بنعرض الموقع المشار فقط'); }, { enableHighAccuracy: true, timeout: 15000 });
+    }, () => { setBusy(false); setInfo('لم يتم السماح بمشاركة موقعك، بنعرض الموقع المشار فقط'); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   };
   return createPortal(
     <div dir={DIR} className="fixed inset-0 z-[150] bg-gray-950 flex flex-col">
@@ -9683,7 +9878,7 @@ function LocationPicker({ onPick, onClose }: { onPick: (l: GeoLoc) => void; onCl
       setBusy(false); setRes([]);
       mapRef.current?.setView([pos.coords.latitude, pos.coords.longitude], 16);
       void choose(pos.coords.latitude, pos.coords.longitude, undefined, 'موقعي');
-    }, () => { setBusy(false); setMsg('لم يتم السماح بتحديد موقعك'); }, { enableHighAccuracy: true, timeout: 15000 });
+    }, () => { setBusy(false); setMsg('لم يتم السماح بتحديد موقعك'); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   };
   return createPortal(
     <div dir={DIR} className="kan-always-white fixed inset-0 z-[140] bg-gray-950 flex flex-col text-white">
@@ -9715,62 +9910,15 @@ function LocationPicker({ onPick, onClose }: { onPick: (l: GeoLoc) => void; onCl
 
 // ============ KIX Studio: camera with colour filters, face filters and a music clip to lip-sync to ============
 type FaceLm = { x: number; y: number }[];
-const STUDIO_CF: { n: string; css: string; tint?: [string, number]; sp?: [string, string]; v?: number; bl?: number; gr?: number; lk?: string }[] = [
-  { n: 'عادي', css: '' },
-  // ---- New looks (2026) ----
-  { n: 'بيتش فزّ', css: 'brightness(1.1) saturate(1.25) contrast(.95)', tint: ['#ffb199', 0.18], bl: 0.4 },
-  { n: 'لافندر هيز', css: 'brightness(1.08) contrast(.92) saturate(1.1)', tint: ['#c9b6ff', 0.2], bl: 0.5, v: 0.12 },
-  { n: 'مينت فريش', css: 'brightness(1.08) saturate(1.2) hue-rotate(-8deg)', tint: ['#9ff5d1', 0.16], bl: 0.2 },
-  { n: 'أمبر', css: 'contrast(1.15) saturate(1.3) sepia(.25)', sp: ['#5a2a00', '#ffc86b'], lk: '#ff9a3c', v: 0.25 },
-  { n: 'ستوديو بارد', css: 'contrast(1.15) saturate(.85) brightness(1.04)', tint: ['#9cc7ff', 0.14], v: 0.2 },
-  { n: 'كريستال', css: 'brightness(1.15) contrast(1.1) saturate(.9)', sp: ['#0a3d62', '#e8f6ff'], bl: 0.3 },
-  { n: 'رمان', css: 'contrast(1.2) saturate(1.3) brightness(.96)', sp: ['#4a0d3a', '#ff5d7d'], gr: 0.06, v: 0.35 },
-  { n: 'غبار ذهبي', css: 'brightness(1.06) saturate(1.2) contrast(1.04)', tint: ['#ffe0a0', 0.1], lk: '#ffd27a', bl: 0.5 },
-  { n: 'أزرق ملكي', css: 'contrast(1.2) saturate(1.3)', sp: ['#0a1f6b', '#8fb4ff'], v: 0.4 },
-  { n: 'نيون أخضر', css: 'contrast(1.25) saturate(1.6) brightness(.95)', sp: ['#003b2a', '#39ff88'], bl: 0.3 },
-  { n: 'ثلجي ناعم', css: 'brightness(1.2) contrast(.9) saturate(.8)', tint: ['#e8f1ff', 0.14], bl: 0.5 },
-  { n: 'موكا', css: 'sepia(.4) contrast(1.1) saturate(1.1) brightness(.98)', tint: ['#8a5a3c', 0.12], gr: 0.05, v: 0.3 },
-  { n: 'سينما ذهبية', css: 'contrast(1.2) saturate(1.15) brightness(.97)', sp: ['#0b3a53', '#ffb066'], v: 0.45, gr: 0.06 },
-  { n: 'حلم', css: 'brightness(1.1) contrast(.9) saturate(1.2)', tint: ['#ff9ecf', 0.12], bl: 0.45, v: 0.2 },
-  { n: 'نيون ليلي', css: 'contrast(1.3) saturate(1.7) brightness(.92)', sp: ['#2a0a5e', '#ff4fd8'], bl: 0.3, v: 0.5 },
-  { n: 'تسريب ضوء', css: 'saturate(1.2) contrast(1.05)', lk: '#ff7a30', v: 0.2 },
-  { n: 'كوداك', css: 'sepia(.25) saturate(1.4) contrast(1.1) brightness(1.05)', sp: ['#1b3a2a', '#ffd9a0'], gr: 0.12, v: 0.25 },
-  { n: 'فيلم قديم', css: 'sepia(.6) contrast(1.15) brightness(.95)', gr: 0.18, v: 0.55 },
-  { n: 'جليد', css: 'saturate(.8) brightness(1.15) contrast(1.05)', sp: ['#0a4d7a', '#cfeaff'], bl: 0.25 },
-  { n: 'غروب كوني', css: 'saturate(1.5) contrast(1.15)', sp: ['#2d1b69', '#ff8a4d'], bl: 0.3, lk: '#ff4d8d' },
-  { n: 'مسرح', css: 'contrast(1.4) saturate(1.1) brightness(.88)', v: 0.7 },
-  { n: 'بورتريه ذهبي', css: 'brightness(1.08) saturate(1.2) contrast(1.05)', tint: ['#ffc27a', 0.12], bl: 0.35, v: 0.2 },
-  { n: 'بشرة ناعمة', css: 'blur(.8px) brightness(1.08) contrast(.96) saturate(1.1)' },
-  // ---- Instagram-style + colour grading (strong) ----
-  { n: 'كلارندون', css: 'contrast(1.3) saturate(1.5) brightness(1.08)', sp: ['#1e4fd8', '#ffb25a'], v: 0.22 },
-  { n: 'جونو', css: 'contrast(1.15) saturate(1.7) brightness(1.05) sepia(.1)', sp: ['#2a7bff', '#ffd36b'], lk: '#ffb347', v: 0.2 },
-  { n: 'فالنسيا', css: 'contrast(1.05) brightness(1.1) saturate(1.2) sepia(.3)', tint: ['#ffd9a0', 0.2], bl: 0.2 },
-  { n: 'إكس برو', css: 'contrast(1.45) saturate(1.4) sepia(.2)', sp: ['#2b1b6b', '#ffd54f'], v: 0.65 },
-  { n: 'ناشفيل', css: 'sepia(.25) contrast(1.15) brightness(1.08) saturate(1.3) hue-rotate(-12deg)', sp: ['#2d3a8c', '#ff8fb1'], v: 0.25 },
-  { n: 'تيل وبرتقال', css: 'contrast(1.25) saturate(1.35)', sp: ['#0e8c9e', '#ff8a3d'], v: 0.3 },
-  { n: 'فابور ويف', css: 'contrast(1.1) saturate(1.7) brightness(1.05)', sp: ['#33d1ff', '#ff4fd8'], bl: 0.35 },
-  { n: 'سايبر بانك', css: 'contrast(1.35) saturate(1.9) brightness(.95)', sp: ['#00f0ff', '#ff2bd6'], bl: 0.3, v: 0.45 },
-  { n: 'دو تون ذهبي', css: 'grayscale(1) contrast(1.2) brightness(1.05) sepia(1) saturate(2.5) hue-rotate(-10deg)', v: 0.3 },
-  { n: 'ساعة ذهبية', css: 'contrast(1.1) saturate(1.5) brightness(1.1) sepia(.2)', sp: ['#ff6a3d', '#ffd27a'], lk: '#ffb347' },
-  { n: 'ليل مطر', css: 'contrast(1.3) brightness(.82) hue-rotate(205deg) saturate(1.1)', sp: ['#06143a', '#1c7bbf'], v: 0.55, bl: 0.15 },
-  { n: 'Y2K', css: 'contrast(1.2) saturate(1.5) brightness(1.15)', tint: ['#ffc2f0', 0.14], bl: 0.45 },
-  { n: 'ديسكو', css: 'contrast(1.25) saturate(2)', sp: ['#7c3aed', '#ff2d95'], bl: 0.4, lk: '#22d3ee' },
-  { n: 'فيلم 35', css: 'sepia(.2) contrast(1.15) saturate(1.3)', gr: 0.2, v: 0.4, lk: '#ff7a30' },
-  { n: 'كلين جيرل', css: 'brightness(1.08) contrast(.96) saturate(1.1)', tint: ['#ffe6d5', 0.14], bl: 0.4 },
-  { n: 'سوفت بينك', css: 'brightness(1.1) contrast(.93) saturate(1.15)', tint: ['#ffb3d1', 0.16], bl: 0.5, v: 0.12 },
-  { n: 'جلو سكن', css: 'brightness(1.06) contrast(1.02) saturate(1.12)', tint: ['#ffd1b0', 0.12], bl: 0.55 },
-  { n: 'خوخي', css: 'saturate(1.2) brightness(1.07) contrast(.97)', tint: ['#ff9a8b', 0.14], bl: 0.35 },
-  { n: 'جولدن جلو', css: 'saturate(1.25) contrast(1.05) brightness(1.05)', lk: '#ffb347', tint: ['#ffc27a', 0.1], v: 0.15 },
-  { n: 'مون لايت', css: 'brightness(.96) contrast(1.12) saturate(.92)', tint: ['#5b7cff', 0.16], v: 0.45 },
-  { n: 'كول تون', css: 'saturate(1.1) hue-rotate(8deg) brightness(1.04)', tint: ['#7fb2ff', 0.12], bl: 0.25 },
-  { n: 'تيل مودي', css: 'contrast(1.18) saturate(1.1) brightness(.95)', sp: ['#0b4a52', '#ffe0c2'], v: 0.4, gr: 0.05 },
-  { n: 'ريترو بوب', css: 'saturate(1.5) contrast(1.1) brightness(1.06)', sp: ['#ff4fa3', '#22d3ee'], gr: 0.05 },
-  { n: 'أورورا', css: 'saturate(1.4) contrast(1.1)', sp: ['#00ffa3', '#a855f7'], bl: 0.25, v: 0.3 },
-  { n: 'ميامي', css: 'saturate(1.45) contrast(1.05) brightness(1.04)', sp: ['#ff4fa3', '#22d3ee'], bl: 0.2 },
-  { n: 'ستريت', css: 'contrast(1.2) saturate(.75) brightness(.96)', gr: 0.1, v: 0.35 },
-  { n: 'كوري', css: 'brightness(1.12) contrast(.92) saturate(.98)', tint: ['#ffd6e8', 0.12], bl: 0.4 },
-  { n: 'دارك أكاديميا', css: 'sepia(.35) contrast(1.15) brightness(.9) saturate(.85)', tint: ['#6b4a2b', 0.12], v: 0.55, gr: 0.05 }
-];
+const STUDIO_CF: { n: string; css: string; tint?: [string, number]; sp?: [string, string]; v?: number; bl?: number; gr?: number; lk?: string }[] = STORY_FILTERS.map(f => {
+  const x = f.fx;
+  return {
+    n: f.n, css: f.f === 'none' ? '' : f.f,
+    ...(x?.t ? { tint: [x.t[0], Math.round(x.t[2] * 55) / 100] as [string, number] } : {}),
+    ...(x?.g ? { sp: [x.g[0], x.g[1]] as [string, string] } : {}),
+    ...(x?.v ? { v: x.v } : {}), ...(x?.bl ? { bl: x.bl } : {}), ...(x?.gr ? { gr: x.gr } : {}), ...(x?.lk ? { lk: x.lk[0] } : {}),
+  };
+});
 const STUDIO_FX = ['بدون', '🕶️ نظارة', '👑 تاج', '🐶 كلب', '🥸 شنب', '😍 قلوب', '🌟 نيون', '🐱 قطة', '🐰 أرنب', '🤓 نظارة دائرية', '😈 شيطان', '😇 هالة', '🌼 تاج ورد', '🎩 قبعة', '🎓 تخرج', '😊 خدود', '💋 أحمر شفاه', '🎀 ظل عيون', '⭐ نجوم', '❄️ ثلج', '🔥 نار', '🎭 قناع', '🧔 لحية', '🎅 بابا نويل', '🙄 عيون كبيرة', '🤡 أنف مهرج', '🎬 نظارة 3D', '🎧 سماعات', '💎 ألماسة', '🌈 قوس قزح', '😢 دموع', '🐲 تنين', '✨ تجميل ذكي', '👀 عيون ضخمة', '😁 ابتسامة ضخمة', '🔮 وجه مجسّم', '🪞 مرآة', '📺 غلتش', '🧊 هولوجرام', '🥇 وجه ذهبي', '🎨 كارتون', '🦋 فراشات', '🤪 وجه ضخم', '🎈 رأس كبير', '😵 وجه ممطوط', '🫓 وجه مفلطح', '👄 فم عملاق', '🐽 أنف ضخم', '👸 ملكة', '🥽 سايبر', '🌈 دموع ملونة', '💫 هالة نيون', '🧛 دراكولا', '🤖 روبوت', '🦄 يونيكورن', '🎉 حفلة', '👁️ عين ثالثة', '🌸 أنمي', '💄 جلام', '🌷 بلاش كوري', '✨ هايلايتر', '🍑 خوخ', '🌙 سموكي', '❤️ ريد ليب', '💜 نيون وجه', '🌈 وجه ملوّن', '🧿 جلاس سكين', '🖤 غوثيك', '🤎 نمش', '🍓 توت', '🌅 جولدن آور', '🐻 دبدوب', '🦊 ثعلب', '🐼 باندا', '🏴‍☠️ قرصان', '🧙 ساحر', '🤠 كاوبوي', '🐝 نحلة', '🐸 ضفدع', '🐷 خنزير', '🧢 كاب'];
 const STUDIO_FX_ORDER: number[] = [0, ...Array.from({ length: 10 }, (_, k) => 71 + k), ...Array.from({ length: 70 }, (_, k) => k + 1)]; // new lenses first
 
@@ -10273,6 +10421,12 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
   const [lyMode, setLyMode] = useState<'me' | 'video' | 'off' | 'both'>('both');
   const [lyOff, setLyOff] = useState(0);
   const [lyT, setLyT] = useState(0);
+  const [lyFont, setLyFont] = useState(0);
+  const [lyCol, setLyCol] = useState('#ffffff');
+  const [lySz, setLySz] = useState(1);
+  const [lyPanel, setLyPanel] = useState(false);
+  const lyStyRef = useRef({ f: 0, c: '#ffffff', z: 1 }); lyStyRef.current = { f: lyFont, c: lyCol, z: lySz };
+  useEffect(() => { if (lyPanel) loadLyFonts(); }, [lyPanel]);
   const lyRef = useRef<[number, string][]>([]); lyRef.current = lyr;
   const lyModeRef = useRef<'me' | 'video' | 'off' | 'both'>('both'); lyModeRef.current = lyMode;
   const lyOffRef = useRef(0); lyOffRef.current = lyOff;
@@ -10333,12 +10487,13 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
         const li = lyActive(lyRef.current, (audRef.current?.currentTime ?? 0) + lyOffRef.current);
         const line = li >= 0 ? lyRef.current[li][1] : '';
         if (line) {
-          ctx.save(); ctx.font = '800 56px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.fillStyle = '#fff';
+          const lst = lyStyRef.current; const lpx = Math.round(56 * lst.z); const lff = LY_FONTS[lst.f]?.css ?? 'inherit';
+          ctx.save(); ctx.font = `800 ${lpx}px ${lff === 'inherit' ? 'sans-serif' : lff}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = Math.round(10 * lst.z); ctx.strokeStyle = lyInk(lst.c) === '#111' ? 'rgba(0,0,0,.6)' : 'rgba(255,255,255,.55)'; ctx.fillStyle = lst.c;
           const rows: string[] = []; let cur = '';
           for (const w of line.split(/\s+/)) { const t = cur ? cur + ' ' + w : w; if (cur && ctx.measureText(t).width > CW * 0.86) { rows.push(cur); cur = w; } else cur = t; }
           if (cur) rows.push(cur);
-          const y0 = CH * 0.74 - ((rows.length - 1) * 66) / 2;
-          rows.forEach((r, k) => { ctx.strokeText(r, CW / 2, y0 + k * 66); ctx.fillText(r, CW / 2, y0 + k * 66); });
+          const lh = Math.round(66 * lst.z); const y0 = CH * 0.74 - ((rows.length - 1) * lh) / 2;
+          rows.forEach((r, k) => { ctx.strokeText(r, CW / 2, y0 + k * lh); ctx.fillText(r, CW / 2, y0 + k * lh); });
           ctx.restore();
         }
       }
@@ -10415,7 +10570,12 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
         const j = await r.json() as { syncedLyrics?: string | null }[];
         const hit = j.find(x => x.syncedLyrics);
         const lrc = hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
-        if (!dead && lrc.length) setLyr(lrc);
+        if (!dead && lrc.length) {
+          setLyr(lrc);
+          // Library songs are 30 s previews of a longer song: find where the verse sits so the words start with it.
+          const u = track?.url;
+          if (u && !track?.file) { const d = await syncLyricsDelta(u, lrc); if (!dead && d !== null) setLyOff(Math.round(d * 10) / 10); }
+        }
       } catch { /* no lyrics: nothing to show */ }
     })();
     return () => { dead = true; window.clearTimeout(tm); ctl.abort(); };
@@ -10452,14 +10612,29 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
         {!ready && !err && <p className="absolute text-sm text-white/80">بفتح الكاميرا...</p>}
         {err && <p className="absolute inset-x-6 text-center text-sm text-white">{err}</p>}
         {lyr.length > 0 && (lyMode === 'me' || lyMode === 'both') && (() => {
-          const li = lyActive(lyr, rec ? lyT : (track?.start ?? 0) + 0.05);
-          const row = (k: number, big: boolean) => lyr[k] ? <div key={k} className={big ? 'text-[26px] font-extrabold leading-tight text-white' : 'text-base font-bold text-white/45'} style={{ textShadow: '0 2px 14px rgba(0,0,0,.7)' }}>{lyr[k][1]}</div> : null;
+          const li = lyActive(lyr, rec ? lyT : (track?.start ?? 0) + 0.05 + lyOff);
+          const ff = LY_FONTS[lyFont]?.css ?? 'inherit';
+          const row = (k: number, big: boolean) => lyr[k] ? <div key={k} className="font-extrabold leading-tight" style={{ fontFamily: ff, fontSize: `${(big ? 26 : 16) * lySz}px`, color: big ? lyCol : 'rgba(255,255,255,.45)', textShadow: '0 2px 14px rgba(0,0,0,.7)' }}>{lyr[k][1]}</div> : null;
           return <div className="absolute inset-x-0 bottom-6 px-6 text-center space-y-1.5 pointer-events-none">{row(li - 1, false)}{li >= 0 ? row(li, true) : row(0, false)}{li >= 0 ? row(li + 1, false) : null}</div>;
         })()}
         {lyr.length > 0 && (
           <div className="absolute top-3 start-3 z-10 flex items-center gap-1.5">
             <button onClick={() => setLyMode(m => (m === 'both' ? 'me' : m === 'me' ? 'video' : m === 'video' ? 'off' : 'both'))} className="h-8 px-3 rounded-full bg-black/55 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-bold active:scale-95">{lyMode === 'both' ? '🎤 كلمات: ليّ + على الفيديو' : lyMode === 'me' ? '🎤 كلمات: ليّ' : lyMode === 'video' ? '🎤 كلمات: على الفيديو' : '🎤 كلمات: إيقاف'}</button>
-            {lyMode !== 'off' && <><button onClick={() => setLyOff(o => Math.round((o - 0.5) * 10) / 10)} className="w-8 h-8 rounded-full bg-black/55 text-white text-[11px] font-bold">−</button><button onClick={() => setLyOff(o => Math.round((o + 0.5) * 10) / 10)} className="w-8 h-8 rounded-full bg-black/55 text-white text-[11px] font-bold">+</button></>}
+            {lyMode !== 'off' && <><button onClick={() => setLyOff(o => Math.round((o - 0.5) * 10) / 10)} className="w-8 h-8 rounded-full bg-black/55 text-white text-[11px] font-bold">−</button><button onClick={() => setLyOff(o => Math.round((o + 0.5) * 10) / 10)} className="w-8 h-8 rounded-full bg-black/55 text-white text-[11px] font-bold">+</button><button onClick={() => setLyPanel(v => !v)} aria-label="شكل الكلمات" className={`h-8 px-2.5 rounded-full text-[12px] font-extrabold active:scale-95 ${lyPanel ? 'bg-white text-black' : 'bg-black/55 text-white'}`}>Aa</button></>}
+          </div>
+        )}
+        {lyr.length > 0 && lyPanel && lyMode !== 'off' && (
+          <div className="absolute top-14 start-3 end-3 z-10 rounded-2xl bg-black/70 backdrop-blur-xl ring-1 ring-white/20 p-2.5 space-y-2" onPointerDown={e => e.stopPropagation()}>
+            <div className="flex gap-1.5 overflow-x-auto no-scrollbar">{LY_FONTS.map((f, i) => <button key={f.n} onClick={() => setLyFont(i)} style={{ fontFamily: f.css }} className={chip(lyFont === i)}>{f.n}</button>)}</div>
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              {LY_COLORS.map(c => <button key={c} onClick={() => setLyCol(c)} aria-label="لون الكلمات" className={`shrink-0 w-7 h-7 rounded-full border-2 ${lyCol === c ? 'border-white scale-110' : 'border-white/30'}`} style={{ background: c }} />)}
+              <input type="color" value={/^#[0-9a-f]{6}$/i.test(lyCol) ? lyCol : '#ffffff'} onChange={e => setLyCol(e.target.value)} aria-label="لون مخصص" className="shrink-0 w-7 h-7 rounded-full bg-transparent border-2 border-white/30 p-0" />
+            </div>
+            <div className="flex items-center gap-2"><span className="text-[11px] text-white/70 shrink-0">الحجم</span>
+              <button onClick={() => setLySz(z => Math.max(0.5, Math.round((z - 0.1) * 100) / 100))} className="shrink-0 w-8 h-8 rounded-full bg-white/15 text-white text-base font-bold active:scale-90">−</button>
+              <input type="range" min={0.5} max={2.5} step={0.05} value={lySz} onChange={e => setLySz(Number(e.target.value))} className="flex-1 min-w-0 accent-white" />
+              <button onClick={() => setLySz(z => Math.min(2.5, Math.round((z + 0.1) * 100) / 100))} className="shrink-0 w-8 h-8 rounded-full bg-white/15 text-white text-base font-bold active:scale-90">+</button>
+            </div>
           </div>
         )}
         {faceMsg && <p className="absolute top-3 inset-x-0 text-center text-xs"><span className="px-3 py-1 rounded-full bg-black/60">{faceMsg}</span></p>}
@@ -10575,6 +10750,7 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
   const [music, setMusic] = useState<File | null>(null);
   const [musicStart, setMusicStart] = useState(0);
   const [musicEnd, setMusicEnd] = useState(0);
+  const [reelLy, setReelLy] = useState<StoryLy | null>(null);
   const [videoVol, setVideoVol] = useState(1);
   const [musicVol, setMusicVol] = useState(0.85);
   const musicRef = useRef<HTMLInputElement>(null);
@@ -10687,15 +10863,15 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
       if (media) mediaUrl = results[0];
       const extraMedia: { type: 'image' | 'video' | 'file'; url: string; name: string; size: number }[] =
         files.slice(offset).map((f, k) => ({ type: detectMediaKind(f), url: results[offset + k], name: f.name.slice(0, 200), size: f.size }));
-      let musicItem: { type: 'file'; url: string; name: string; size: number; start?: number; end?: number } | null = null;
+      let musicItem: { type: 'file'; url: string; name: string; size: number; start?: number; end?: number; vv?: number; mv?: number; ly?: StoryLy } | null = null;
       if (music) {
         const mp = musicPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000', undefined, ctl.signal);
         if (mErr) throw mErr;
         uploaded.push(mp);
-        musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size, start: musicStart, end: musicEnd > musicStart ? musicEnd : undefined, ...(media?.type === 'video' ? { vv: videoVol, mv: musicVol } : {}) };
+        musicItem = { type: 'file', url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: `kan-music|${music.name.replace(/\.[^.]+$/, '').slice(0, 80)}`, size: music.size, start: musicStart, end: musicEnd > musicStart ? musicEnd : undefined, ...(media?.type === 'video' ? { vv: videoVol, mv: musicVol } : {}), ...(reelLy && kind === 'reel' ? { ly: reelLy } : {}) };
       } else if (remoteMusic) {
-        musicItem = { type: 'file', url: stableUrl(remoteMusic.url), name: `kan-music|${remoteMusic.name}`, size: 0, start: musicStart, end: musicEnd > musicStart ? musicEnd : undefined, ...(media?.type === 'video' ? { vv: videoVol, mv: musicVol } : {}) };
+        musicItem = { type: 'file', url: stableUrl(remoteMusic.url), name: `kan-music|${remoteMusic.name}`, size: 0, start: musicStart, end: musicEnd > musicStart ? musicEnd : undefined, ...(media?.type === 'video' ? { vv: videoVol, mv: musicVol } : {}), ...(reelLy && kind === 'reel' ? { ly: reelLy } : {}) };
       }
       if (kind === 'video' && cover) {
         const coverPath = `${currentUser.id}/${crypto.randomUUID()}-cover.${cover.blob.type === 'image/png' ? 'png' : cover.blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
@@ -10731,7 +10907,7 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
         title: kind === 'video' ? title.trim().slice(0, 120) : undefined,
         coverUrl: coverUrl ?? undefined,
         extraMedia: extraMedia.length > 0 ? extraMedia : undefined,
-        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10), start: musicItem.start, end: musicItem.end, vv: musicItem.vv, mv: musicItem.mv } : undefined,
+        music: musicItem ? { url: musicItem.url, name: musicItem.name.slice(10), start: musicItem.start, end: musicItem.end, vv: musicItem.vv, mv: musicItem.mv, ly: musicItem.ly } : undefined,
         cursor: new Date().toISOString(),
         timestamp: Date.now(), likes: [], comments: [], bookmarks: [],
       };
@@ -10887,6 +11063,8 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
             <MusicTrimmer file={music} start={musicStart} end={musicEnd} onStart={setMusicStart} onEnd={setMusicEnd} />
           </div>
         )}
+        {kind === 'reel' && media && music && <ReelLyricsStudio key={`${music.name}-${music.size}`} file={music} name={music.name} start={musicStart} end={musicEnd} bgUrl={media.url} bgType={media.type === 'video' ? 'video' : 'image'} onPack={setReelLy} />}
+        {kind === 'reel' && media && remoteMusic && !music && <ReelLyricsStudio key={remoteMusic.url} src={remoteMusic.url} name={remoteMusic.name} start={musicStart} end={musicEnd} bgUrl={media.url} bgType={media.type === 'video' ? 'video' : 'image'} onPack={setReelLy} />}
         {canMusic && remoteMusic && !music && (
           <div className="mb-4 flex items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25 p-3 text-sm text-white">
             <Music size={16} className="text-white shrink-0" />
@@ -10960,7 +11138,9 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
           <button onClick={() => setLocOpen(true)} className={`${toolBtn} ${loc ? 'text-white !bg-white/20' : 'text-white'}`}><MapPin size={20} />موقع</button>
           {!videoOnly && <button onClick={() => openPicker('*/*')} className={`${toolBtn} text-white`}><Paperclip size={20} />ملف</button>}
         </div>
-        {emojiOpen && <EmojiPicker docked onPick={e => setText(t => t + e)} onClose={() => setEmojiOpen(false)} />}
+        <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }} onGames={() => { setToolsOpen(false); inputRef.current?.blur(); setShowGames(true); }} />}</AnimatePresence>
+          {locSheet && <LocationShareSheet onClose={() => setLocSheet(false)} onSend={l => { setLocSheet(false); void send({ text: locMsgText(l) }); }} />}
+          {emojiOpen && <EmojiPicker docked onPick={e => setText(t => t + e)} onClose={() => setEmojiOpen(false)} />}
         <motion.button whileTap={{ scale: 0.97 }} onClick={handlePost} className="mt-4 w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-bold text-base disabled:opacity-60">
           {kind === 'reel' ? 'نشر الريل' : kind === 'video' ? 'نشر الفيديو' : 'نشر'}
         </motion.button>
@@ -11124,7 +11304,7 @@ function SearchTab({ users, posts, currentUser, setUsers, onStartChat, onOpenPro
                   <MessageSquare size={18} />
                 </button>
                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => toggleFollow(user.id)} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${isFollowing ? 'bg-gray-800 text-gray-300 hover:bg-red-500/20 hover:text-red-400' : 'bg-violet-600 text-white hover:bg-violet-500'}`}>
-                  {isFollowing ? t('متابَع') : t('متابعة')}
+                  {isFollowing ? t('متابَع') : user.following.includes(currentUser.id) ? t('متابعة بالمثل') : t('متابعة')}
                 </motion.button>
               </div>
             </motion.div>
@@ -11338,6 +11518,7 @@ function UserListModal({ title, userIds, users, onOpenProfile, onClose }: {
 }
 
 // "Liked by [friend] and 12 others", with small faces: people you follow come first.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LikedByLine({ likes, users, currentUser, onClick, light = false }: { likes: string[]; users: User[]; currentUser: User; onClick: () => void; light?: boolean }) {
   if (likes.length === 0) return null;
   const fol = new Set(currentUser.following);
@@ -11425,7 +11606,7 @@ function UserProfile({ userId, currentUser, users, posts, setUsers, setPosts, on
         </div>
         <div className="flex gap-2 mt-4">
           <motion.button whileTap={{ scale: 0.95 }} onClick={() => toggleFollow(user.id)} className={`flex-1 py-2 rounded-full text-sm font-medium transition-all ${isFollowing ? 'bg-gray-800 text-gray-300 hover:bg-red-500/20 hover:text-red-400' : 'bg-violet-600 text-white hover:bg-violet-500'}`}>
-            {isFollowing ? t('متابَع') : t('متابعة')}
+            {isFollowing ? t('متابَع') : followsYou ? t('متابعة بالمثل') : t('متابعة')}
           </motion.button>
           <button onClick={() => onStartChat(user.id)} className="px-5 py-2 rounded-full text-sm font-medium bg-gray-800 text-cyan-400 hover:bg-gray-700 flex items-center gap-2">
             <MessageSquare size={16} /> راسل
@@ -11914,7 +12095,7 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
                   </div>
                   <p className={`text-sm truncate mt-0.5 ${unread > 0 ? 'text-white font-medium' : 'text-gray-500'}`}>
                     {lastMsg
-                      ? `${lastMsg.senderId === currentUser.id ? 'أنت: ' : ''}${lastMsg.media?.type === 'voice' ? '🎤 رسالة صوتية' : lastMsg.media ? '📷 وسائط' : lastMsg.text}`
+                      ? `${lastMsg.senderId === currentUser.id ? 'أنت: ' : ''}${lastMsg.media?.type === 'voice' ? '🎤 رسالة صوتية' : lastMsg.media ? '📷 وسائط' : chatPreviewText(lastMsg.text)}`
                       : 'ابدأ المحادثة'
                     }
                   </p>
@@ -12415,7 +12596,7 @@ const GIPHY_KEY = (import.meta.env.VITE_GIPHY_KEY as string | undefined) ?? '';
 const NOTO_BASE = 'https://fonts.gstatic.com/s/e/notoemoji/latest';
 type StoreSticker = { id: string; gif: string; webp: string; thumb: string; kind?: 'sticker' | 'gif' };
 type GiphyRow = { id: string; images?: Record<string, { url?: string } | undefined> };
-const STORE_CATS: [string, string][] = [['all', 'الكل'], ['faces', 'وجوه'], ['hearts', 'قلوب'], ['party', 'احتفال'], ['hands', 'إيدين'], ['fun', 'حاجات'], ['nature', 'طبيعة']];
+const STORE_CATS: [string, string][] = [['all', 'الكل'], ['faces', 'وجوه'], ['hearts', 'قلوب'], ['party', 'احتفال'], ['hands', 'إيدين'], ['sports', 'كورة ورياضة'], ['medals', 'ميداليات'], ['clothes', 'ملابس'], ['flags', 'أعلام'], ['food', 'أكل'], ['animals', 'حيوانات'], ['travel', 'سفر'], ['objects', 'أدوات'], ['symbols', 'رموز'], ['fun', 'حاجات'], ['nature', 'طبيعة']];
 const STORE_ITEMS: [string, string, string][] = [
   ['1f600', 'faces', 'ابتسامة سعيد happy grin smile'],
   ['1f603', 'faces', 'سعيد فرحان happy smile'],
@@ -12563,6 +12744,427 @@ const STORE_ITEMS: [string, string, string][] = [
   ['1f43c', 'nature', 'باندا panda'],
   ['1f427', 'nature', 'بطريق penguin'],
   ['1f41d', 'nature', 'نحلة bee'],
+  ['26bd', 'sports', 'كورة كرة football soccer ball ريال مدريد ريال real madrid madridista الملكي ابيض white برشلونة برشا barcelona barca blaugrana بلاوجرانا ميسي messi رونالدو ronaldo'],
+  ['1f945', 'sports', 'كورة كرة football soccer مرمى جول goal net ريال مدريد ريال real madrid madridista الملكي ابيض white برشلونة برشا barcelona barca blaugrana بلاوجرانا'],
+  ['1f3df_fe0f', 'sports', 'كورة كرة football soccer ملعب استاد stadium ريال مدريد ريال real madrid madridista الملكي ابيض white سانتياغو برنابيو bernabeu برشلونة برشا barcelona barca blaugrana بلاوجرانا كامب نو camp nou'],
+  ['1f3c6', 'sports', 'كاس كأس بطولة trophy champions دوري ابطال ريال مدريد ريال real madrid madridista الملكي ابيض white برشلونة برشا barcelona barca blaugrana بلاوجرانا فوز'],
+  ['1f451', 'sports', 'تاج ملك king crown ريال مدريد ريال real madrid madridista الملكي ابيض white ملك الملوك'],
+  ['1f410', 'sports', 'عنزة goat الافضل GOAT ميسي رونالدو برشلونة برشا barcelona barca blaugrana بلاوجرانا ريال مدريد ريال real madrid madridista الملكي ابيض white'],
+  ['1f981', 'sports', 'اسد lion كورة كرة football soccer منتخب'],
+  ['1f7e5', 'sports', 'كرت احمر red card حكم referee كورة كرة football soccer'],
+  ['1f7e8', 'sports', 'كرت اصفر yellow card حكم referee كورة كرة football soccer'],
+  ['1f4e3', 'sports', 'هتاف مشجع جمهور fans cheer كورة كرة football soccer'],
+  ['1f941', 'sports', 'طبل تشجيع drum fans ultras كورة كرة football soccer'],
+  ['1f3c1', 'sports', 'سباق نهاية race finish flag'],
+  ['1f3c3', 'sports', 'جري runner run'],
+  ['1f3c0', 'sports', 'سلة basketball nba'],
+  ['1f3be', 'sports', 'تنس tennis'],
+  ['1f3c8', 'sports', 'كرة قدم امريكي american football nfl'],
+  ['1f94a', 'sports', 'ملاكمة boxing ufc'],
+  ['1f3b3', 'sports', 'بولينج bowling'],
+  ['1f3d3', 'sports', 'تنس طاولة ping pong'],
+  ['1f6b4', 'sports', 'عجلة دراجة cycling bike'],
+  ['1f3ca', 'sports', 'سباحة swimming'],
+  ['1f3cb_fe0f', 'sports', 'جيم حديد gym weights lift'],
+  ['26aa', 'sports', 'دايرة بيضاء white circle ريال مدريد ريال real madrid madridista الملكي ابيض white ابيض'],
+  ['1f535', 'sports', 'دايرة زرقاء blue circle برشلونة برشا barcelona barca blaugrana بلاوجرانا ازرق'],
+  ['1f534', 'sports', 'دايرة حمراء red circle برشلونة برشا barcelona barca blaugrana بلاوجرانا احمر'],
+  ['1f7e3', 'sports', 'دايرة بنفسجي purple ريال مدريد ريال real madrid madridista الملكي ابيض white'],
+  ['1f4aa', 'sports', 'قوة muscle strong كورة كرة football soccer ريال مدريد ريال real madrid madridista الملكي ابيض white برشلونة برشا barcelona barca blaugrana بلاوجرانا'],
+  ['1f947', 'medals', 'ميدالية ذهبية ذهب gold medal first اول مركز اول فوز'],
+  ['1f948', 'medals', 'ميدالية فضية فضة silver medal second مركز تاني'],
+  ['1f949', 'medals', 'ميدالية برونزية برونز bronze medal third مركز تالت'],
+  ['1f3c5', 'medals', 'ميدالية medal sports ميداليه وسام'],
+  ['1f396_fe0f', 'medals', 'وسام شرف military medal honor'],
+  ['1f3c6', 'medals', 'كاس كأس trophy بطولة'],
+  ['1f31f', 'medals', 'نجمة star ممتاز excellent'],
+  ['1f4af', 'medals', 'مية 100 perfect كامل'],
+  ['1f451', 'medals', 'تاج crown ملك'],
+  ['1f48e', 'medals', 'الماس diamond جوهرة'],
+  ['1f397_fe0f', 'medals', 'شريط تقدير ribbon reminder'],
+  ['1f9e0', 'medals', 'ذكاء مخ smart brain عبقري'],
+  ['1f455', 'clothes', 'تيشيرت قميص shirt t-shirt jersey فانلة ريال مدريد ريال real madrid madridista الملكي ابيض white برشلونة برشا barcelona barca blaugrana بلاوجرانا كورة كرة football soccer'],
+  ['1f454', 'clothes', 'قميص رسمي بدلة shirt tie necktie'],
+  ['1f456', 'clothes', 'بنطلون جينز jeans pants'],
+  ['1f457', 'clothes', 'فستان dress'],
+  ['1f45a', 'clothes', 'بلوزة womans clothes blouse'],
+  ['1f9e5', 'clothes', 'جاكيت معطف coat jacket'],
+  ['1f9e3', 'clothes', 'وشاح كوفية scarf شال'],
+  ['1f9e4', 'clothes', 'جوانتي قفازات gloves حارس مرمى كورة كرة football soccer'],
+  ['1f9e2', 'clothes', 'كاب طاقية cap hat'],
+  ['1f452', 'clothes', 'قبعة hat women'],
+  ['1f45f', 'clothes', 'كوتشي حذاء رياضي sneaker shoe running كورة كرة football soccer'],
+  ['1f460', 'clothes', 'كعب high heel shoe'],
+  ['1f97e', 'clothes', 'بوت boot hiking'],
+  ['1f45c', 'clothes', 'شنطة bag handbag'],
+  ['1f392', 'clothes', 'شنطة ضهر backpack school'],
+  ['1f453', 'clothes', 'نظارة glasses'],
+  ['1f576_fe0f', 'clothes', 'نظارة شمس sunglasses cool'],
+  ['231a', 'clothes', 'ساعة watch'],
+  ['1f48d', 'clothes', 'خاتم دبلة ring wedding'],
+  ['1f9a6', 'clothes', 'شراب جوارب socks'],
+  ['1fa73', 'clothes', 'شورت shorts'],
+  ['1f97b', 'clothes', 'ساري sari'],
+  ['1f451', 'clothes', 'تاج crown'],
+  ['1f1ea_1f1f8', 'flags', 'علم اسبانيا spain flag ريال مدريد ريال real madrid madridista الملكي ابيض white برشلونة برشا barcelona barca blaugrana بلاوجرانا الليجا la liga'],
+  ['1f1ea_1f1ec', 'flags', 'علم مصر egypt flag مصري'],
+  ['1f1f8_1f1e6', 'flags', 'علم السعودية saudi flag'],
+  ['1f1e6_1f1ea', 'flags', 'علم الامارات uae flag'],
+  ['1f1f0_1f1fc', 'flags', 'علم الكويت kuwait flag'],
+  ['1f1f6_1f1e6', 'flags', 'علم قطر qatar flag'],
+  ['1f1f2_1f1e6', 'flags', 'علم المغرب morocco flag'],
+  ['1f1e9_1f1ff', 'flags', 'علم الجزائر algeria flag'],
+  ['1f1f9_1f1f3', 'flags', 'علم تونس tunisia flag'],
+  ['1f1f5_1f1f8', 'flags', 'علم فلسطين palestine flag'],
+  ['1f1ee_1f1f6', 'flags', 'علم العراق iraq flag'],
+  ['1f1f8_1f1fe', 'flags', 'علم سوريا syria flag'],
+  ['1f1f1_1f1e7', 'flags', 'علم لبنان lebanon flag'],
+  ['1f1ef_1f1f4', 'flags', 'علم الاردن jordan flag'],
+  ['1f1f1_1f1fe', 'flags', 'علم ليبيا libya flag'],
+  ['1f1f8_1f1e9', 'flags', 'علم السودان sudan flag'],
+  ['1f1e7_1f1f7', 'flags', 'علم البرازيل brazil flag كورة كرة football soccer'],
+  ['1f1e6_1f1f7', 'flags', 'علم الارجنتين argentina flag ميسي messi كورة كرة football soccer'],
+  ['1f1f5_1f1f9', 'flags', 'علم البرتغال portugal flag رونالدو ronaldo كورة كرة football soccer'],
+  ['1f1eb_1f1f7', 'flags', 'علم فرنسا france flag كورة كرة football soccer'],
+  ['1f1e9_1f1ea', 'flags', 'علم المانيا germany flag كورة كرة football soccer'],
+  ['1f1ee_1f1f9', 'flags', 'علم ايطاليا italy flag كورة كرة football soccer'],
+  ['1f1ec_1f1e7', 'flags', 'علم بريطانيا england uk flag كورة كرة football soccer'],
+  ['1f1fa_1f1f8', 'flags', 'علم امريكا usa flag'],
+  ['1f1f9_1f1f7', 'flags', 'علم تركيا turkey flag'],
+  ['1f3f4_200d_2620_fe0f', 'flags', 'علم قراصنة pirate flag'],
+  ['1f3c1', 'flags', 'علم سباق checkered flag'],
+  ['1f3f3_fe0f_200d_1f308', 'flags', 'علم قوس قزح rainbow flag'],
+  ['1f34e', 'food', 'تفاحة apple'],
+  ['1f34c', 'food', 'موز banana'],
+  ['1f353', 'food', 'فراولة strawberry'],
+  ['1f349', 'food', 'بطيخ watermelon'],
+  ['1f347', 'food', 'عنب grapes'],
+  ['1f34a', 'food', 'برتقال orange'],
+  ['1f351', 'food', 'خوخ peach'],
+  ['1f96d', 'food', 'مانجو mango'],
+  ['1f354', 'food', 'برجر burger'],
+  ['1f355', 'food', 'بيتزا pizza'],
+  ['1f32d', 'food', 'هوت دوج hot dog'],
+  ['1f32e', 'food', 'تاكو taco'],
+  ['1f32f', 'food', 'شاورما burrito wrap'],
+  ['1f959', 'food', 'ساندوتش فلافل falafel'],
+  ['1f35f', 'food', 'بطاطس fries'],
+  ['1f357', 'food', 'فراخ chicken'],
+  ['1f356', 'food', 'لحمة meat'],
+  ['1f373', 'food', 'بيض egg'],
+  ['1f35e', 'food', 'عيش bread'],
+  ['1f9c0', 'food', 'جبنة cheese'],
+  ['1f366', 'food', 'ايس كريم ice cream'],
+  ['1f370', 'food', 'كيك cake'],
+  ['1f36b', 'food', 'شوكولاتة chocolate'],
+  ['1f36d', 'food', 'مصاصة lollipop'],
+  ['1f36a', 'food', 'كوكيز cookie'],
+  ['1f369', 'food', 'دونات donut'],
+  ['2615', 'food', 'قهوة coffee'],
+  ['1f375', 'food', 'شاي tea'],
+  ['1f964', 'food', 'عصير drink cup'],
+  ['1f37a', 'food', 'مشروب beer'],
+  ['1f9c3', 'food', 'عصير juice'],
+  ['1f95b', 'food', 'لبن milk'],
+  ['1f42f', 'animals', 'نمر tiger'],
+  ['1f434', 'animals', 'حصان horse'],
+  ['1f984', 'animals', 'يونيكورن unicorn'],
+  ['1f402', 'animals', 'ثور bull'],
+  ['1f42e', 'animals', 'بقرة cow'],
+  ['1f437', 'animals', 'خنزير pig'],
+  ['1f411', 'animals', 'خروف sheep'],
+  ['1f42a', 'animals', 'جمل camel'],
+  ['1f418', 'animals', 'فيل elephant'],
+  ['1f412', 'animals', 'قرد monkey'],
+  ['1f43b', 'animals', 'دب bear'],
+  ['1f428', 'animals', 'كوالا koala'],
+  ['1f43a', 'animals', 'ذئب wolf'],
+  ['1f98a', 'animals', 'ثعلب fox'],
+  ['1f985', 'animals', 'نسر eagle'],
+  ['1f989', 'animals', 'بومة owl'],
+  ['1f40d', 'animals', 'تعبان snake'],
+  ['1f422', 'animals', 'سلحفاة turtle'],
+  ['1f42c', 'animals', 'دولفين dolphin'],
+  ['1f433', 'animals', 'حوت whale'],
+  ['1f988', 'animals', 'قرش shark'],
+  ['1f419', 'animals', 'اخطبوط octopus'],
+  ['1f41f', 'animals', 'سمكة fish'],
+  ['1f414', 'animals', 'فرخة chicken hen'],
+  ['1f423', 'animals', 'كتكوت chick'],
+  ['2708_fe0f', 'travel', 'طيارة airplane plane'],
+  ['1f697', 'travel', 'عربية car'],
+  ['1f695', 'travel', 'تاكسي taxi'],
+  ['1f68c', 'travel', 'اتوبيس bus'],
+  ['1f682', 'travel', 'قطر train'],
+  ['1f6a2', 'travel', 'سفينة ship'],
+  ['1f6f5', 'travel', 'موتوسيكل scooter'],
+  ['1f3cd_fe0f', 'travel', 'موتور motorcycle'],
+  ['1f3d6_fe0f', 'travel', 'شاطئ beach'],
+  ['1f3d4_fe0f', 'travel', 'جبل mountain'],
+  ['1f3d9_fe0f', 'travel', 'مدينة city'],
+  ['1f3f0', 'travel', 'قلعة castle'],
+  ['1f54b', 'travel', 'كعبة kaaba مكة'],
+  ['1f54c', 'travel', 'مسجد mosque'],
+  ['1f3d5_fe0f', 'travel', 'تخييم camping'],
+  ['1f5fa_fe0f', 'travel', 'خريطة map'],
+  ['1f305', 'travel', 'شروق sunrise'],
+  ['1f307', 'travel', 'غروب sunset'],
+  ['1f303', 'travel', 'ليل night city'],
+  ['1f30d', 'travel', 'الارض earth world'],
+  ['1f9f3', 'travel', 'شنطة سفر luggage'],
+  ['1f3a1', 'travel', 'ملاهي ferris wheel'],
+  ['1f3a4', 'fun', 'ميكروفون mic sing غنا'],
+  ['1f3a7', 'fun', 'سماعة headphones music'],
+  ['1f3b8', 'fun', 'جيتار guitar'],
+  ['1f3b9', 'fun', 'بيانو piano'],
+  ['1f3ac', 'fun', 'فيلم سينما movie clapper'],
+  ['1f4f8', 'fun', 'كاميرا camera photo'],
+  ['1f4bb', 'fun', 'لابتوب laptop'],
+  ['1f6d2', 'fun', 'تسوق shopping cart'],
+  ['1f4e6', 'fun', 'طرد package'],
+  ['1f512', 'fun', 'قفل lock'],
+  ['1f511', 'fun', 'مفتاح key'],
+  ['23f0', 'fun', 'منبه alarm clock'],
+  ['1f4da', 'fun', 'كتب books study مذاكرة'],
+  ['270f_fe0f', 'fun', 'قلم pencil'],
+  ['1f4dd', 'fun', 'ملاحظة memo note'],
+  ['1f60f', 'faces', 'نظرة جانبية smirk مغرور'],
+  ['1f612', 'faces', 'زهقان unamused'],
+  ['1f61e', 'faces', 'زعلان disappointed'],
+  ['1f629', 'faces', 'تعبان weary'],
+  ['1f62b', 'faces', 'مرهق tired'],
+  ['1f625', 'faces', 'حزين متوتر sad relieved'],
+  ['1f62e', 'faces', 'مندهش wow open mouth'],
+  ['1f62f', 'faces', 'مصدوم hushed'],
+  ['1f632', 'faces', 'مذهول astonished'],
+  ['1f637', 'faces', 'كمامة mask مريض'],
+  ['1f915', 'faces', 'مصاب bandage'],
+  ['1f910', 'faces', 'سحاب سكوت zipper quiet'],
+  ['1f636', 'faces', 'بدون كلام no mouth speechless'],
+  ['1f9d0', 'faces', 'مراقب monocle يفحص'],
+  ['1f978', 'faces', 'متنكر disguise'],
+  ['1fae1', 'faces', 'تحية salute احترام'],
+  ['1fae0', 'faces', 'دايب melting حر'],
+  ['1f979', 'faces', 'دموع بتحبس holding back tears'],
+  ['1fae3', 'faces', 'بيبص من بعيد peeking'],
+  ['1f44a', 'hands', 'بوكس قبضة fist bump'],
+  ['270a', 'hands', 'قبضة fist power'],
+  ['1f64b', 'hands', 'رفع ايد raising hand'],
+  ['1f937', 'hands', 'مش عارف shrug'],
+  ['1f926', 'hands', 'ايد على وشه facepalm'],
+  ['1f647', 'hands', 'انحناء bow احترام'],
+  ['1f485', 'hands', 'مانيكير nail polish'],
+  ['1f91f', 'hands', 'بحبك love you'],
+  ['1f90f', 'hands', 'حاجة صغيرة pinch'],
+  ['1f446', 'hands', 'فوق point up'],
+  ['1f447', 'hands', 'تحت point down'],
+  ['1f448', 'hands', 'شمال point left'],
+  ['261d_fe0f', 'hands', 'اشارة up index'],
+  ['1f90e', 'hearts', 'قلب بني brown heart'],
+  ['1fa75', 'hearts', 'قلب سماوي light blue heart'],
+  ['1fa77', 'hearts', 'قلب وردي pink heart'],
+  ['2763_fe0f', 'hearts', 'قلب علامة تعجب heart exclamation'],
+  ['1f49f', 'hearts', 'زخرفة قلب heart decoration'],
+  ['1f48f', 'hearts', 'بوسة كابل kiss couple'],
+  ['1f491', 'hearts', 'كابل حب couple heart'],
+  ['1f493', 'hearts', 'قلب ينبض beating heart'],
+  ['1f49e', 'hearts', 'قلوب بتلف revolving hearts'],
+  ['1f4f7', 'objects', 'كاميرا camera'],
+  ['1f3a5', 'objects', 'كاميرا فيلم movie camera'],
+  ['1f4fa', 'objects', 'تلفزيون tv'],
+  ['1f50b', 'objects', 'بطارية battery'],
+  ['1f526', 'objects', 'كشاف flashlight'],
+  ['1f6e0_fe0f', 'objects', 'ادوات tools'],
+  ['1f528', 'objects', 'شاكوش hammer'],
+  ['2699_fe0f', 'objects', 'ترس gear settings'],
+  ['1f52e', 'objects', 'كرة كريستال crystal ball'],
+  ['1f9ff', 'objects', 'عين حسد نظرة nazar amulet'],
+  ['1f4ff', 'objects', 'سبحة prayer beads'],
+  ['1f579_fe0f', 'objects', 'جويستيك joystick'],
+  ['1f3b2', 'objects', 'نرد dice'],
+  ['1f9e9', 'objects', 'بازل puzzle'],
+  ['1f4b3', 'objects', 'كارت بنكي credit card'],
+  ['1f4b5', 'objects', 'دولار dollar فلوس'],
+  ['1f4b8', 'objects', 'فلوس طايرة money wings'],
+  ['1f6cd_fe0f', 'objects', 'شنط تسوق shopping bags'],
+  ['1f9f8', 'objects', 'دبدوب teddy bear'],
+  ['1f3ad', 'objects', 'مسرح masks theatre'],
+  ['1f3a8', 'objects', 'ألوان palette art'],
+  ['1f4e2', 'objects', 'ميكروفون loudspeaker'],
+  ['1f514', 'objects', 'جرس bell'],
+  ['1f4c5', 'objects', 'تقويم calendar'],
+  ['1f4e1', 'objects', 'طبق satellite'],
+  ['1f4be', 'objects', 'فلوبي disk'],
+  ['1f50d', 'objects', 'بحث magnifier search'],
+  ['1f4cc', 'objects', 'دبوس pin'],
+  ['1f5dd_fe0f', 'objects', 'مفتاح قديم old key'],
+  ['1f9fc', 'objects', 'صابون soap'],
+  ['1fa91', 'objects', 'كرسي chair'],
+  ['1f6cf_fe0f', 'objects', 'سرير bed'],
+  ['1f6c1', 'objects', 'بانيو bath'],
+  ['1f4a1', 'objects', 'لمبة idea'],
+  ['2705', 'symbols', 'تمام صح check ok'],
+  ['274c', 'symbols', 'غلط x cross'],
+  ['2757', 'symbols', 'تعجب exclamation'],
+  ['2753', 'symbols', 'سؤال question'],
+  ['203c_fe0f', 'symbols', 'تعجب مزدوج double exclamation'],
+  ['1f4a2', 'symbols', 'غضب anger'],
+  ['1f4ab', 'symbols', 'دوخة dizzy'],
+  ['1f4ac', 'symbols', 'فقاعة كلام speech bubble'],
+  ['1f4ad', 'symbols', 'فقاعة تفكير thought'],
+  ['1f6a8', 'symbols', 'سارينة siren'],
+  ['1f51d', 'symbols', 'فوق top'],
+  ['1f195', 'symbols', 'جديد new'],
+  ['1f198', 'symbols', 'نجدة sos'],
+  ['1f197', 'symbols', 'اوكي ok'],
+  ['1f199', 'symbols', 'اب up'],
+  ['1f51e', 'symbols', 'ممنوع 18'],
+  ['267b_fe0f', 'symbols', 'تدوير recycle'],
+  ['1f4a4', 'symbols', 'نوم zzz'],
+  ['2b55', 'symbols', 'دايرة حمراء circle'],
+  ['1f6ab', 'symbols', 'ممنوع prohibited'],
+  ['2714_fe0f', 'symbols', 'علامة صح check mark'],
+  ['1f503', 'symbols', 'تحديث reload'],
+  ['1f93e', 'sports', 'كرة يد handball'],
+  ['1f3d0', 'sports', 'كرة طائرة volleyball'],
+  ['1f3cf', 'sports', 'كريكت cricket'],
+  ['1f3d2', 'sports', 'هوكي hockey'],
+  ['26f3', 'sports', 'جولف golf'],
+  ['1f3af', 'sports', 'هدف dart target'],
+  ['1f93a', 'sports', 'مبارزة fencing'],
+  ['1f3c7', 'sports', 'سباق خيل horse racing'],
+  ['1f6f9', 'sports', 'سكيت skateboard'],
+  ['1f9d7', 'sports', 'تسلق climbing'],
+  ['1f3bf', 'sports', 'تزلج ski'],
+  ['26f7_fe0f', 'sports', 'متزلج skier'],
+  ['1f6a3', 'sports', 'تجديف rowing'],
+  ['1f93c', 'sports', 'مصارعة wrestling'],
+  ['1f3c4', 'sports', 'ركوب امواج surf'],
+  ['1f7e1', 'sports', 'دورتموند dortmund اصفر yellow كورة football'],
+  ['1f7e2', 'sports', 'اخضر green كورة football الاهلي السعودي'],
+  ['1f525', 'sports', 'نار fire ديربي derby كلاسيكو clasico كورة football'],
+  ['1f947', 'sports', 'هداف top scorer جولدن بوت golden boot كورة'],
+  ['1f35c', 'food', 'شوربة نودلز ramen'],
+  ['1f363', 'food', 'سوشي sushi'],
+  ['1f35d', 'food', 'مكرونة spaghetti'],
+  ['1f958', 'food', 'طاجن stew'],
+  ['1f957', 'food', 'سلطة salad'],
+  ['1f96a', 'food', 'ساندوتش sandwich'],
+  ['1f36f', 'food', 'عسل honey'],
+  ['1f95c', 'food', 'فول سوداني peanuts'],
+  ['1f34d', 'food', 'اناناس pineapple'],
+  ['1f965', 'food', 'جوز هند coconut'],
+  ['1f955', 'food', 'جزر carrot'],
+  ['1f33d', 'food', 'درة corn'],
+  ['1f336_fe0f', 'food', 'فلفل pepper hot'],
+  ['1f345', 'food', 'طماطم tomato'],
+  ['1f346', 'food', 'باذنجان eggplant'],
+  ['1f951', 'food', 'افوكادو avocado'],
+  ['1f9cb', 'food', 'بابل تي bubble tea'],
+  ['1f379', 'food', 'كوكتيل cocktail'],
+  ['1f942', 'food', 'نخب cheers'],
+  ['1f37e', 'food', 'شمبانيا champagne'],
+  ['1f352', 'food', 'كرز cherry'],
+  ['1f34b', 'food', 'ليمون lemon'],
+  ['1f426', 'animals', 'عصفور bird'],
+  ['1f54a_fe0f', 'animals', 'حمامة dove سلام'],
+  ['1f986', 'animals', 'بطة duck'],
+  ['1f9a2', 'animals', 'بجعة swan'],
+  ['1f99a', 'animals', 'طاووس peacock'],
+  ['1f99c', 'animals', 'ببغاء parrot'],
+  ['1f98e', 'animals', 'سحلية lizard'],
+  ['1f40a', 'animals', 'تمساح crocodile'],
+  ['1f995', 'animals', 'ديناصور dino'],
+  ['1f996', 'animals', 'تي ركس trex'],
+  ['1f9ad', 'animals', 'فقمة seal'],
+  ['1f9a5', 'animals', 'كسلان sloth'],
+  ['1f994', 'animals', 'قنفذ hedgehog'],
+  ['1f407', 'animals', 'ارنب rabbit'],
+  ['1f430', 'animals', 'ارنب وش rabbit face'],
+  ['1f439', 'animals', 'هامستر hamster'],
+  ['1f43e', 'animals', 'اثار حيوان paw prints'],
+  ['1f577_fe0f', 'animals', 'عنكبوت spider'],
+  ['1f982', 'animals', 'عقرب scorpion'],
+  ['1f40c', 'animals', 'قوقعة snail'],
+  ['1f41e', 'animals', 'دعسوقة ladybug'],
+  ['1f98c', 'animals', 'غزال deer'],
+  ['1f993', 'animals', 'حمار وحشي zebra'],
+  ['1f992', 'animals', 'زرافة giraffe'],
+  ['1f9a9', 'animals', 'فلامنجو flamingo'],
+  ['1f332', 'nature', 'شجرة tree'],
+  ['1f334', 'nature', 'نخلة palm'],
+  ['1f335', 'nature', 'صبار cactus'],
+  ['1f33f', 'nature', 'عشب herb'],
+  ['1f341', 'nature', 'ورقة خريف maple'],
+  ['1f343', 'nature', 'ورق leaf'],
+  ['1f338', 'nature', 'زهرة كرز cherry blossom'],
+  ['1f33a', 'nature', 'هيبسكس hibiscus'],
+  ['1f4a7', 'nature', 'نقطة ماية droplet'],
+  ['1f30b', 'nature', 'بركان volcano'],
+  ['1f32a_fe0f', 'nature', 'اعصار tornado'],
+  ['1f327_fe0f', 'nature', 'مطر rain'],
+  ['26c8_fe0f', 'nature', 'رعد thunder storm'],
+  ['2603_fe0f', 'nature', 'رجل ثلج snowman'],
+  ['1f31e', 'nature', 'شمس بوش sun face'],
+  ['1f31a', 'nature', 'قمر وش moon face'],
+  ['1f320', 'nature', 'شهاب shooting star'],
+  ['1f681', 'travel', 'هيلوكوبتر helicopter'],
+  ['1f6f8', 'travel', 'طبق طائر ufo'],
+  ['1f6a4', 'travel', 'لانش speedboat'],
+  ['1f6b2', 'travel', 'عجلة bicycle'],
+  ['1f69a', 'travel', 'شاحنة truck'],
+  ['1f3ce_fe0f', 'travel', 'سيارة سباق race car'],
+  ['1f3a2', 'travel', 'rollercoaster ملاهي'],
+  ['1f3dc_fe0f', 'travel', 'صحراء desert'],
+  ['1f5fd', 'travel', 'تمثال الحرية statue liberty'],
+  ['1f5fc', 'travel', 'برج طوكيو tokyo tower'],
+  ['1f3db_fe0f', 'travel', 'مبنى كلاسيكي classical building'],
+  ['26f2', 'travel', 'نافورة fountain'],
+  ['1f3e0', 'travel', 'بيت house home'],
+  ['1f3e8', 'travel', 'فندق hotel'],
+  ['1f6eb', 'travel', 'اقلاع takeoff'],
+  ['1f451', 'fun', 'تاج'],
+  ['1f389', 'fun', 'احتفال'],
+  ['1f9c3', 'fun', 'عصير'],
+  ['1fae2', 'faces', 'بيبص من بعيد peeking'],
+  ['1f972', 'faces', 'ابتسامة ودمعة smiling tear'],
+  ['1f925', 'faces', 'كداب liar pinocchio'],
+  ['1f927', 'faces', 'عطس sneeze'],
+  ['1f624', 'faces', 'غضب steam angry'],
+  ['1f971', 'faces', 'تتاؤب yawn'],
+  ['1f919', 'hands', 'كلمني call me'],
+  ['1f91b', 'hands', 'قبضة يسار fist left'],
+  ['1f91c', 'hands', 'قبضة يمين fist right'],
+  ['1f933', 'hands', 'سيلفي selfie'],
+  ['1f481', 'hands', 'استقبال information desk'],
+  ['1f980', 'animals', 'سلطعون crab'],
+  ['1f987', 'animals', 'خفاش bat'],
+  ['1f98d', 'animals', 'غوريلا gorilla'],
+  ['1f383', 'fun', 'قرع هالوين pumpkin'],
+  ['1f385', 'fun', 'بابا نويل santa'],
+  ['1f9d9', 'fun', 'ساحر mage wizard'],
+  ['1f9da', 'fun', 'جنية fairy'],
+  ['1f9de', 'fun', 'جني genie'],
+  ['1f9db', 'fun', 'دراكولا vampire'],
+  ['1f9df', 'fun', 'زومبي zombie'],
+  ['1f9b8', 'fun', 'بطل خارق superhero'],
+  ['1f9b9', 'fun', 'شرير خارق supervillain'],
+  ['1f575_fe0f', 'fun', 'مخبر detective'],
+  ['1f47f', 'fun', 'شيطان غاضب imp'],
+  ['26f5', 'travel', 'مركب شراع sailboat'],
+  ['1f5ff', 'travel', 'تمثال moai'],
+  ['1f309', 'travel', 'كوبري بالليل bridge night'],
+  ['26c4', 'nature', 'رجل تلج snowman'],
+  ['1f33c', 'nature', 'زهرة blossom'],
+  ['1f490', 'nature', 'بوكيه bouquet'],
+  ['1f33e', 'nature', 'سنابل rice'],
+  ['1f484', 'clothes', 'روج lipstick'],
+  ['1f380', 'party', 'فيونكة ribbon'],
+  ['1f9e8', 'party', 'صواريخ firecracker'],
+  ['1f3aa', 'party', 'سيرك circus'],
+  ['1f1f4_1f1f2', 'flags', 'عمان oman'],
+  ['1f1e7_1f1ed', 'flags', 'البحرين bahrain'],
+  ['1f1fe_1f1ea', 'flags', 'اليمن yemen'],
 ];
 const notoSticker = (cp: string): StoreSticker => ({ id: 'noto-' + cp, gif: `${NOTO_BASE}/${cp}/512.gif`, webp: `${NOTO_BASE}/${cp}/512.webp`, thumb: `${NOTO_BASE}/${cp}/512.webp` });
 const GIF_QUICK: [string, string][] = [['😂', 'funny'], ['❤️', 'love'], ['💃', 'dance'], ['😮', 'wow'], ['😢', 'sad'], ['👏', 'clap'], ['🔥', 'fire'], ['😎', 'cool']];
@@ -12588,7 +13190,7 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
     if (!words.length) return true;
     const typed = [...q.trim()].map(ch => ch.codePointAt(0)?.toString(16)).join('_');
     return words.every(w => k.includes(w)) || cp.startsWith(typed) || (typed.length > 0 && cp.replace('_fe0f', '') === typed.replace('_fe0f', '').replace(/^fe0f_?/, ''));
-  }).map(([cp]) => ({ ...notoSticker(cp), kind })).filter(x => !bad.has(x.id));
+  }).map(([cp]) => ({ ...notoSticker(cp), kind })).filter((x, i, a) => !bad.has(x.id) && a.findIndex(y => y.id === x.id) === i);
   useEffect(() => {
     setNet([]);
     if (!GIPHY_KEY) return;
@@ -12628,7 +13230,7 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
           ? GIF_QUICK.map(([e, w]) => <button key={w} onClick={() => setQ(w)} className={`shrink-0 px-3.5 h-9 rounded-full text-sm font-bold active:scale-95 ${q === w ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{e} {w}</button>)
           : STORE_CATS.map(([k, l]) => <button key={k} onClick={() => setCat(k)} className={`shrink-0 px-3.5 h-9 rounded-full text-xs font-bold active:scale-95 ${cat === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pb-3">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 [-webkit-overflow-scrolling:touch] [transform:translateZ(0)]">
         {!all.length && !busy && <p className="text-center text-white/60 text-xs py-10">مفيش نتائج، جرّب كلمة تانية</p>}
         {kind === 'gif' && !GIPHY_KEY && <p className="text-center text-white/50 text-[11px] pb-2">دي GIF متحركة جاهزة. للبحث في ملايين الـ GIF أضف VITE_GIPHY_KEY.</p>}
         <div className={`grid gap-2 ${gifOnline ? 'grid-cols-3' : 'grid-cols-4 min-[420px]:grid-cols-5'}`}>
@@ -13412,6 +14014,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [locSheet, setLocSheet] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
   const [limit, setLimit] = useState(60);
   const [sel, setSel] = useState<string[] | null>(null);
@@ -14016,7 +14619,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                       <Download size={16} className="shrink-0" />
                     </button>
                   )}
-                  {msg.text && (parseGame(msg.text)?.k === 'inv' ? (() => { const gi = games.find(x => x.g === parseGame(msg.text)?.g); return gi ? <GameInviteCard game={gi} games={games} meId={currentUser.id} other={chatUser} onAccept={() => sendGame({ k: 'acc', g: gi.g })} onDecline={() => sendGame({ k: 'dec', g: gi.g })} onOpen={() => setOpenGid(gi.g)} /> : null; })() : parsePoll(msg.text) ? <ChatPoll id={msg.id} text={msg.text} all={messages} meId={currentUser.id} onVote={i => void send({ text: VOTE_TAG + JSON.stringify({ p: msg.id, i }) })} /> : <p className="text-sm leading-relaxed whitespace-pre-wrap break-words" dir="auto"><Linkified text={msg.text} /></p>)}
+                  {msg.text && (parseGame(msg.text)?.k === 'inv' ? (() => { const gi = games.find(x => x.g === parseGame(msg.text)?.g); return gi ? <GameInviteCard game={gi} games={games} meId={currentUser.id} other={chatUser} onAccept={() => sendGame({ k: 'acc', g: gi.g })} onDecline={() => sendGame({ k: 'dec', g: gi.g })} onOpen={() => setOpenGid(gi.g)} /> : null; })() : parseLocMsg(msg.text) ? <ChatLocation loc={parseLocMsg(msg.text)!} /> : parsePoll(msg.text) ? <ChatPoll id={msg.id} text={msg.text} all={messages} meId={currentUser.id} onVote={i => void send({ text: VOTE_TAG + JSON.stringify({ p: msg.id, i }) })} /> : <p className="text-sm leading-relaxed whitespace-pre-wrap break-words" dir="auto"><Linkified text={msg.text} /></p>)}
                   {msg.sharedPostId && (
                     <button
                       onClick={e => { e.stopPropagation(); openPost(msg.sharedPostId!, msg.sharedCommentId); }}
@@ -14175,30 +14778,6 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           <input ref={fileRef} type="file" multiple onChange={handleFile} className="hidden" />
           <AnimatePresence>
             {pollOpen && <PollComposer onClose={() => setPollOpen(false)} onSend={(q, o) => { setPollOpen(false); void send({ text: POLL_TAG + JSON.stringify({ q, o }) }); }} />}
-            {toolsOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.94 }}
-                transition={{ type: 'spring', damping: 22, stiffness: 420 }}
-                className="absolute bottom-full right-2 mb-2 z-20 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur border border-white/10 shadow-xl origin-bottom-right"
-              >
-                <button onClick={() => { setPollOpen(true); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs active:scale-95">📊 استطلاع</button>
-                <button onClick={() => { fileRef.current?.click(); setToolsOpen(false); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-cyan-300 active:scale-95">
-                  <Paperclip size={16} /> إرفاق
-                </button>
-                <button onClick={() => { setToolsOpen(false); inputRef.current?.blur(); setShowGames(true); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-800 text-gray-200 text-xs hover:text-white active:scale-95">
-                  <Gamepad2 size={16} className="text-white" /> العب
-                </button>
-                <button
-                  onPointerDown={e => e.preventDefault()}
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => { setAiOpen(true); setToolsOpen(false); }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-gradient-to-r from-violet-600/30 to-cyan-500/20 border border-violet-400/30 text-white text-xs active:scale-95"
-                  aria-label="اسأل KIX"
-                >
-                  <Sparkles size={16} className="text-violet-300" /> اسأل KIX
-                </button>
-              </motion.div>
-            )}
           </AnimatePresence>
           {queue.length > 0 && <QueueChip count={queue.length} onClear={() => setQueue([])} />}
             {Object.keys(ups).length > 0 && <UploadBar ups={ups} />}
@@ -14206,7 +14785,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
             <button
               onPointerDown={e => e.preventDefault()}
               onMouseDown={e => e.preventDefault()}
-              onClick={() => setToolsOpen(o => !o)}
+              onClick={() => { if (toolsOpen) { setToolsOpen(false); inputRef.current?.focus(); } else { setEmojiOpen(false); inputRef.current?.blur(); setToolsOpen(true); } }}
               className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${toolsOpen ? 'bg-violet-600 text-white rotate-45' : 'bg-gray-800 text-gray-300 hover:text-white'}`}
               aria-label="المزيد"
             >
@@ -14225,7 +14804,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               value={text} onChange={e => { setText(e.target.value); if (e.target.value) notifyTyping(); }}
               placeholder={t('اكتب رسالة...')}
               className="flex-1 min-w-0 h-10 px-4 bg-gray-800 rounded-full text-[16px] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              onFocus={() => setEmojiOpen(false)}
+              onFocus={() => { setEmojiOpen(false); setToolsOpen(false); }}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             />
             {text.trim() || media || queue.length > 0 ? (
