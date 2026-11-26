@@ -3680,7 +3680,6 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
   const flash = (msg: string) => { setHint(msg); window.setTimeout(() => setHint(''), 2200); };
   const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    e.target.value = '';
     if (!f) return;
     if (!f.type.startsWith('image/') && !f.type.startsWith('video/')) { flash('اختر صورة أو فيديو'); return; }
     if (f.size > 80 * 1024 * 1024) { flash('الملف كبير جداً (الحد 80 ميجا)'); return; }
@@ -3746,7 +3745,7 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
             <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mb-4" />
             <h4 className="text-center text-base font-bold text-white mb-4">قصة جديدة</h4>
             <div className="grid grid-cols-3 gap-3">
-              {([[ImageIcon, 'المعرض', 'from-violet-600 to-cyan-500', () => fileRef.current?.click()], [TypeIcon, 'نصوص', 'from-fuchsia-500 to-violet-600', () => { void renderTextStory(' ', 0).then(f => setComposer(new File([f], 'kix-text-story.jpg', { type: f.type }))).catch(() => setTextComposer(true)); }]] as const).map(([Ic, lb, g, fn]) => (
+              {([[ImageIcon, 'المعرض', 'from-violet-600 to-cyan-500', () => { if (fileRef.current) fileRef.current.value = ''; fileRef.current?.click(); }], [TypeIcon, 'نصوص', 'from-fuchsia-500 to-violet-600', () => { void renderTextStory(' ', 0).then(f => setComposer(new File([f], 'kix-text-story.jpg', { type: f.type }))).catch(() => setTextComposer(true)); }]] as const).map(([Ic, lb, g, fn]) => (
                 <button key={lb} onClick={() => { setAddMenu(false); fn(); }} className="flex flex-col items-center gap-2.5 py-4 rounded-3xl bg-white/[0.06] backdrop-blur ring-1 ring-white/15 active:scale-95 transition-transform">
                   <span className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${g} ring-1 ring-white/30 flex items-center justify-center shadow-lg shadow-violet-900/40`}><Ic size={26} strokeWidth={2.3} color="#fff" /></span>
                   <span className="text-sm font-semibold text-white">{lb}</span>
@@ -4863,7 +4862,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
         <div style={{ background: isVideo ? undefined : bgc }} className="relative h-full w-full sm:w-auto sm:max-w-full sm:aspect-[9/16] bg-black sm:rounded-[32px] overflow-hidden sm:ring-2 ring-violet-400/40 sm:shadow-[0_0_60px_-10px_rgba(139,92,246,0.6)] flex items-center justify-center">
           {isVideo
             ? <video src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay />
-            : <>{blurBg && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}<img src={previewUrl} alt="" draggable={false} style={{ filter: fk >= 100 ? STORY_FILTERS[flt].f : undefined, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="relative w-full h-full object-contain select-none pointer-events-none" />{fk < 100 && flt > 0 && <img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, opacity: fk / 100, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none" />}</>}
+            : <>{blurBg && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}<img src={previewUrl} alt="" draggable={false} style={{ filter: fk >= 100 ? STORY_FILTERS[flt].f : undefined, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} onError={() => { const r = new FileReader(); r.onload = () => { if (typeof r.result === 'string') setPreviewUrl(r.result); }; r.readAsDataURL(file); }} className="relative w-full h-full object-contain select-none pointer-events-none" />{fk < 100 && flt > 0 && <img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, opacity: fk / 100, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none" />}</>}
           {!isVideo && tool !== 'draw' && <div className="absolute inset-0 z-[4] touch-none cursor-grab"
             onPointerDown={e => { tapStart.current = { x: e.clientX, y: e.clientY }; setMoreOpen(false); e.currentTarget.setPointerCapture(e.pointerId); bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); setSel(-1); setXsel(''); if (bp.current.size === 2) { const [p, q] = [...bp.current.values()]; bz.current = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI, r: rot }; } }}
             onPointerMove={e => {
@@ -6745,9 +6744,10 @@ export default function App() {
   });
   const refreshHome = () => {
     notifyStoriesChanged();
-    if (feedBusy.current) return;
+    // A stuck / slow earlier load must never make the Home icon dead: take over after it, and never wait more than 12 s.
+    feedBusy.current = false;
     setHomeRefreshing(true);
-    void loadFeedFirst().finally(() => window.setTimeout(() => setHomeRefreshing(false), 400));
+    void Promise.race([loadFeedFirst(), new Promise<void>(r => window.setTimeout(r, 12000))]).finally(() => { feedBusy.current = false; setFeedLoading(false); window.setTimeout(() => setHomeRefreshing(false), 400); });
   };
   // Home icon: from any screen -> back to Home. On Home: scrolled down -> top; already at the top -> refresh the feed (the icon spins).
   const onHomeTap = () => {
@@ -6756,8 +6756,11 @@ export default function App() {
       window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }), 60);
       return;
     }
-    if (window.scrollY > 40) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    // Jump (not smooth) to the top: the feed re-renders while refreshing and a smooth scroll gets cancelled half way.
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    document.documentElement.scrollTop = 0; document.body.scrollTop = 0;
     refreshHome();
+    window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }), 120);
   };
   const openProfile = (id: string) => {
     if (id === currentUserId) {
