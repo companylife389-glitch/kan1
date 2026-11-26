@@ -2553,6 +2553,18 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [editing, setEditing] = useState<GroupMessage | null>(null);
   const [reactingTo, setReactingTo] = useState<string | null>(null);
+  const justClosed = useRef(0);
+  // Changed your mind? Tapping anywhere outside the reaction bar / action buttons just closes them.
+  useEffect(() => {
+    if (!reactingTo && !activeMsgId) return;
+    const h = (e: PointerEvent) => {
+      if ((e.target as HTMLElement | null)?.closest('[data-msg-ui]')) return;
+      justClosed.current = Date.now();
+      setReactingTo(null); setActiveMsgId(null);
+    };
+    document.addEventListener('pointerdown', h, true);
+    return () => document.removeEventListener('pointerdown', h, true);
+  }, [reactingTo, activeMsgId]);
   const [seenFor, setSeenFor] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [viewer, setViewer] = useState<{ src: string; name?: string } | null>(null);
@@ -2761,7 +2773,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                       () => { setReplyingTo(m); window.setTimeout(() => inputRef.current?.focus(), 30); },
                       () => { setActiveMsgId(m.id); setReactingTo(m.id); },
                     )}
-                    onClick={e => { e.stopPropagation(); setActiveMsgId(active ? null : m.id); setReactingTo(null); }}
+                    onClick={e => { e.stopPropagation(); if (Date.now() - justClosed.current < 450) return; setActiveMsgId(active ? null : m.id); setReactingTo(null); }}
                     className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words cursor-pointer select-none touch-pan-y transition-shadow ${highlightId === m.id ? 'ring-2 ring-cyan-400' : ''} ${isStickerName(m.media?.name) && !m.text ? 'bg-transparent !p-0' : mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`}
                   >
                     {m.replyToId && (
@@ -2820,14 +2832,14 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     </div>
                   )}
                   {active && reactingTo === m.id && (
-                    <div className={`kan-pop flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full shadow-lg ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
+                    <div data-msg-ui className={`kan-pop flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full shadow-lg ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
                       {QUICK_REACTIONS.map(em => (
                         <button key={em} onClick={() => { void react(m, em); setReactingTo(null); setActiveMsgId(null); }} className="w-9 h-9 text-xl rounded-full hover:bg-gray-700 active:scale-125 transition-transform">{em}</button>
                       ))}
                     </div>
                   )}
                   {active && (
-                    <div className={`flex flex-wrap items-center gap-1.5 mt-1 ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
+                    <div data-msg-ui className={`flex flex-wrap items-center gap-1.5 mt-1 ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
                       <button onClick={() => setReactingTo(p => (p === m.id ? null : m.id))} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Smile size={12} /> تفاعل</button>
                       <button onClick={() => { setReplyingTo(m); setActiveMsgId(null); inputRef.current?.focus(); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Reply size={12} /> رد</button>
                       {isStickerName(m.media?.name) && m.media && <SaveStickerBtn url={m.media.url} onDone={() => setActiveMsgId(null)} />}
@@ -3765,8 +3777,29 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
 
 // ============ Story extras: text + stickers, poll, question box, close friends, highlights ============
 const STORY_BGS = ['linear-gradient(135deg,#6d28d9,#c026d3,#06b6d4)', 'linear-gradient(135deg,#f97316,#ec4899)', 'linear-gradient(135deg,#0ea5e9,#6366f1)', 'linear-gradient(135deg,#10b981,#0e7490)', 'linear-gradient(135deg,#ef4444,#7c2d12)', 'linear-gradient(135deg,#111827,#4b5563)'];
-const STORY_FILTERS: { n: string; f: string }[] = [{ n: 'عادي', f: 'none' }, { n: 'دافئ', f: 'sepia(0.35) saturate(1.4) contrast(1.05)' }, { n: 'بارد', f: 'hue-rotate(185deg) saturate(1.1) brightness(1.05)' }, { n: 'أبيض وأسود', f: 'grayscale(1) contrast(1.1)' }, { n: 'ساطع', f: 'brightness(1.2) saturate(1.3)' }, { n: 'كلاسيك', f: 'sepia(0.7) contrast(0.95) brightness(1.05)' }, { n: 'دراما', f: 'contrast(1.4) saturate(0.9) brightness(0.92)' }, { n: 'سينمائي', f: 'contrast(1.25) sepia(0.2) hue-rotate(-12deg) saturate(1.2) brightness(0.95)' }, { n: 'نيون', f: 'saturate(2.1) contrast(1.2) hue-rotate(320deg) brightness(1.05)' }, { n: 'غروب', f: 'sepia(0.5) saturate(1.9) hue-rotate(-18deg) brightness(1.08)' }, { n: 'ذهبي', f: 'sepia(0.6) saturate(2) hue-rotate(-8deg) brightness(1.1) contrast(1.05)' }, { n: 'شتوي', f: 'hue-rotate(200deg) saturate(0.8) brightness(1.12) contrast(1.05)' }, { n: 'بوب', f: 'saturate(2.3) contrast(1.15) brightness(1.03)' }, { n: 'ليلي', f: 'brightness(0.82) contrast(1.3) hue-rotate(210deg) saturate(1.3)' }, { n: 'حلم', f: 'brightness(1.12) contrast(0.88) saturate(1.35) sepia(0.12)' }, { n: 'فيلم', f: 'contrast(1.15) sepia(0.15) saturate(0.85) brightness(0.97)' }, { n: 'مضيء', f: 'brightness(1.18) contrast(0.95) saturate(1.1)' }, { n: 'عميق', f: 'contrast(1.35) saturate(1.25) brightness(0.9)' }, { n: 'ربيع', f: 'hue-rotate(-10deg) saturate(1.5) brightness(1.08)' }, { n: 'ريترو', f: 'sepia(0.45) contrast(1.1) saturate(0.8) hue-rotate(-15deg)' }, { n: 'جليد', f: 'hue-rotate(170deg) saturate(0.7) brightness(1.15) contrast(1.1)' }, { n: 'قوي', f: 'contrast(1.5) saturate(1.5)' }, { n: 'فينتج', f: 'sepia(0.3) contrast(1.1) saturate(1.3) hue-rotate(-8deg) brightness(1.05)' }, { n: 'بورتريه', f: 'brightness(1.08) contrast(1.05) saturate(1.15) sepia(0.08)' }, { n: 'تباين', f: 'contrast(1.6) brightness(0.95)' }, { n: 'باستيل', f: 'saturate(0.7) brightness(1.2) contrast(0.9)' }, { n: 'سايبر', f: 'hue-rotate(260deg) saturate(1.8) contrast(1.15)' }, { n: 'فجر', f: 'sepia(0.25) hue-rotate(-30deg) saturate(1.6) brightness(1.1)' }, { n: 'غابة', f: 'hue-rotate(60deg) saturate(1.3) contrast(1.05) brightness(0.98)' }, { n: 'محيط', f: 'hue-rotate(150deg) saturate(1.4) brightness(1.05)' }, { n: 'توهج', f: 'brightness(1.25) contrast(0.9) saturate(1.4)' }, { n: 'ظلام', f: 'brightness(0.7) contrast(1.4) saturate(0.8)' }, { n: 'نقي', f: 'contrast(1.08) saturate(1.1) brightness(1.04)' }, { n: 'رمادي ناعم', f: 'grayscale(0.7) brightness(1.08) contrast(0.95)' }, { n: 'كرز', f: 'hue-rotate(-25deg) saturate(1.7) contrast(1.1)' }, { n: 'ليمون', f: 'hue-rotate(35deg) saturate(1.6) brightness(1.1)' }, { n: 'بنفسج', f: 'hue-rotate(250deg) saturate(1.4) brightness(1.02)' }, { n: 'كودك', f: 'sepia(0.35) saturate(1.5) contrast(1.15) brightness(1.02) hue-rotate(-6deg)' }, { n: 'نوار', f: 'grayscale(1) contrast(1.6) brightness(0.9)' }, { n: 'صيف', f: 'saturate(1.6) brightness(1.12) sepia(0.15)' }, { n: 'خريف', f: 'sepia(0.5) hue-rotate(-20deg) saturate(1.5) contrast(1.05)' }];
-const bakeFilter = async (f: File, css: string): Promise<File | null> => {
+type StoryFx = { v?: number; t?: [string, string, number] };
+const STORY_FILTERS: { n: string; f: string; fx?: StoryFx }[] = [{ n: 'عادي', f: 'none' }, { n: 'دافئ', f: 'sepia(0.35) saturate(1.4) contrast(1.05)' }, { n: 'بارد', f: 'hue-rotate(185deg) saturate(1.1) brightness(1.05)' }, { n: 'أبيض وأسود', f: 'grayscale(1) contrast(1.1)' }, { n: 'ساطع', f: 'brightness(1.2) saturate(1.3)' }, { n: 'كلاسيك', f: 'sepia(0.7) contrast(0.95) brightness(1.05)' }, { n: 'دراما', f: 'contrast(1.4) saturate(0.9) brightness(0.92)' }, { n: 'سينمائي', f: 'contrast(1.25) sepia(0.2) hue-rotate(-12deg) saturate(1.2) brightness(0.95)' }, { n: 'نيون', f: 'saturate(2.1) contrast(1.2) hue-rotate(320deg) brightness(1.05)' }, { n: 'غروب', f: 'sepia(0.5) saturate(1.9) hue-rotate(-18deg) brightness(1.08)' }, { n: 'ذهبي', f: 'sepia(0.6) saturate(2) hue-rotate(-8deg) brightness(1.1) contrast(1.05)' }, { n: 'شتوي', f: 'hue-rotate(200deg) saturate(0.8) brightness(1.12) contrast(1.05)' }, { n: 'بوب', f: 'saturate(2.3) contrast(1.15) brightness(1.03)' }, { n: 'ليلي', f: 'brightness(0.82) contrast(1.3) hue-rotate(210deg) saturate(1.3)' }, { n: 'حلم', f: 'brightness(1.12) contrast(0.88) saturate(1.35) sepia(0.12)' }, { n: 'فيلم', f: 'contrast(1.15) sepia(0.15) saturate(0.85) brightness(0.97)' }, { n: 'مضيء', f: 'brightness(1.18) contrast(0.95) saturate(1.1)' }, { n: 'عميق', f: 'contrast(1.35) saturate(1.25) brightness(0.9)' }, { n: 'ربيع', f: 'hue-rotate(-10deg) saturate(1.5) brightness(1.08)' }, { n: 'ريترو', f: 'sepia(0.45) contrast(1.1) saturate(0.8) hue-rotate(-15deg)' }, { n: 'جليد', f: 'hue-rotate(170deg) saturate(0.7) brightness(1.15) contrast(1.1)' }, { n: 'قوي', f: 'contrast(1.5) saturate(1.5)' }, { n: 'فينتج', f: 'sepia(0.3) contrast(1.1) saturate(1.3) hue-rotate(-8deg) brightness(1.05)' }, { n: 'بورتريه', f: 'brightness(1.08) contrast(1.05) saturate(1.15) sepia(0.08)' }, { n: 'تباين', f: 'contrast(1.6) brightness(0.95)' }, { n: 'باستيل', f: 'saturate(0.7) brightness(1.2) contrast(0.9)' }, { n: 'سايبر', f: 'hue-rotate(260deg) saturate(1.8) contrast(1.15)' }, { n: 'فجر', f: 'sepia(0.25) hue-rotate(-30deg) saturate(1.6) brightness(1.1)' }, { n: 'غابة', f: 'hue-rotate(60deg) saturate(1.3) contrast(1.05) brightness(0.98)' }, { n: 'محيط', f: 'hue-rotate(150deg) saturate(1.4) brightness(1.05)' }, { n: 'توهج', f: 'brightness(1.25) contrast(0.9) saturate(1.4)' }, { n: 'ظلام', f: 'brightness(0.7) contrast(1.4) saturate(0.8)' }, { n: 'نقي', f: 'contrast(1.08) saturate(1.1) brightness(1.04)' }, { n: 'رمادي ناعم', f: 'grayscale(0.7) brightness(1.08) contrast(0.95)' }, { n: 'كرز', f: 'hue-rotate(-25deg) saturate(1.7) contrast(1.1)' }, { n: 'ليمون', f: 'hue-rotate(35deg) saturate(1.6) brightness(1.1)' }, { n: 'بنفسج', f: 'hue-rotate(250deg) saturate(1.4) brightness(1.02)' }, { n: 'كودك', f: 'sepia(0.35) saturate(1.5) contrast(1.15) brightness(1.02) hue-rotate(-6deg)' }, { n: 'نوار', f: 'grayscale(1) contrast(1.6) brightness(0.9)' }, { n: 'صيف', f: 'saturate(1.6) brightness(1.12) sepia(0.15)' }, { n: 'خريف', f: 'sepia(0.5) hue-rotate(-20deg) saturate(1.5) contrast(1.05)' },
+  { n: 'سينما+', f: 'contrast(1.2) saturate(1.1) brightness(0.96)', fx: { v: 0.55, t: ['#ff8a3d', 'soft-light', 0.35] } },
+  { n: 'بولارويد', f: 'sepia(0.25) contrast(0.95) brightness(1.08) saturate(1.2)', fx: { v: 0.35, t: ['#ffd9a8', 'soft-light', 0.45] } },
+  { n: 'غروب ذهبي', f: 'saturate(1.35) contrast(1.08) brightness(1.04)', fx: { v: 0.3, t: ['#ff9a3c', 'overlay', 0.4] } },
+  { n: 'حلم وردي', f: 'brightness(1.1) contrast(0.92) saturate(1.2)', fx: { t: ['#ff9ecf', 'screen', 0.28] } },
+  { n: 'نيون ليلي', f: 'contrast(1.25) saturate(1.5) brightness(0.9)', fx: { v: 0.5, t: ['#7c3aed', 'overlay', 0.45] } },
+  { n: 'ثلجي', f: 'brightness(1.12) saturate(0.85) contrast(1.05)', fx: { t: ['#7cc8ff', 'soft-light', 0.4] } },
+  { n: 'ذهب وردي', f: 'saturate(1.25) brightness(1.06) contrast(1.04)', fx: { v: 0.25, t: ['#ff8fa3', 'soft-light', 0.45] } },
+  { n: 'مسرحي', f: 'contrast(1.35) saturate(1.2) brightness(0.9)', fx: { v: 0.7 } },
+  { n: 'ضباب', f: 'contrast(0.85) brightness(1.1) saturate(0.9)', fx: { t: ['#ffffff', 'soft-light', 0.5] } },
+  { n: 'تيل وبرتقالي', f: 'contrast(1.15) saturate(1.3)', fx: { v: 0.3, t: ['#0fb5ae', 'overlay', 0.3] } }];
+function FilterFx({ i }: { i: number }) {
+  const fx = STORY_FILTERS[i]?.fx;
+  if (!fx) return null;
+  return (
+    <>
+      {fx.t && <div className="absolute inset-0 pointer-events-none z-[3]" style={{ background: fx.t[0], mixBlendMode: fx.t[1] as React.CSSProperties['mixBlendMode'], opacity: fx.t[2] }} />}
+      {fx.v ? <div className="absolute inset-0 pointer-events-none z-[3]" style={{ background: `radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,${fx.v}) 100%)` }} /> : null}
+    </>
+  );
+}
+const bakeFilter = async (f: File, css: string, fxIdx = 0): Promise<File | null> => {
   try {
     const bmp = await createImageBitmap(f);
     const sc = Math.min(1, 2160 / Math.max(bmp.width, bmp.height));
@@ -3776,6 +3809,12 @@ const bakeFilter = async (f: File, css: string): Promise<File | null> => {
     if (!ctx || !('filter' in ctx)) return null;
     ctx.filter = css;
     ctx.drawImage(bmp, 0, 0, c.width, c.height);
+    const fx = STORY_FILTERS[fxIdx]?.fx;
+    if (fx) {
+      ctx.filter = 'none';
+      if (fx.t) { ctx.globalCompositeOperation = fx.t[1] as GlobalCompositeOperation; ctx.globalAlpha = fx.t[2]; ctx.fillStyle = fx.t[0]; ctx.fillRect(0, 0, c.width, c.height); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+      if (fx.v) { const r = Math.hypot(c.width, c.height) / 2; const g = ctx.createRadialGradient(c.width / 2, c.height / 2, r * 0.45, c.width / 2, c.height / 2, r); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${fx.v})`); ctx.fillStyle = g; ctx.fillRect(0, 0, c.width, c.height); }
+    }
     const blob = await new Promise<Blob | null>(r => c.toBlob(r, 'image/jpeg', 0.92));
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
@@ -4200,6 +4239,28 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   useEffect(() => { if (tool !== 'music') setLyPlay(false); }, [tool]);
   const lyLines = useMemo(() => ly.raw.map(([t, s]) => [t + ly.off, s] as [number, string]), [ly.raw, ly.off]);
   const lyIdx = lyActive(lyLines, lyPlay ? lyT : mStart + 0.05);
+  // Picking a song looks its lyrics up by itself and switches them on when found.
+  const mStartRef = useRef(0); mStartRef.current = mStart;
+  useEffect(() => {
+    const nm = music ? music.name : remoteM?.name;
+    if (!nm) return;
+    let dead = false;
+    const ctl = new AbortController();
+    const tm = window.setTimeout(() => ctl.abort(), 9000);
+    setLy(v => ({ ...v, raw: [], on: false, off: 0 }));
+    void (async () => {
+      try {
+        const q = nm.replace(/\.[^.]+$/, '').replace(/\s[-–]\s/g, ' ').replace(/_+/g, ' ').slice(0, 100);
+        const r = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`, { signal: ctl.signal });
+        const j = await r.json() as { syncedLyrics?: string | null }[];
+        const hit = j.find(x => x.syncedLyrics);
+        const lrc = hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
+        if (dead || !lrc.length) return;
+        setLy(v => ({ ...v, raw: lrc, on: true, off: music ? 0 : Math.round((mStartRef.current - lrc[0][0]) * 10) / 10 }));
+      } catch { /* no lyrics found: the manual editor is still there */ }
+    })();
+    return () => { dead = true; window.clearTimeout(tm); ctl.abort(); };
+  }, [music?.name, remoteM?.url]); // eslint-disable-line react-hooks/exhaustive-deps
   const [bgc, setBgc] = useState('#000000');
   const [rot, setRot] = useState(0);
   const [blurBg, setBlurBg] = useState(false);
@@ -4241,6 +4302,8 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const [penW, setPenW] = useState(10);
   const [, setDn] = useState(0);
   const [dur, setDur] = useState(5);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const tapStart = useRef<{ x: number; y: number } | null>(null);
   const [tFont, setTFont] = useState(0);
   const [cTitle, setCTitle] = useState('');
   const [cWhen, setCWhen] = useState('');
@@ -4327,12 +4390,16 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
     if (at && at.getTime() < Date.now() + 60000) { setErr('اختر وقتاً في المستقبل'); return; }
     setBusy(true);
     setErr('');
-    const baseFile = isVideo ? file : await bakeTransform(file);
+    // Every preparation step is guarded: a failure falls back to the original file instead of leaving the button stuck.
+    let baseFile: File = file;
+    if (!isVideo) { try { baseFile = await bakeTransform(file); } catch (e) { console.error(e); } }
     let upFile: File = baseFile;
     let baked = false;
-    if (!isVideo && flt > 0) { const b = await bakeFilter(baseFile, STORY_FILTERS[flt].f); if (b) { upFile = b; baked = true; } }
-    if (!isVideo) upFile = await shrinkImageFile(upFile);
-    const path = kanPath(`${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[upFile.type] ?? safeExt(upFile.name)}`, upFile.size);
+    if (!isVideo && flt > 0) { try { const b = await bakeFilter(baseFile, STORY_FILTERS[flt].f, flt); if (b) { upFile = b; baked = true; } } catch (e) { console.error(e); } }
+    if (!isVideo) { try { upFile = await shrinkImageFile(upFile); } catch (e) { console.error(e); } }
+    let path: string;
+    try { path = kanPath(`${currentUser.id}/story-${crypto.randomUUID()}.${MEDIA_EXT[upFile.type] ?? safeExt(upFile.name)}`, upFile.size); }
+    catch (e) { setErr(`تعذّر نشر القصة: ${(e as { message?: string })?.message ?? 'الملف غير مدعوم أو كبير'}`); setBusy(false); return; }
     // Show this upload in the always-visible upload bar (with cancel), like posts do.
     const jobId = crypto.randomUUID();
     const ctl = new AbortController();
@@ -4371,10 +4438,10 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
       if (ly.on && lyLines.length > 0 && (music || remoteM)) {
         const within = lyLines.filter(([t]) => t <= lyEnd);
         let first = 0; within.forEach(([t], k) => { if (t <= mStart) first = k; });
-        const l = within.slice(first, first + 80).map(([t, tx]) => [Math.round(t * 100) / 100, tx.slice(0, 140)] as [number, string]);
+        const l = within.slice(first, first + 80).filter(([t]) => Number.isFinite(t)).map(([t, tx]) => [Math.round(t * 100) / 100, tx.slice(0, 140)] as [number, string]);
         if (l.length) lyPack = { l, st: ly.st, c: ly.c, p: ly.p };
       }
-      let mObj: StoryExtra['m'];
+      let mObj: StoryExtra['m'] = undefined;
       if (music) {
         const mp = musicPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
@@ -4383,7 +4450,9 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
       } else if (remoteM) {
         mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, cover: remoteM.cover, style: mStyle === 'cover' && remoteM.cover ? 'cover' : 'none', ...(tp && mStyle === 'cover' ? { tp } : {}), ...(lyPack ? { ly: lyPack } : {}) };
       }
-      const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, shared_post_id: sharedPostId ?? null, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj, items: uploadedItems }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
+      const doInsert = () => supabase.from('stories').insert({ user_id: currentUser.id, shared_post_id: sharedPostId ?? null, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj, items: uploadedItems }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
+      let { error: insErr } = await doInsert();
+      if (insErr && mObj?.ly) { delete mObj.ly; ({ error: insErr } = await doInsert()); } // never lose the story over its lyrics
       if (insErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); throw insErr; }
       notifyStoriesChanged();
       storyOk = true;
@@ -4433,12 +4502,21 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
     </div>
   ) : null;
   void [setTxt, setTxtC, setTxtS, setTxtB, txtC, txtS, txtB];
+  const toolDefs = [
+    ['text', TypeIcon, 'نص', items.some(i => i.k === 't')], ['sticker', Smile, 'ملصق', items.length > 0], ['music', Music, 'موسيقى', !!music || !!remoteM], ['filter', Wand2, 'فلتر', flt > 0], ['draw', Pencil, 'رسم', strokes.current.length > 0],
+    ...(isVideo ? [] : [['frame', ImageIcon, 'الخلفية والتدوير', bgc !== '#000000' || rot !== 0] as const]),
+    ['poll', BarChart3, 'استطلاع', !!extra.poll], ['ask', HelpCircle, 'سؤال', !!extra.ask], ['count', Clock, 'عدّاد', items.some(i => i.k === 'c')], ['dur', Play, 'مدة العرض', dur !== 5], ['aud', Users, 'مقربين', aud === 'close'], ['sched', Calendar, 'جدولة', !!sched],
+  ] as const;
+  const toolLabel = toolDefs.find(d => d[0] === tool)?.[2] ?? '';
   return createPortal(
     <div dir={DIR} className="kan-always-white fixed inset-0 z-[140] bg-black flex flex-col overscroll-none select-none">
       <div className="flex items-center justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
         <button onClick={onClose} disabled={busy} className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl ring-1 ring-white/25 shadow-lg shadow-violet-900/30 text-white active:scale-90 transition-transform" aria-label="إغلاق"><X size={20} /></button>
-        <span className="text-white font-semibold text-sm">قصة جديدة</span>
-        <span className="w-9" />
+        <style>{'@keyframes kySheet{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}@keyframes kyFade{from{opacity:0}to{opacity:1}}.ky-sheet{animation:kySheet .28s cubic-bezier(.2,.8,.2,1) both}.ky-fade{animation:kyFade .2s both}'}</style>
+        <div className="flex rounded-full bg-white/10 backdrop-blur-xl ring-1 ring-white/20 p-0.5 text-xs font-semibold">
+          {([['all', 'الجميع'], ['close', 'المقربين']] as const).map(([k, l]) => <button key={k} onClick={() => setAud(k)} className={`px-4 h-8 rounded-full transition-all duration-200 ${aud === k ? 'bg-white text-black shadow' : 'text-white/80'}`}>{l}</button>)}
+        </div>
+        <span className="w-10" />
       </div>
       <div className="relative flex-1 min-h-0 flex items-center justify-center">
         <div style={{ background: isVideo ? undefined : bgc }} className="relative h-full w-full sm:w-auto sm:max-w-full sm:aspect-[9/16] bg-black sm:rounded-[32px] overflow-hidden sm:ring-2 ring-violet-400/40 sm:shadow-[0_0_60px_-10px_rgba(139,92,246,0.6)] flex items-center justify-center">
@@ -4446,14 +4524,14 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
             ? <video src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay />
             : <>{blurBg && <img src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}<img src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="relative w-full h-full object-contain select-none pointer-events-none" /></>}
           {!isVideo && tool !== 'draw' && <div className="absolute inset-0 z-[4] touch-none cursor-grab"
-            onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); setSel(-1); setXsel(''); if (bp.current.size === 2) { const [p, q] = [...bp.current.values()]; bz.current = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI, r: rot }; } }}
+            onPointerDown={e => { tapStart.current = { x: e.clientX, y: e.clientY }; setMoreOpen(false); e.currentTarget.setPointerCapture(e.pointerId); bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); setSel(-1); setXsel(''); if (bp.current.size === 2) { const [p, q] = [...bp.current.values()]; bz.current = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI, r: rot }; } }}
             onPointerMove={e => {
               const prev = bp.current.get(e.pointerId); if (!prev) return;
               bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
               if (bp.current.size >= 2 && bz.current) { const [p, q] = [...bp.current.values()]; setZoom(Math.max(0.5, Math.min(4, (bz.current.z * Math.hypot(p.x - q.x, p.y - q.y)) / bz.current.d))); setRot(snapAng(bz.current.r + (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI - bz.current.a)); return; }
               if (bp.current.size === 1) { const r = e.currentTarget.getBoundingClientRect(); const dx = ((e.clientX - prev.x) / r.width) * 100; const dy = ((e.clientY - prev.y) / r.height) * 100; setOff(o => ({ x: Math.max(-150, Math.min(150, o.x + dx)), y: Math.max(-150, Math.min(150, o.y + dy)) })); }
             }}
-            onPointerUp={e => { bp.current.delete(e.pointerId); if (bp.current.size < 2) bz.current = null; }}
+            onPointerUp={e => { bp.current.delete(e.pointerId); if (bp.current.size < 2) bz.current = null; const t0 = tapStart.current; tapStart.current = null; if (t0 && Math.hypot(e.clientX - t0.x, e.clientY - t0.y) < 6 && tool) setTool(''); }}
             onPointerCancel={e => { bp.current.delete(e.pointerId); bz.current = null; }}
             onWheel={e => setZoom(z => Math.max(0.5, Math.min(4, z - e.deltaY * 0.002)))}
             onDoubleClick={resetBase} />}
@@ -4467,16 +4545,19 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
           {remoteM && !music && mStyle === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={q => setTp(o => ({ ...q, r: o?.r, s: o?.s }))} />}
           {(music || remoteM) && ly.on && lyLines.length > 0 && <StoryLyrics ly={{ l: lyLines, st: ly.st, c: ly.c, p: ly.p }} idx={lyIdx} onMove={tool === 'music' ? (q => patchLy({ p: { ...ly.p, x: q.x, y: q.y } })) : undefined} />}
+          <FilterFx i={flt} />
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
-          <div className="absolute top-12 end-2 min-[400px]:end-3 z-20 flex flex-col gap-1.5 min-[400px]:gap-2 max-h-[calc(100%-4rem)] overflow-y-auto no-scrollbar">
-            {([['text', TypeIcon, 'نص', items.some(i => i.k === 't')], ['sticker', Smile, 'ملصق', items.length > 0], ['music', Music, 'موسيقى', !!music || !!remoteM], ['filter', Wand2, 'فلتر', flt > 0], ...(isVideo ? [] : [['frame', ImageIcon, 'الخلفية والتدوير', bgc !== '#000000' || rot !== 0] as const]), ['draw', Pencil, 'رسم', strokes.current.length > 0], ['poll', BarChart3, 'استطلاع', !!extra.poll], ['ask', HelpCircle, 'سؤال', !!extra.ask], ['count', Clock, 'عدّاد', items.some(i => i.k === 'c')], ['dur', Play, 'مدة العرض', dur !== 5], ['aud', Users, 'مقربين', aud === 'close'], ['sched', Calendar, 'جدولة', !!sched]] as const).map(([k, Ic, label, on]) => (
-              <button key={k} onClick={() => setTool(t => (t === k ? '' : k))} aria-label={label} title={label} className={`relative shrink-0 w-9 h-9 min-[400px]:w-11 min-[400px]:h-11 rounded-full flex items-center justify-center text-white active:scale-90 transition-transform ${tool === k ? 'bg-white/30 backdrop-blur-xl ring-2 ring-white' : 'bg-black/35 backdrop-blur-xl ring-1 ring-white/30'}`} style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.5))' }}><Ic size={22} strokeWidth={2.3} color="#fff" />{on && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-white ring-2 ring-violet-600" />}</button>
+          <div className="absolute top-3 end-3 z-20 flex flex-col items-center gap-2.5">
+            {toolDefs.slice(0, 5).map(([k, Ic, label, on]) => (
+              <button key={k} onClick={() => { setMoreOpen(false); setTool(t => (t === k ? '' : k)); }} aria-label={label} title={label} className={`relative w-11 h-11 rounded-2xl flex items-center justify-center text-white active:scale-90 transition-all duration-200 backdrop-blur-xl ${tool === k ? 'bg-gradient-to-br from-violet-500 to-cyan-400 shadow-lg shadow-violet-500/40 scale-105' : 'bg-black/35 ring-1 ring-white/25'}`}><Ic size={21} strokeWidth={2.2} color="#fff" />{on && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-white ring-2 ring-violet-600" />}</button>
             ))}
+            <button onClick={() => { setTool(''); setMoreOpen(true); }} aria-label="المزيد" title="المزيد" className={`relative w-11 h-11 rounded-2xl flex items-center justify-center text-white text-xl font-black leading-none active:scale-90 transition-all backdrop-blur-xl bg-black/35 ring-1 ring-white/25`}>⋯{toolDefs.slice(5).some(d => d[3]) && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-white ring-2 ring-violet-600" />}</button>
           </div>
           <StoryOverlays extra={extra} sel={sel} xsel={xsel} onXSelect={k => { setXsel(k); setSel(-1); setTool(k); }} onXf={(k, p) => (k === 'poll' ? setPollPos(o => ({ ...o, ...p })) : setAskPos(o => ({ ...o, ...p })))} onXRemove={k => { if (k === 'poll') { setPq(''); setPa(''); setPb(''); setPxs([]); } else setAsk(''); setXsel(''); }} onSelect={i => { setSel(i); setXsel(''); if (items[i]?.k === 't') setTool('text'); }} onRemove={removeItem} onScale={(i, sz) => setItems(a => a.map((x, k) => (k === i ? { ...x, s: sz } : x)))} onRotate={(i, r) => setItems(a => a.map((x, k) => (k === i ? { ...x, r } : x)))} onMove={(k, x, y, idx) => { if (k === 'text') { const tk = extra.texts?.[idx ?? -1]?.k; if (tk === 'loc') setLocP(o => ({ ...o, x, y })); else if (tk === 'men') setMenP(o => ({ ...o, x, y })); else if (tk === 'lnk') setLnkP(o => ({ ...o, x, y })); } else if (k === 'poll') setPollPos(o => ({ ...o, x, y })); else if (k === 'item' && idx !== undefined) setItems(a => a.map((it, i) => (i === idx ? { ...it, x, y } : it))); else setStkPos({ x, y }); }} />
         </div>
       </div>
-      <div className={`absolute inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 ${tool ? 'rounded-3xl bg-black/70 backdrop-blur-2xl ring-1 ring-white/15 p-3 max-h-[48%] overflow-y-auto overscroll-contain shadow-2xl' : 'hidden'}`}>
+      <div key={tool || 'none'} className={`absolute inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 ${tool ? 'ky-sheet rounded-[28px] bg-gray-950/80 backdrop-blur-2xl ring-1 ring-white/15 p-3 max-h-[48%] overflow-y-auto no-scrollbar overscroll-contain shadow-2xl shadow-violet-950/50' : 'hidden'}`}>
+        {tool && <div className="flex items-center justify-between mb-2"><span className="text-white text-sm font-bold">{toolLabel}</span><button onClick={() => setTool('')} className="px-3.5 h-7 rounded-full bg-white text-black text-xs font-bold active:scale-95">تم</button></div>}
         {tool === 'text' && <div className="space-y-2 mb-1">
           <div className="flex gap-2"><input value={tNew} onChange={e => setTNew(e.target.value.slice(0, 200))} onKeyDown={e => { if (e.key === 'Enter') addText(tNew); }} placeholder="اكتب نصاً ثم اضغط +" dir="auto" className="flex-1 min-w-0 px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" /><button onClick={() => addText(tNew)} className="shrink-0 w-10 h-10 rounded-full bg-white text-black flex items-center justify-center active:scale-90" aria-label="إضافة"><Plus size={20} /></button></div>
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -4591,6 +4672,21 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           {busy ? <><RefreshCw size={15} className="animate-spin" /> {pct}%</> : <><Send size={15} /> {sched ? 'جدولة' : 'نشر'}</>}
         </button>
       </div>
+      {moreOpen && (
+        <div className="absolute inset-0 z-[35] flex items-end bg-black/55 ky-fade" onClick={() => setMoreOpen(false)}>
+          <div className="w-full rounded-t-[28px] bg-gray-950/95 backdrop-blur-2xl ring-1 ring-white/10 p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] ky-sheet" onClick={e => e.stopPropagation()}>
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/25" />
+            <div className="grid grid-cols-4 gap-x-2 gap-y-4">
+              {toolDefs.slice(5).map(([k, Ic, label, on]) => (
+                <button key={k} onClick={() => { setMoreOpen(false); setTool(k); }} className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform">
+                  <span className={`relative w-14 h-14 rounded-2xl flex items-center justify-center ${on ? 'bg-gradient-to-br from-violet-500 to-cyan-400 shadow-lg shadow-violet-500/30' : 'bg-white/10 ring-1 ring-white/10'}`}><Ic size={24} color="#fff" strokeWidth={2.1} /></span>
+                  <span className="text-[11px] text-white/85 text-center leading-tight">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {cfOpen && <CloseFriendsModal meId={currentUser.id} onClose={() => setCfOpen(false)} />}
       {err && <div className="absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500/90 text-white text-xs">{err}</div>}
     </div>,
@@ -4725,7 +4821,7 @@ function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPl
   };
   const chip = (on: boolean) => `shrink-0 px-3 h-8 rounded-full text-xs font-semibold ${on ? 'bg-white text-black' : 'bg-white/10 text-white'}`;
   return (
-    <div className="mt-2 rounded-2xl bg-white/5 ring-1 ring-white/10 p-2 max-h-[46svh] overflow-y-auto overscroll-contain">
+    <div className="mt-2 rounded-2xl bg-white/5 ring-1 ring-white/10 p-2 max-h-[46svh] overflow-y-auto no-scrollbar overscroll-contain">
       <div className="flex items-center justify-between gap-2 px-1">
         <span className="text-xs font-bold text-white flex items-center gap-1.5"><TypeIcon size={14} />كلمات الأغنية</span>
         <button onClick={() => patch({ on: !ly.on })} role="switch" aria-checked={ly.on} aria-label="كلمات الأغنية" className={`w-11 h-6 rounded-full p-0.5 transition-colors ${ly.on ? 'bg-white' : 'bg-white/20'}`}>
@@ -4760,7 +4856,7 @@ function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPl
             </div>
           </div>
           <p className="mt-2 px-1 text-[11px] text-white/70">اضغط على السطر اللي بيبدأ عنده الصوت المختار عشان تظبط التزامن</p>
-          <div className="mt-1 max-h-28 overflow-y-auto overscroll-contain rounded-xl bg-black/30 p-1">
+          <div className="mt-1 max-h-28 overflow-y-auto no-scrollbar overscroll-contain rounded-xl bg-black/30 p-1">
             {ly.raw.map(([t, s], i) => <button key={i} onClick={() => patch({ off: Math.round((start - t) * 10) / 10 })} className={`block w-full text-start px-2 py-1 rounded-lg text-[12px] ${Math.abs(t + ly.off - start) < 0.3 ? 'bg-white/20 text-white font-bold' : 'text-white/80'}`} dir="auto">{s}</button>)}
           </div>
         </>}
@@ -5067,8 +5163,9 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
             </div>
           )
           : story.type === 'image'
-          ? <><img src={story.url} alt="" draggable={false} onContextMenu={e => e.preventDefault()} style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f, WebkitTouchCallout: 'none' } as React.CSSProperties} onLoad={e => markFit(story.id, e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)} className={`absolute inset-0 w-full h-full ${coverFit[story.id] ? 'object-cover' : 'object-contain'} pointer-events-none select-none`} />{story.extra?.m && <StoryMusic key={story.id} m={story.extra.m} paused={paused || showViewers || replyFocus} />}</>
+          ? <><img src={story.url} alt="" draggable={false} onContextMenu={e => e.preventDefault()} style={{ filter: STORY_FILTERS[story.extra?.filter ?? 0]?.f, WebkitTouchCallout: 'none' } as React.CSSProperties} onLoad={e => markFit(story.id, e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)} className={`absolute inset-0 w-full h-full ${coverFit[story.id] ? 'object-cover' : 'object-contain'} pointer-events-none select-none`} /><FilterFx i={story.extra?.filter ?? 0} />{story.extra?.m && <StoryMusic key={story.id} m={story.extra.m} paused={paused || showViewers || replyFocus} />}</>
           : (
+            <>
             <video
               key={story.id}
               ref={videoRef}
@@ -5085,6 +5182,8 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
               onEnded={() => setProgress(1)}
               onError={() => setProgress(1)}
             />
+            <FilterFx i={story.extra?.filter ?? 0} />
+            </>
           )}
         <StoryOverlays extra={story.extra} onMention={ref => { const u = users.find(x => x.id === ref || x.username.toLowerCase() === ref.toLowerCase()); if (u) { onClose(); openUserProfile(u.id); } }} />
         {(() => {
@@ -6245,18 +6344,21 @@ export default function App() {
     }
     return false;
   });
+  // Home button: back to the very top and refresh the feed, stories and reels, every time.
+  const refreshHome = () => {
+    notifyStoriesChanged();
+    if (feedBusy.current) return;
+    setHomeRefreshing(true);
+    void loadFeedFirst().finally(() => window.setTimeout(() => setHomeRefreshing(false), 400));
+  };
   const onHomeTap = () => {
-    if (activeTab !== 'feed' || viewedUserId) { goTab('feed'); return; }
-    const now = Date.now();
-    if (now - lastHomeTap.current < 500) {
-      lastHomeTap.current = 0;
-      setHomeRefreshing(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      void loadFeedFirst().finally(() => window.setTimeout(() => setHomeRefreshing(false), 400));
+    if (activeTab !== 'feed' || viewedUserId) {
+      goTab('feed');
+      window.setTimeout(() => { window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); refreshHome(); }, 60);
       return;
     }
-    lastHomeTap.current = now;
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    refreshHome();
   };
   const openProfile = (id: string) => {
     if (id === currentUserId) {
@@ -7428,6 +7530,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
         {post.media && post.text && <PostLoc text={post.text} />}
       </div>
 
+      {post.likes.length > 0 && <div className="px-4 pt-3"><LikedByLine likes={post.likes} users={users} currentUser={currentUser} onClick={() => setListModal({ title: 'الإعجابات', ids: post.likes })} /></div>}
       <div className="px-4 py-3 flex items-center gap-1 border-t border-gray-800/50">
         <div className="flex items-center">
           <button onClick={toggleLike} className={`p-2 rounded-full transition-all ${isLiked ? 'text-red-400' : 'text-gray-500 hover:text-red-400'}`}>
@@ -7965,6 +8068,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
           )}
         </div>
         {post.text && parseGeo(post.text).body && <p className="text-white text-sm leading-snug line-clamp-2 whitespace-pre-wrap" dir="auto"><MentionText text={parseGeo(post.text).body} /></p>}
+        {post.likes.length > 0 && <div className="mt-1.5"><LikedByLine light likes={post.likes} users={users} currentUser={currentUser} onClick={onShowLikes} /></div>}
         <div className="mt-1.5 flex items-center gap-1.5 text-white/80 text-xs max-w-full"><Music size={12} className="shrink-0" /><span className="truncate" dir="auto">{audioName}</span>{(post.music?.url ?? post.media?.url) && <SaveClipButton clip={{ url: post.music?.url ?? post.media!.url, name: audioName.slice(0, 80), start: post.music?.start, end: post.music?.end }} className="w-6 h-6" />}</div>
       </div>
 
@@ -9204,8 +9308,18 @@ function LocationPicker({ onPick, onClose }: { onPick: (l: GeoLoc) => void; onCl
 
 // ============ KIX Studio: camera with colour filters, face filters and a music clip to lip-sync to ============
 type FaceLm = { x: number; y: number }[];
-const STUDIO_CF: { n: string; css: string; tint?: [string, number] }[] = [
+const STUDIO_CF: { n: string; css: string; tint?: [string, number]; sp?: [string, string]; v?: number; bl?: number; gr?: number; lk?: string }[] = [
   { n: 'عادي', css: '' },
+  { n: 'سينما ذهبية', css: 'contrast(1.2) saturate(1.15) brightness(.97)', sp: ['#0b3a53', '#ffb066'], v: 0.45, gr: 0.06 },
+  { n: 'حلم', css: 'brightness(1.1) contrast(.9) saturate(1.2)', tint: ['#ff9ecf', 0.12], bl: 0.45, v: 0.2 },
+  { n: 'نيون ليلي', css: 'contrast(1.3) saturate(1.7) brightness(.92)', sp: ['#2a0a5e', '#ff4fd8'], bl: 0.3, v: 0.5 },
+  { n: 'تسريب ضوء', css: 'saturate(1.2) contrast(1.05)', lk: '#ff7a30', v: 0.2 },
+  { n: 'كوداك', css: 'sepia(.25) saturate(1.4) contrast(1.1) brightness(1.05)', sp: ['#1b3a2a', '#ffd9a0'], gr: 0.12, v: 0.25 },
+  { n: 'فيلم قديم', css: 'sepia(.6) contrast(1.15) brightness(.95)', gr: 0.18, v: 0.55 },
+  { n: 'جليد', css: 'saturate(.8) brightness(1.15) contrast(1.05)', sp: ['#0a4d7a', '#cfeaff'], bl: 0.25 },
+  { n: 'غروب كوني', css: 'saturate(1.5) contrast(1.15)', sp: ['#2d1b69', '#ff8a4d'], bl: 0.3, lk: '#ff4d8d' },
+  { n: 'مسرح', css: 'contrast(1.4) saturate(1.1) brightness(.88)', v: 0.7 },
+  { n: 'بورتريه ذهبي', css: 'brightness(1.08) saturate(1.2) contrast(1.05)', tint: ['#ffc27a', 0.12], bl: 0.35, v: 0.2 },
   { n: 'دافئ', css: 'sepia(.35) saturate(1.3) hue-rotate(-10deg) brightness(1.05)', tint: ['#ff9a3c', 0.12] },
   { n: 'بارد', css: 'saturate(1.2) hue-rotate(15deg) brightness(1.03)', tint: ['#3c8cff', 0.12] },
   { n: 'أبيض وأسود', css: 'grayscale(1) contrast(1.1)' },
@@ -9239,11 +9353,74 @@ const STUDIO_CF: { n: string; css: string; tint?: [string, number] }[] = [
   { n: 'سلبي', css: 'invert(1)' },
   { n: 'سايبر', css: 'saturate(2.2) contrast(1.2) hue-rotate(-60deg) brightness(1.05)', tint: ['#00e5ff', 0.14] },
 ];
-const STUDIO_FX = ['بدون', 'نظارة', 'تاج', 'كلب', 'شنب', 'قلوب', 'نيون', 'قطة', 'أرنب', 'نظارة دائرية', 'شيطان', 'هالة', 'تاج ورد', 'قبعة', 'تخرج', 'خدود', 'أحمر شفاه', 'ظل عيون', 'نجوم', 'ثلج', 'نار', 'قناع', 'لحية', 'شبكة', 'عيون كبيرة', 'أنف مهرج', 'نظارة 3D', 'سماعات', 'ألماسة', 'قوس قزح', 'دموع', 'تنين'];
+const STUDIO_FX = ['بدون', 'نظارة', 'تاج', 'كلب', 'شنب', 'قلوب', 'نيون', 'قطة', 'أرنب', 'نظارة دائرية', 'شيطان', 'هالة', 'تاج ورد', 'قبعة', 'تخرج', 'خدود', 'أحمر شفاه', 'ظل عيون', 'نجوم', 'ثلج', 'نار', 'قناع', 'لحية', 'شبكة', 'عيون كبيرة', 'أنف مهرج', 'نظارة 3D', 'سماعات', 'ألماسة', 'قوس قزح', 'دموع', 'تنين', '✨ تجميل ذكي', '👀 عيون ضخمة', '😁 ابتسامة ضخمة', '🔮 وجه مجسّم', '🪞 مرآة', '📺 غلتش', '🧊 هولوجرام', '🥇 وجه ذهبي', '🎨 كارتون', '🦋 فراشات', '🤪 وجه ضخم', '🎈 رأس كبير', '😵 وجه ممطوط', '🫓 وجه مفلطح', '👄 فم عملاق', '🐽 أنف ضخم'];
 const FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
 type StudioTrack = { url: string; name: string; start: number; end: number; file?: File };
 type FaceGeo = { CW: number; vw: number; vh: number; sc: number; ox: number; oy: number; mirror: boolean };
 
+let fxSnap: HTMLCanvasElement | null = null;
+let grainCv: HTMLCanvasElement | null = null;
+const getGrain = () => {
+  if (grainCv) return grainCv;
+  const g = document.createElement('canvas'); g.width = g.height = 160;
+  const x = g.getContext('2d'); if (!x) return g;
+  const d = x.createImageData(160, 160);
+  for (let i = 0; i < d.data.length; i += 4) { const v = 90 + Math.random() * 120; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+  x.putImageData(d, 0, 0); grainCv = g; return g;
+};
+// Colour "look" extras on top of the CSS filter: split-tone, bloom, light leak, grain and vignette.
+function drawLookFx(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, f: (typeof STUDIO_CF)[number], I: number, canFilter: boolean, now: number) {
+  const CW = c.width, CH = c.height;
+  if (f.sp) { const g = ctx.createLinearGradient(0, 0, 0, CH); g.addColorStop(0, f.sp[0]); g.addColorStop(1, f.sp[1]); ctx.save(); ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = 0.75 * I; ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH); ctx.restore(); }
+  if (f.bl && canFilter) {
+    fxSnap = fxSnap ?? document.createElement('canvas');
+    if (fxSnap.width !== CW / 4) { fxSnap.width = CW / 4; fxSnap.height = CH / 4; }
+    const sx = fxSnap.getContext('2d');
+    if (sx) { sx.clearRect(0, 0, fxSnap.width, fxSnap.height); sx.drawImage(c, 0, 0, fxSnap.width, fxSnap.height); ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = Math.min(1, f.bl * I); (ctx as unknown as { filter: string }).filter = 'blur(10px) brightness(1.15)'; ctx.drawImage(fxSnap, 0, 0, CW, CH); ctx.restore(); }
+  }
+  if (f.lk) { const g = ctx.createRadialGradient(CW, 0, 0, CW, 0, CH * 0.75); g.addColorStop(0, f.lk); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = (0.5 + 0.1 * Math.sin(now / 900)) * I; ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH); ctx.restore(); }
+  if (f.gr) { const pat = ctx.createPattern(getGrain(), 'repeat'); if (pat) { ctx.save(); ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = f.gr * 2.2 * I; ctx.translate(Math.random() * 160, Math.random() * 160); ctx.fillStyle = pat; ctx.fillRect(-160, -160, CW + 320, CH + 320); ctx.restore(); } }
+  if (f.v) { const r = Math.hypot(CW, CH) / 2; const g = ctx.createRadialGradient(CW / 2, CH / 2, r * 0.4, CW / 2, CH / 2, r); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${f.v * I})`); ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH); }
+}
+// Face effects that bend or repaint the real picture (not just stickers): beauty, big eyes, bulge, mirror, glitch, hologram, gold, cartoon.
+function warpFaceFx(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, fx: number, lm: FaceLm | null, g: FaceGeo, now: number, canFilter: boolean) {
+  const CW = c.width, CH = c.height;
+  fxSnap = fxSnap ?? document.createElement('canvas');
+  if (fxSnap.width !== CW) { fxSnap.width = CW; fxSnap.height = CH; }
+  const sx = fxSnap.getContext('2d'); if (!sx) return;
+  sx.clearRect(0, 0, CW, CH); sx.drawImage(c, 0, 0);
+  const snap = fxSnap;
+  const flt = (css: string) => { if (canFilter) (ctx as unknown as { filter: string }).filter = css; };
+  if (fx === 36) { ctx.save(); ctx.beginPath(); ctx.rect(CW / 2, 0, CW / 2, CH); ctx.clip(); ctx.translate(CW, 0); ctx.scale(-1, 1); ctx.drawImage(snap, 0, 0); ctx.restore(); return; }
+  if (fx === 37) {
+    for (let k = 0; k < 6; k++) { if (Math.random() < 0.4) { const sy = Math.random() * CH, h = 16 + Math.random() * 80, dx = (Math.random() - 0.5) * 70; ctx.drawImage(snap, 0, sy, CW, h, dx, sy, CW, h); } }
+    ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 0.35; ctx.drawImage(snap, 8, 0); ctx.fillStyle = 'rgba(255,0,120,.08)'; ctx.fillRect(0, 0, CW, CH); ctx.restore();
+    return;
+  }
+  if (!lm) return;
+  const P = (i: number) => { const l = lm[i]; let x = g.ox + l.x * g.vw * g.sc; if (g.mirror) x = g.CW - x; return { x, y: g.oy + l.y * g.vh * g.sc }; };
+  const mid = (a: { x: number; y: number }, b: { x: number; y: number }) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+  const eye = dist(P(33), P(263)); const fh = dist(P(10), P(152)); const nose = P(1);
+  const oval = () => { ctx.beginPath(); FACE_OVAL.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.closePath(); };
+  const bulge = (cx: number, cy: number, r: number, k: number) => { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip(); ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-cx, -cy); ctx.drawImage(snap, 0, 0); ctx.restore(); };
+  switch (fx) {
+    case 32: if (canFilter) { ctx.save(); oval(); ctx.clip(); flt('blur(7px) brightness(1.07) saturate(1.08)'); ctx.globalAlpha = 0.62; ctx.drawImage(snap, 0, 0); ctx.restore(); ctx.save(); oval(); ctx.clip(); ctx.globalCompositeOperation = 'soft-light'; ctx.fillStyle = 'rgba(255,205,190,.35)'; ctx.fillRect(0, 0, CW, CH); ctx.restore(); } break;
+    case 33: for (const e of [mid(P(33), P(133)), mid(P(362), P(263))]) bulge(e.x, e.y, eye * 0.36, 1.85); break;
+    case 34: { const m = mid(P(61), P(291)); bulge(m.x, m.y, eye * 0.6, 1.55); break; }
+    case 35: bulge(nose.x, nose.y, fh * 0.42, 1.5); break;
+    case 38: { ctx.save(); oval(); ctx.clip(); flt('hue-rotate(165deg) saturate(2.4) brightness(1.25) contrast(1.1)'); ctx.globalAlpha = 0.85 - 0.15 * Math.sin(now / 90); ctx.drawImage(snap, 0, 0); ctx.filter = 'none'; ctx.fillStyle = 'rgba(0,255,255,.14)'; for (let y = 0; y < CH; y += 6) ctx.fillRect(0, y + ((now / 40) % 6), CW, 2); ctx.restore(); break; }
+    case 39: { ctx.save(); oval(); ctx.clip(); flt('sepia(1) saturate(3) hue-rotate(-8deg) brightness(1.15) contrast(1.15)'); ctx.drawImage(snap, 0, 0); ctx.filter = 'none'; ctx.globalCompositeOperation = 'overlay'; const gr = ctx.createLinearGradient(0, nose.y - fh * 0.5, 0, nose.y + fh * 0.5); gr.addColorStop(0, 'rgba(255,240,170,.7)'); gr.addColorStop(1, 'rgba(190,120,20,.6)'); ctx.fillStyle = gr; ctx.fillRect(0, 0, CW, CH); ctx.restore();
+      ctx.save(); ctx.fillStyle = '#fff'; for (let k = 0; k < 8; k++) { if (Math.sin(now / 170 + k * 2.1) > 0.55) { const a = k * 2.4; const x = nose.x + Math.cos(a) * fh * 0.3, y = nose.y + Math.sin(a * 1.3) * fh * 0.4; ctx.beginPath(); ctx.arc(x, y, 3 + 2 * Math.sin(now / 90 + k), 0, Math.PI * 2); ctx.fill(); } } ctx.restore(); break; }
+    case 40: { ctx.save(); oval(); ctx.clip(); flt('contrast(1.75) saturate(2.1) brightness(1.06)'); ctx.drawImage(snap, 0, 0); ctx.restore(); ctx.save(); oval(); ctx.strokeStyle = 'rgba(25,10,50,.85)'; ctx.lineWidth = 7; ctx.lineJoin = 'round'; ctx.stroke(); ctx.restore(); break; }
+    case 42: bulge(nose.x, nose.y, fh * 0.64, 1.6); break;
+    case 43: { const t = P(10); bulge(mid(t, nose).x, mid(t, nose).y, fh * 0.75, 1.75); break; }
+    case 44: ctx.save(); oval(); ctx.clip(); ctx.translate(nose.x, nose.y); ctx.scale(1, 1.4); ctx.translate(-nose.x, -nose.y); ctx.drawImage(snap, 0, 0); ctx.restore(); break;
+    case 45: ctx.save(); oval(); ctx.clip(); ctx.translate(nose.x, nose.y); ctx.scale(1.45, 1); ctx.translate(-nose.x, -nose.y); ctx.drawImage(snap, 0, 0); ctx.restore(); break;
+    case 46: { const m = mid(P(61), P(291)); bulge(m.x, m.y, eye * 0.85, 2.15); break; }
+    case 47: bulge(nose.x, nose.y, fh * 0.26, 2.3); break;
+  }
+}
 function drawFaceFx(ctx: CanvasRenderingContext2D, fx: number, lm: FaceLm, g: FaceGeo, now: number) {
   type Pt = { x: number; y: number };
   const P = (i: number): Pt => { const l = lm[i]; let x = g.ox + l.x * g.vw * g.sc; if (g.mirror) x = g.CW - x; return { x, y: g.oy + l.y * g.vh * g.sc }; };
@@ -9387,6 +9564,7 @@ function drawFaceFx(ctx: CanvasRenderingContext2D, fx: number, lm: FaceLm, g: Fa
       rot(top, () => { ['#ff3b3b', '#ff9f1c', '#ffe14d', '#3ddc84', '#3aa0ff', '#8b5cf6'].forEach((col, k) => { ctx.strokeStyle = col; ctx.lineWidth = eye * 0.07; ctx.beginPath(); ctx.arc(0, fh * 0.12, eye * (0.95 - k * 0.075), Math.PI * 1.05, Math.PI * 1.95); ctx.stroke(); }); });
       break;
     case 30: for (const c of [c1, c2]) { const f = (now / 14) % (fh * 0.6); emo('💧', { x: c.x, y: c.y + sep * 0.35 + f }, eye * 0.18); } break;
+    case 41: for (let k = 0; k < 6; k++) { const a = now / 1100 + (k * Math.PI) / 3; emo('🦋', { x: nose.x + Math.cos(a) * fh * 0.72, y: nose.y - fh * 0.2 + Math.sin(a * 1.4) * fh * 0.45 }, eye * (0.3 + 0.06 * Math.sin(now / 180 + k)), Math.sin(a * 2) * 0.5); } break;
     case 31: if (open) { const f = 1 + 0.15 * Math.sin(now / 70); emo('🔥', { x: lipL.x, y: lipL.y + fh * 0.2 }, fh * 0.5 * f, roll); } break;
     default: break;
   }
@@ -9402,6 +9580,8 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
   const [mode, setMode] = useState<'photo' | 'video'>('photo');
   const [ftab, setFtab] = useState<'color' | 'face'>('color');
   const [cf, setCf] = useState(0);
+  const [cfI, setCfI] = useState(100);
+  const cfIR = useRef(1); cfIR.current = cfI / 100;
   const [fx, setFx] = useState(0);
   const cfR = useRef(0), fxR = useRef(0), facR = useRef<'user' | 'environment'>('user');
   cfR.current = cf; fxR.current = fx; facR.current = facing;
@@ -9417,8 +9597,16 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
   const chunks = useRef<Blob[]>([]);
   const [shot, setShot] = useState<{ file: File; url: string } | null>(null);
   const [track, setTrack] = useState<StudioTrack | null>(null);
+  const [lyr, setLyr] = useState<[number, string][]>([]);
+  const [lyMode, setLyMode] = useState<'me' | 'video' | 'off'>('me');
+  const [lyOff, setLyOff] = useState(0);
+  const [lyT, setLyT] = useState(0);
+  const lyRef = useRef<[number, string][]>([]); lyRef.current = lyr;
+  const lyModeRef = useRef<'me' | 'video' | 'off'>('me'); lyModeRef.current = lyMode;
+  const lyOffRef = useRef(0); lyOffRef.current = lyOff;
   const [sheet, setSheet] = useState<'' | 'lib' | 'trim'>('');
   const audRef = useRef<HTMLAudioElement | null>(null);
+  const recOn = useRef(false);
   const devPick = useRef<HTMLInputElement>(null);
   const supportsFilter = useMemo(() => { try { return 'filter' in CanvasRenderingContext2D.prototype; } catch { return false; } }, []);
   useEffect(() => { const b = document.body; const prev = b.style.overflow; b.style.overflow = 'hidden'; return () => { b.style.overflow = prev; }; }, []);
@@ -9450,16 +9638,36 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
       const sc = Math.max(CW / vw, CH / vh), ox = (CW - vw * sc) / 2, oy = (CH - vh * sc) / 2;
       const mirror = facR.current === 'user';
       const f = STUDIO_CF[cfR.current];
-      ctx.save();
-      if (supportsFilter && f.css) (ctx as unknown as { filter: string }).filter = f.css;
-      if (mirror) { ctx.translate(CW, 0); ctx.scale(-1, 1); }
-      ctx.drawImage(v, ox, oy, vw * sc, vh * sc);
-      ctx.restore();
+      const I = cfIR.current;
+      const paint = (css: string, a: number) => {
+        ctx.save(); ctx.globalAlpha = a;
+        if (supportsFilter && css) (ctx as unknown as { filter: string }).filter = css;
+        if (mirror) { ctx.translate(CW, 0); ctx.scale(-1, 1); }
+        ctx.drawImage(v, ox, oy, vw * sc, vh * sc);
+        ctx.restore();
+      };
+      if (I < 0.99 && f.css && supportsFilter) { paint('', 1); paint(f.css, I); } else paint(f.css, 1);
       if (!supportsFilter && f.tint) { ctx.save(); ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = Math.min(0.6, f.tint[1] * 3); ctx.fillStyle = f.tint[0]; ctx.fillRect(0, 0, CW, CH); ctx.restore(); }
+      if (f.sp || f.bl || f.lk || f.gr || f.v) drawLookFx(ctx, c, f, I, supportsFilter, performance.now());
       if (fxR.current > 0) {
         const lk = lmkRef.current; const now = performance.now();
         if (lk && now - lastDet > 45) { lastDet = now; try { lmRef.current = lk.detectForVideo(v, now).faceLandmarks?.[0] ?? null; } catch { /* skip this frame */ } }
-        if (lmRef.current) drawFaceFx(ctx, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now);
+        if (fxR.current >= 36 && fxR.current <= 37) warpFaceFx(ctx, c, fxR.current, null, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
+        else if (lmRef.current && ((fxR.current >= 32 && fxR.current <= 40) || fxR.current >= 42)) warpFaceFx(ctx, c, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
+        else if (lmRef.current) drawFaceFx(ctx, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now);
+      }
+      if (recOn.current && lyModeRef.current === 'video' && lyRef.current.length) {
+        const li = lyActive(lyRef.current, (audRef.current?.currentTime ?? 0) + lyOffRef.current);
+        const line = li >= 0 ? lyRef.current[li][1] : '';
+        if (line) {
+          ctx.save(); ctx.font = '800 56px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.fillStyle = '#fff';
+          const rows: string[] = []; let cur = '';
+          for (const w of line.split(/\s+/)) { const t = cur ? cur + ' ' + w : w; if (cur && ctx.measureText(t).width > CW * 0.86) { rows.push(cur); cur = w; } else cur = t; }
+          if (cur) rows.push(cur);
+          const y0 = CH * 0.74 - ((rows.length - 1) * 66) / 2;
+          rows.forEach((r, k) => { ctx.strokeText(r, CW / 2, y0 + k * 66); ctx.fillText(r, CW / 2, y0 + k * 66); });
+          ctx.restore();
+        }
       }
     };
     raf = requestAnimationFrame(loop);
@@ -9469,6 +9677,7 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
   const pickFx = async (i: number) => {
     setFx(i);
     if (i === 0) { lmRef.current = null; return; }
+    if (i === 36 || i === 37) return;
     if (lmkRef.current || loadingFace.current) return;
     loadingFace.current = true; setFaceMsg('بحمّل فلاتر الوجه...');
     try {
@@ -9520,6 +9729,29 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
     const h = window.setInterval(() => setSecs(s => s + 1), 1000);
     return () => window.clearInterval(h);
   }, [rec]);
+  recOn.current = rec;
+  // Lyrics of the chosen song: the person filming reads them on screen (and can also print them on the video).
+  useEffect(() => {
+    setLyr([]); setLyOff(0);
+    const nm = track?.name; if (!nm) return;
+    let dead = false; const ctl = new AbortController(); const tm = window.setTimeout(() => ctl.abort(), 9000);
+    void (async () => {
+      try {
+        const q = nm.replace(/\.[^.]+$/, '').replace(/\s[-–]\s/g, ' ').replace(/_+/g, ' ').slice(0, 100);
+        const r = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`, { signal: ctl.signal });
+        const j = await r.json() as { syncedLyrics?: string | null }[];
+        const hit = j.find(x => x.syncedLyrics);
+        const lrc = hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
+        if (!dead && lrc.length) setLyr(lrc);
+      } catch { /* no lyrics: nothing to show */ }
+    })();
+    return () => { dead = true; window.clearTimeout(tm); ctl.abort(); };
+  }, [track?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!rec || !lyr.length) return;
+    const h = window.setInterval(() => setLyT((audRef.current?.currentTime ?? 0) + lyOff), 120);
+    return () => window.clearInterval(h);
+  }, [rec, lyr.length, lyOff]);
   useEffect(() => { if (rec && secs >= 60) stopRec(); }, [secs, rec]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isVid = !!shot && shot.file.type.startsWith('video/');
@@ -9546,16 +9778,40 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
         <canvas ref={cref} width={720} height={1280} className="h-full max-w-full aspect-[9/16] bg-black object-cover rounded-2xl" />
         {!ready && !err && <p className="absolute text-sm text-white/80">بفتح الكاميرا...</p>}
         {err && <p className="absolute inset-x-6 text-center text-sm text-white">{err}</p>}
+        {lyr.length > 0 && lyMode === 'me' && (() => {
+          const li = lyActive(lyr, rec ? lyT : (track?.start ?? 0) + 0.05);
+          const row = (k: number, big: boolean) => lyr[k] ? <div key={k} className={big ? 'text-[26px] font-extrabold leading-tight text-white' : 'text-base font-bold text-white/45'} style={{ textShadow: '0 2px 14px rgba(0,0,0,.7)' }}>{lyr[k][1]}</div> : null;
+          return <div className="absolute inset-x-0 bottom-6 px-6 text-center space-y-1.5 pointer-events-none">{row(li - 1, false)}{li >= 0 ? row(li, true) : row(0, false)}{li >= 0 ? row(li + 1, false) : null}</div>;
+        })()}
+        {lyr.length > 0 && (
+          <div className="absolute top-3 start-3 z-10 flex items-center gap-1.5">
+            <button onClick={() => setLyMode(m => (m === 'me' ? 'video' : m === 'video' ? 'off' : 'me'))} className="h-8 px-3 rounded-full bg-black/55 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-bold active:scale-95">{lyMode === 'me' ? '🎤 كلمات: ليّ' : lyMode === 'video' ? '🎤 كلمات: على الفيديو' : '🎤 كلمات: إيقاف'}</button>
+            {lyMode !== 'off' && <><button onClick={() => setLyOff(o => Math.round((o - 0.5) * 10) / 10)} className="w-8 h-8 rounded-full bg-black/55 text-white text-[11px] font-bold">−</button><button onClick={() => setLyOff(o => Math.round((o + 0.5) * 10) / 10)} className="w-8 h-8 rounded-full bg-black/55 text-white text-[11px] font-bold">+</button></>}
+          </div>
+        )}
         {faceMsg && <p className="absolute top-3 inset-x-0 text-center text-xs"><span className="px-3 py-1 rounded-full bg-black/60">{faceMsg}</span></p>}
       </div>
       <div className="bg-black pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex justify-center gap-2 pb-2">
           {([['color', 'فلاتر ألوان'], ['face', 'فلاتر وجه']] as const).map(([k, l]) => <button key={k} onClick={() => setFtab(k)} className={`px-4 h-8 rounded-full text-xs font-bold ${ftab === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}
         </div>
-        <div className="flex gap-2 overflow-x-auto no-scrollbar px-3 pb-3">
+        {ftab === 'color' && cf > 0 && STUDIO_CF[cf].css !== '' && (
+          <div className="flex items-center gap-3 px-6 pb-2"><span className="text-[11px] text-white/70 shrink-0">الشدة</span><input type="range" min={10} max={100} value={cfI} onChange={e => setCfI(Number(e.target.value))} className="flex-1 min-w-0 accent-white" aria-label="شدة الفلتر" /><span className="text-[11px] text-white/70 w-8 tabular-nums" dir="ltr">{cfI}%</span></div>
+        )}
+        <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-3 pb-3">
           {ftab === 'color'
-            ? STUDIO_CF.map((f, i) => <button key={f.n} onClick={() => setCf(i)} className={chip(cf === i)}>{f.n}</button>)
-            : STUDIO_FX.map((f, i) => <button key={f} onClick={() => void pickFx(i)} className={chip(fx === i)}>{f}</button>)}
+            ? STUDIO_CF.map((f, i) => (
+              <button key={f.n} onClick={() => setCf(i)} className="shrink-0 w-[60px] flex flex-col items-center gap-1 active:scale-95 transition-transform">
+                <span className={`block w-[52px] h-[52px] rounded-2xl transition-all ${cf === i ? 'ring-2 ring-white scale-105 shadow-lg shadow-violet-500/40' : 'ring-1 ring-white/20'}`} style={{ background: f.sp ? `linear-gradient(160deg, ${f.sp[0]}, ${f.sp[1]})` : f.tint ? `linear-gradient(160deg, ${f.tint[0]}, #1f2937)` : i === 0 ? 'linear-gradient(160deg,#e5e7eb,#6b7280)' : 'linear-gradient(160deg,#a78bfa,#22d3ee)' }} />
+                <span className={`text-[10.5px] truncate max-w-full ${cf === i ? 'text-white font-bold' : 'text-white/65'}`}>{f.n}</span>
+              </button>
+            ))
+            : STUDIO_FX.map((f, i) => (
+              <button key={f} onClick={() => void pickFx(i)} className="shrink-0 w-[64px] flex flex-col items-center gap-1 active:scale-95 transition-transform">
+                <span className={`w-[52px] h-[52px] rounded-2xl flex items-center justify-center text-[22px] transition-all ${fx === i ? 'bg-gradient-to-br from-violet-500 to-cyan-400 ring-2 ring-white scale-105 shadow-lg shadow-violet-500/40' : 'bg-white/10 ring-1 ring-white/15'}`}>{i === 0 ? '🚫' : (/^\p{Extended_Pictographic}/u.test(f) ? f.split(' ')[0] : f[0])}</span>
+                <span className={`text-[10.5px] truncate max-w-full ${fx === i ? 'text-white font-bold' : 'text-white/65'}`}>{/^\p{Extended_Pictographic}/u.test(f) ? f.split(' ').slice(1).join(' ') : f}</span>
+              </button>
+            ))}
         </div>
         <div className="grid grid-cols-3 items-center px-5">
           <div className="flex justify-start"><button onClick={() => { if (rec) return; setSheet(track ? 'trim' : 'lib'); }} className={`w-12 h-12 rounded-full flex items-center justify-center ${track ? 'bg-white text-black' : 'bg-white/15 text-white'}`} aria-label="موسيقى"><Music size={20} /></button></div>
@@ -10361,30 +10617,76 @@ function UserListModal({ title, userIds, users, onOpenProfile, onClose }: {
   onClose: () => void;
 }) {
   useBackLayer(true, onClose);
+  const [q, setQ] = useState('');
   const list = userIds.map(id => users.find(u => u.id === id)).filter((u): u is User => Boolean(u));
+  const qq = q.trim().toLowerCase().replace(/^@/, '');
+  const shown = qq ? list.filter(u => u.displayName.toLowerCase().includes(qq) || u.username.toLowerCase().includes(qq)) : list;
   return createPortal(
-    <div dir={DIR} className="fixed inset-0 z-[100] bg-black/70 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
-      <div className="kan-theme-text w-full sm:max-w-md bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-2xl max-h-[75vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
-          <h3 className="font-bold text-white">{title} <span className="text-gray-500 text-sm font-normal">({list.length})</span></h3>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white"><X size={20} /></button>
+    <div dir={DIR} className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 ky-fade" onClick={onClose}>
+      <style>{'@keyframes kyUp{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}@keyframes kyFd{from{opacity:0}to{opacity:1}}.ky-up{animation:kyUp .3s cubic-bezier(.2,.8,.2,1) both}.ky-fade{animation:kyFd .2s both}'}</style>
+      <div className="kan-theme-text ky-up w-full sm:max-w-md bg-gray-950/95 ring-1 ring-white/10 rounded-t-[28px] sm:rounded-[28px] h-[78vh] sm:h-[70vh] flex flex-col shadow-2xl shadow-violet-950/40" onClick={e => e.stopPropagation()}>
+        <div className="pt-2.5 pb-1 flex justify-center"><span className="h-1 w-10 rounded-full bg-white/20" /></div>
+        <div className="flex items-center justify-between px-4 pb-2">
+          <h3 className="font-extrabold text-white text-base flex items-center gap-2">{title}<span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-violet-600/40 to-cyan-500/30 text-xs font-bold text-white tabular-nums">{list.length}</span></h3>
+          <button onClick={onClose} aria-label="إغلاق" className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white active:scale-90 transition-transform"><X size={18} /></button>
         </div>
-        <div className="overflow-y-auto p-2">
-          {list.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">لا أحد بعد</p>
-          ) : list.map(u => (
-            <button key={u.id} onClick={() => { onClose(); onOpenProfile(u.id); }} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-800 text-right">
-              <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="md" />
-              <div className="min-w-0">
-                <div className="text-white font-medium truncate">{u.displayName}</div>
-                <div className="text-sm text-gray-500">@{u.username}</div>
+        {list.length > 6 && (
+          <div className="px-4 pb-2">
+            <div className="flex items-center gap-2 rounded-full bg-white/10 ring-1 ring-white/10 px-3.5 h-10">
+              <Search size={16} className="text-gray-400 shrink-0" />
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="ابحث بالاسم أو اسم المستخدم" className="flex-1 min-w-0 bg-transparent text-[16px] text-white placeholder-gray-500 outline-none" />
+              {q && <button onClick={() => setQ('')} aria-label="مسح" className="text-gray-400"><X size={15} /></button>}
+            </div>
+          </div>
+        )}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain no-scrollbar px-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {shown.length === 0 ? (
+            <div className="text-center py-14">
+              <div className="mx-auto mb-3 w-14 h-14 rounded-full bg-white/5 flex items-center justify-center"><Users size={24} className="text-gray-500" /></div>
+              <p className="text-gray-400 text-sm">{list.length === 0 ? 'لا أحد بعد' : 'لا توجد نتائج'}</p>
+            </div>
+          ) : shown.map(u => (
+            <button key={u.id} onClick={() => { onClose(); onOpenProfile(u.id); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl active:bg-white/10 hover:bg-white/5 transition-colors text-start">
+              <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="lg" />
+              <div className="min-w-0 flex-1">
+                <div className="text-white font-bold text-[15px] truncate">{u.displayName}</div>
+                <div className="text-[13px] text-gray-400 truncate" dir="ltr" style={{ textAlign: 'start' }}>@{u.username}</div>
               </div>
+              <ChevronLeft size={18} className="text-gray-600 shrink-0" />
             </button>
           ))}
         </div>
       </div>
     </div>,
     document.body
+  );
+}
+
+// "Liked by [friend] and 12 others", with small faces: people you follow come first.
+function LikedByLine({ likes, users, currentUser, onClick, light = false }: { likes: string[]; users: User[]; currentUser: User; onClick: () => void; light?: boolean }) {
+  if (likes.length === 0) return null;
+  const fol = new Set(currentUser.following);
+  const others = likes.filter(id => id !== currentUser.id).sort((a, b) => (fol.has(b) ? 1 : 0) - (fol.has(a) ? 1 : 0));
+  const faces = others.slice(0, 3).map(id => users.find(u => u.id === id)).filter((u): u is User => Boolean(u));
+  const first = faces[0];
+  const rest = likes.length - 1;
+  const mine = likes.includes(currentUser.id);
+  const txt = first
+    ? <>أعجب <b className="font-bold">{first.displayName}</b>{rest > 0 ? <> و<b className="font-bold">{rest}</b> آخرين</> : null}</>
+    : mine ? <>أعجبك هذا</> : <>{likes.length} إعجاب</>;
+  return (
+    <button onClick={e => { e.stopPropagation(); onClick(); }} className={`flex items-center gap-2 min-w-0 max-w-full text-start ${light ? 'text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]' : 'text-gray-300'}`}>
+      {faces.length > 0 && (
+        <span className="flex items-center shrink-0" dir="ltr">
+          {faces.map((u, k) => (
+            <span key={u.id} className="w-5 h-5 rounded-full overflow-hidden ring-2 ring-black/80 bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center" style={{ marginInlineStart: k ? -7 : 0, zIndex: 3 - k }}>
+              {u.avatar ? <img src={u.avatar} alt="" className="w-full h-full object-cover" /> : (u.displayName[0] ?? '?')}
+            </span>
+          ))}
+        </span>
+      )}
+      <span className="text-[13px] leading-tight truncate">{txt}</span>
+    </button>
   );
 }
 
@@ -12176,6 +12478,18 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   }, []);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [reactingTo, setReactingTo] = useState<string | null>(null);
+  const justClosed = useRef(0);
+  // Changed your mind? Tapping anywhere outside the reaction bar / action buttons just closes them.
+  useEffect(() => {
+    if (!reactingTo && !activeMsgId) return;
+    const h = (e: PointerEvent) => {
+      if ((e.target as HTMLElement | null)?.closest('[data-msg-ui]')) return;
+      justClosed.current = Date.now();
+      setReactingTo(null); setActiveMsgId(null);
+    };
+    document.addEventListener('pointerdown', h, true);
+    return () => document.removeEventListener('pointerdown', h, true);
+  }, [reactingTo, activeMsgId]);
   const [coinMsgId, setCoinMsgId] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -12688,7 +13002,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                     () => { setReplyingTo(msg); window.setTimeout(() => inputRef.current?.focus(), 30); },
                     () => { setActiveMsgId(null); setReactingTo(msg.id); },
                   )}
-                  onClick={() => (sel ? setSel(x => ((x ?? []).includes(msg.id) ? (x ?? []).filter(y => y !== msg.id) : [...(x ?? []), msg.id])) : reactingTo && reactingTo !== msg.id ? (setReactingTo(null), setActiveMsgId(null), setSel([msg.id])) : handleBubbleTap(msg))}
+                  onClick={() => (sel ? setSel(x => ((x ?? []).includes(msg.id) ? (x ?? []).filter(y => y !== msg.id) : [...(x ?? []), msg.id])) : Date.now() - justClosed.current < 450 ? undefined : handleBubbleTap(msg))}
                   className={`relative select-none touch-pan-y max-w-full [overflow-wrap:anywhere] px-4 py-2.5 rounded-2xl cursor-pointer transition-shadow ${highlightId === msg.id ? 'ring-2 ring-cyan-400' : ''} ${sel?.includes(msg.id) ? 'ring-2 ring-white brightness-110' : ''} ${
                     isStickerName(msg.media?.name) && !msg.text ? 'bg-transparent !p-0'
                     : isMine
@@ -12822,7 +13136,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                 })()}
                 {burst?.id === msg.id && <div className="relative h-0 w-full flex justify-center z-10 pointer-events-none"><span key={burst.k} className="absolute -top-4 text-4xl" style={{ animation: 'kanReactBurst 1s ease-out forwards' }}>{burst.e}</span></div>}
                 {reactingTo === msg.id && (
-                  <div className={`kan-pop flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full shadow-lg ${isMine ? 'flex-row-reverse' : ''}`}>
+                  <div data-msg-ui className={`kan-pop flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full shadow-lg ${isMine ? 'flex-row-reverse' : ''}`}>
                     {QUICK_REACTIONS.map(e => (
                       <button
                         key={e}
@@ -12835,7 +13149,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   </div>
                 )}
                 {activeMsgId === msg.id && (
-                  <div className={`flex items-center gap-1.5 mt-1 ${isMine ? 'flex-row-reverse' : ''}`}>
+                  <div data-msg-ui className={`flex items-center gap-1.5 mt-1 ${isMine ? 'flex-row-reverse' : ''}`}>
                     <button
                       onClick={() => setReactingTo(prev => (prev === msg.id ? null : msg.id))}
                       className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"
