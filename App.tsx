@@ -108,7 +108,7 @@ Object.assign(EN, {
   "↪️ منشور مني": "↪️ A post from me", "🎤 رسالة صوتية": "🎤 Voice message", "🎥 فيديو": "🎥 Video", "🎬 ريل": "🎬 Reel", "🏷️ ملصق": "🏷️ Sticker", "💡 اقترح رد": "💡 Suggest a reply", "📎 ملف": "📎 File", "📝 لخّص الشات": "📝 Summarize chat", "📷 صورة": "📷 Photo", "📷 وسائط": "📷 Media", "🔍 المطلوب مني؟": "🔍 What's expected of me?",
   "أضف تعليقاً...": "Add a comment...", "متابعة": "Follow", "متابَع": "Following", "الصوت": "Sound", "كتم الصوت": "Mute", "تشغيل الصوت": "Unmute", "إيقاف مؤقت": "Pause", "تشغيل": "Play",
   "📚 المكتبة": "📚 Library", "⏱ شاهد لاحقاً": "⏱ Watch later", "👍 فيديوهات أعجبتني": "👍 Liked videos", "🕘 سجل المشاهدة": "🕘 Watch history", "قوائم التشغيل": "Playlists", "قائمة تشغيل جديدة": "New playlist", "إنشاء": "Create", "تشغيل الكل": "Play all", "حذف القائمة": "Delete playlist", "مسح السجل": "Clear history", "قائمة تشغيل": "Playlist", "حفظ في قائمة تشغيل": "Save to playlist", "اسم القائمة الجديدة": "New playlist name", "لسه مفيش فيديوهات هنا": "No videos here yet", "🔔 مشترك ✓": "🔔 Subscribed ✓", "إزالة من القائمة": "Remove from playlist",
-  "📍 موقع": "📍 Location", "📊 استطلاع": "📊 Poll", "موقع": "Location", "ملف": "File", "صورة / فيديو": "Photo / Video", "استطلاع": "Poll", "اسأل KIX": "Ask KIX", "العب": "Play", "📍 مشاركة موقع": "📍 Share location", "ابعت موقعي الحالي": "Send my current location", "اختار مكان من الخريطة": "Pick a place on the map", "أماكن محفوظة": "Saved places", "محفوظ": "Saved", "اتحفظ ✓": "Saved ✓", "اتشال من المحفوظات": "Removed from saved", "اتنسخ الرابط ✓": "Link copied ✓", "موقعي الحالي": "My current location", "عرض على الخريطة": "View on map",
+  "📍 موقع": "📍 Location", "📊 استطلاع": "📊 Poll", "موقع": "Location", "ملف": "File", "صورة / فيديو": "Photo / Video", "استطلاع": "Poll", "اسأل KIX": "Ask KIX", "العب": "Play", "📍 مشاركة موقع": "📍 Share location", "ابعت موقعي الحالي": "Send my current location", "اختار مكان من الخريطة": "Pick a place on the map", "أماكن محفوظة": "Saved places", "محفوظ": "Saved", "اتحفظ ✓": "Saved ✓", "اتشال من المحفوظات": "Removed from saved", "اتنسخ الرابط ✓": "Link copied ✓", "موقعي الحالي": "My current location", "عرض على الخريطة": "View on map", "حفظ الموقع": "Save location", "… عرض المزيد": "… See more",
 });
 const EN_RULES: [RegExp, (m: RegExpExecArray) => string][] = [
   [/^منذ (\d+) د$/, m => `${m[1]}m ago`], [/^منذ (\d+) س$/, m => `${m[1]}h ago`], [/^منذ (\d+) ي$/, m => `${m[1]}d ago`], [/^منذ (\d+) يوم$/, m => `${m[1]}d ago`],
@@ -978,7 +978,7 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false, onEnded }:
         <Film size={32} className="text-gray-500" />
         <p className="text-sm text-gray-300">لا يمكن تشغيل هذا الفيديو على هذا الجهاز. قد يكون بصيغة لا يدعمها المتصفح (مثل تسجيلات الآيفون HEVC).</p>
         <button onClick={() => { void downloadFile(src, 'video.mp4'); }} className="px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-sm flex items-center gap-2">
-          <Download size={14} /> تحميل الفيديو
+          <Download size={14} color="#fff" /> تحميل الفيديو
         </button>
       </div>
     );
@@ -1143,8 +1143,8 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false, onEnded }:
         <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
           <div className={`w-16 h-16 rounded-full flex items-center justify-center backdrop-blur-md ${started && !waiting ? 'bg-black/50' : 'bg-gradient-to-br from-violet-600/90 to-cyan-500/90 shadow-lg shadow-violet-500/30'}`}>
             {waiting
-              ? <RefreshCw size={26} className="text-white animate-spin" />
-              : <Play size={28} className="text-white translate-x-0.5" fill="white" />}
+              ? <RefreshCw size={26} color="#fff" className="animate-spin" />
+              : <Play size={28} color="#fff" className="translate-x-0.5" fill="#fff" />}
           </div>
         </div>
       )}
@@ -1168,20 +1168,20 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false, onEnded }:
           </div>
           <div className="flex items-center gap-1 text-white mt-0.5">
             <button onClick={e => { e.stopPropagation(); toggle(); }} className="p-1.5 rounded-full hover:bg-white/10" aria-label={playing ? 'إيقاف' : 'تشغيل'}>
-              {playing ? <Pause size={20} fill="white" /> : <Play size={20} fill="white" />}
+              {playing ? <Pause size={20} color="#fff" fill="#fff" /> : <Play size={20} color="#fff" fill="#fff" />}
             </button>
             <button onClick={e => { e.stopPropagation(); setMuted(m => !m); }} className="p-1.5 rounded-full hover:bg-white/10" aria-label={muted ? 'تشغيل الصوت' : 'كتم الصوت'}>
-              {muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
+              {muted ? <VolumeX size={19} color="#fff" /> : <Volume2 size={19} color="#fff" />}
             </button>
             <span className="text-[11px] tabular-nums text-white/80 mx-1">{fmtClock(cur)} / {fmtClock(dur)}</span>
             <div className="ml-auto flex items-center gap-1 relative">
               <button onClick={e => { e.stopPropagation(); changeSpeed(PLAYER_SPEEDS[(PLAYER_SPEEDS.indexOf(speed) + 1) % PLAYER_SPEEDS.length]); }} className="px-2 py-1 rounded-full hover:bg-white/10 text-xs font-semibold tabular-nums" aria-label="السرعة">
                 {speed}x
               </button>
-              <button onClick={e => { e.stopPropagation(); setLoop(l => !l); }} className={`p-1.5 rounded-full hover:bg-white/10 ${loop ? 'text-cyan-300' : ''}`} aria-label="تكرار"><Repeat size={17} /></button>
-              {typeof document !== 'undefined' && document.pictureInPictureEnabled && <button onClick={e => { e.stopPropagation(); void togglePip(); }} className="p-1.5 rounded-full hover:bg-white/10" aria-label="صورة داخل صورة"><PictureInPicture2 size={18} /></button>}
+              <button onClick={e => { e.stopPropagation(); setLoop(l => !l); }} className={`p-1.5 rounded-full hover:bg-white/10 ${loop ? 'text-cyan-300' : ''}`} aria-label="تكرار"><Repeat size={17} color={loop ? '#67e8f9' : '#fff'} /></button>
+              {typeof document !== 'undefined' && document.pictureInPictureEnabled && <button onClick={e => { e.stopPropagation(); void togglePip(); }} className="p-1.5 rounded-full hover:bg-white/10" aria-label="صورة داخل صورة"><PictureInPicture2 size={18} color="#fff" /></button>}
               <button onClick={e => { e.stopPropagation(); toggleFullscreen(); }} className="p-1.5 rounded-full hover:bg-white/10" aria-label="ملء الشاشة">
-                {fs ? <Minimize size={19} /> : <Maximize size={19} />}
+                {fs ? <Minimize size={19} color="#fff" /> : <Maximize size={19} color="#fff" />}
               </button>
             </div>
           </div>
@@ -1518,7 +1518,7 @@ function useSeenObserver(root: React.RefObject<HTMLElement | null>, enabled: boo
         }
         io.unobserve(target);
       }
-      if (any) { window.clearTimeout(timer); timer = window.setTimeout(flush, 350); }
+      if (any) { window.clearTimeout(timer); timer = window.setTimeout(flush, 40); }
     }, { root: el, threshold: [0.1, 0.3, 0.6, 1] });
     el.querySelectorAll<HTMLElement>('[data-unread="1"]').forEach(n => io.observe(n));
     return () => { io.disconnect(); window.clearTimeout(timer); flush(); };
@@ -2561,6 +2561,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [editing, setEditing] = useState<GroupMessage | null>(null);
   const [reactingTo, setReactingTo] = useState<string | null>(null);
+  const [gsel, setGsel] = useState<string[] | null>(null);
   const justClosed = useRef(0);
   // Changed your mind? Tapping anywhere outside the reaction bar / action buttons just closes them.
   useEffect(() => {
@@ -2700,6 +2701,19 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
     if (m.media?.path) void kanRemove(CHAT_MEDIA_BUCKET, [m.media.path]);
   };
 
+  const deleteSelected = async () => {
+    const mineMsgs = group.messages.filter(x => gsel?.includes(x.id) && x.senderId === currentUser.id);
+    if (mineMsgs.length === 0) { setGsel(null); return; }
+    if (!(await kanConfirm(`حذف ${mineMsgs.length} رسالة للجميع؟`))) return;
+    const ids = mineMsgs.map(x => x.id);
+    setGsel(null);
+    patchMsgs(list => list.filter(x => !ids.includes(x.id)));
+    const { error: err } = await supabase.from('group_messages').delete().in('id', ids);
+    if (err) { console.error(err); setError('تعذّر حذف الرسائل'); void reload(); return; }
+    const paths = mineMsgs.flatMap(x => (x.media?.path ? [x.media.path] : []));
+    if (paths.length) void kanRemove(CHAT_MEDIA_BUCKET, paths);
+  };
+
   const react = async (m: GroupMessage, emoji: string) => {
     const mine = m.reactions.find(r => r.userId === currentUser.id);
     if (mine?.emoji === emoji) {
@@ -2726,7 +2740,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   return (
     <div className="fixed left-0 right-0 z-[70] flex justify-center bg-gray-950" style={{ top: vp.top, height: vp.height }}>
       <div className="flex flex-col h-full w-full bg-gray-950">
-        <div className="flex items-center gap-3 px-3 py-3 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 relative z-10">
+        <div className="flex items-center gap-3 px-3 py-3 bg-gray-900 border-b border-gray-800 relative z-10">
           <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors" aria-label="رجوع"><ChevronRight size={20} /></button>
           <button onClick={() => setInfoOpen(true)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
             <GroupAvatar name={group.name} src={group.avatar} size="md" />
@@ -2752,6 +2766,14 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             }}
           />
         )}
+        {gsel && createPortal(
+          <div dir={DIR} className="kan-theme-text fixed top-0 inset-x-0 z-[85] flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-white/10">
+            <button onClick={() => setGsel(null)} className="p-1.5 text-white" aria-label="إلغاء"><X size={20} /></button>
+            <span className="text-sm font-bold text-white">{gsel.length} محددة</span>
+            <button onClick={() => void deleteSelected()} disabled={gsel.length === 0} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500 text-white text-sm font-bold disabled:opacity-40"><Trash2 size={15} /> حذف</button>
+          </div>,
+          document.body,
+        )}
         <div ref={scrollRef} onScroll={onScroll} onWheel={onUserScroll} onTouchMove={onUserScroll} className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" onClick={() => { setActiveMsgId(null); setReactingTo(null); }}>
           {group.messages.length === 0 && <p className="text-center text-gray-500 text-sm py-12">ابدأ المحادثة في المجموعة 👋</p>}
           {group.messages.length > limit && <button onClick={() => setLimit(l => l + 60)} className="mx-auto block my-2 px-4 py-1.5 rounded-full bg-white/10 text-xs text-white">عرض رسائل أقدم</button>}
@@ -2772,7 +2794,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             const reactionGroups = new Map<string, string[]>();
             for (const r of m.reactions) reactionGroups.set(r.emoji, [...(reactionGroups.get(r.emoji) ?? []), r.userId]);
             return (
-              <motion.div key={m.id} id={`gmsg-${m.id}`} data-unread={!mine && !m.readBy.includes(currentUser.id) ? '1' : undefined} data-mids={m.id} initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.18 }} className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
+              <motion.div key={m.id} id={`gmsg-${m.id}`} data-unread={!mine && !m.readBy.includes(currentUser.id) ? '1' : undefined} data-mids={m.id} initial={i >= group.messages.length - 3 ? { opacity: 0, y: 8 } : false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.16 }} className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
                 {!mine && (showName && sender ? <button onClick={e => { e.stopPropagation(); openUserProfile(sender.id); }} className="shrink-0 self-end"><Avatar userId={sender.id} src={sender.avatar} name={sender.displayName} size="sm" /></button> : <div className="w-7 shrink-0" />)}
                 <div className={`min-w-0 max-w-[85%] sm:max-w-[75%] flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
                   {showName && sender && <button onClick={e => { e.stopPropagation(); openUserProfile(sender.id); }} className={`text-[11px] font-semibold mb-0.5 px-1 text-right ${nameColors[sender.displayName.charCodeAt(0) % nameColors.length]}`}>{sender.displayName}</button>}
@@ -2781,8 +2803,8 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                       () => { setReplyingTo(m); window.setTimeout(() => inputRef.current?.focus(), 30); },
                       () => { setActiveMsgId(m.id); setReactingTo(m.id); },
                     )}
-                    onClick={e => { e.stopPropagation(); if (Date.now() - justClosed.current < 450) return; setActiveMsgId(active ? null : m.id); setReactingTo(null); }}
-                    className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words cursor-pointer select-none touch-pan-y transition-shadow ${highlightId === m.id ? 'ring-2 ring-cyan-400' : ''} ${isStickerName(m.media?.name) && !m.text ? 'bg-transparent !p-0' : mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`}
+                    onClick={e => { e.stopPropagation(); if (gsel) { setGsel(x => ((x ?? []).includes(m.id) ? (x ?? []).filter(y => y !== m.id) : [...(x ?? []), m.id])); return; } if (Date.now() - justClosed.current < 450) return; setActiveMsgId(active ? null : m.id); setReactingTo(null); }}
+                    className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words cursor-pointer select-none touch-pan-y transition-shadow ${highlightId === m.id ? 'ring-2 ring-cyan-400' : ''} ${gsel?.includes(m.id) ? 'ring-2 ring-white brightness-110' : ''} ${isStickerName(m.media?.name) && !m.text ? 'bg-transparent !p-0' : mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`}
                   >
                     {m.replyToId && (
                       <button
@@ -2855,6 +2877,8 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                         <button onClick={() => { void downloadFile(m.media!.url, m.media!.name || (m.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Download size={12} /> تحميل</button>
                       )}
                       {mine && <button onClick={() => setSeenFor(seenFor === m.id ? null : m.id)} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-cyan-300 text-xs flex items-center gap-1"><Eye size={12} /> من شاهدها</button>}
+                      {!!m.text && !parsePoll(m.text) && !parseLocMsg(m.text) && <button onClick={() => { void navigator.clipboard?.writeText(m.text ?? '').catch(() => undefined); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Copy size={12} /> نسخ</button>}
+                      <button onClick={() => { setGsel([m.id]); setActiveMsgId(null); setReactingTo(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Check size={12} /> تحديد</button>
                       {mine && m.media?.type !== 'voice' && <button onClick={() => { setEditing(m); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Pencil size={12} /> تعديل</button>}
                       {mine && <button onClick={() => void deleteMessage(m)} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-red-400 text-xs flex items-center gap-1"><Trash2 size={12} /> حذف</button>}
                     </div>
@@ -2882,7 +2906,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
         </div>
 
         {(
-          <div className={`px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10 ${recording ? 'hidden' : ''}`}>
+          <div className={`px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900 border-t border-gray-800 relative z-10 ${recording ? 'hidden' : ''}`}>
             <input ref={fileRef} type="file" multiple onChange={handleFile} className="hidden" />
             {error && <p className="text-xs text-red-400 pb-1.5 px-1">{error}</p>}
             {replyingTo && (
@@ -2941,13 +2965,13 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 </motion.button>
               )}
             </div>
-          <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }} />}</AnimatePresence>
+          <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onClose={() => setToolsOpen(false)} onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }} />}</AnimatePresence>
           {locSheet && <LocationShareSheet onClose={() => setLocSheet(false)} onSend={l => { setLocSheet(false); void send({ text: locMsgText(l) }); }} />}
           {emojiOpen && <EmojiPicker docked onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `${st.gif ? 'kix-gif' : 'kan-sticker'}.${stkExt(st.blob, st.kind)}` }); }} />}
           </div>
         )}
         {recording && (
-          <div className="px-3 py-2 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
+          <div className="px-3 py-2 bg-gray-900 border-t border-gray-800 relative z-10">
             <VoiceRecorder onSend={sendVoice} onCancel={() => setRecording(false)} />
           </div>
         )}
@@ -3897,7 +3921,7 @@ function CountdownSticker({ target, title, size }: { target: string; title?: str
   const diff = Math.max(0, new Date(target).getTime() - now);
   const cell = (n: number, l: string) => <div className="flex flex-col items-center min-w-[2.2em]"><span className="font-extrabold tabular-nums" style={{ fontSize: '1.5em', lineHeight: 1.1 }}>{String(n).padStart(2, '0')}</span><span className="opacity-80" style={{ fontSize: '0.5em' }}>{l}</span></div>;
   return (
-    <div dir="auto" className="rounded-[1.2em] bg-gradient-to-br from-violet-600/85 to-cyan-500/85 backdrop-blur-xl ring-1 ring-white/40 text-white text-center px-[1em] py-[0.7em] shadow-xl select-none" style={{ fontSize: `${size / 3.6}cqw` }}>
+    <div dir="auto" className="rounded-[1.2em] bg-gradient-to-br from-violet-600 to-cyan-500 ring-1 ring-white/40 text-white text-center px-[1em] py-[0.7em] shadow-xl select-none" style={{ fontSize: `${size / 3.6}cqw` }}>
       {title && <div className="font-bold mb-[0.3em]" style={{ fontSize: '0.7em' }}>{title}</div>}
       {diff === 0 ? <div className="font-extrabold">انتهى الوقت</div> : <div className="flex items-center justify-center gap-[0.5em]">{cell(Math.floor(diff / 86400000), 'يوم')}{cell(Math.floor((diff % 86400000) / 3600000), 'ساعة')}{cell(Math.floor((diff % 3600000) / 60000), 'دقيقة')}{cell(Math.floor((diff % 60000) / 1000), 'ثانية')}</div>}
     </div>
@@ -3911,17 +3935,19 @@ const pollOptions = (p: { a: string; b: string; o?: string[] }): string[] => (p.
 // Rotation snaps to every 45 degrees when you are within a few degrees of it.
 const snapAng = (r: number) => { const n = ((((r + 540) % 360) + 360) % 360) - 180; const m = Math.round(n / 45) * 45; return Math.abs(n - m) < 3.5 ? m : n; };
 
-function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSelect, xsel, onXSelect, onXf, onXRemove, onMention, onTap, onLong }: {
-  onLong?: (idx: number) => void; onTap?: (idx: number) => void; onMention?: (ref: string) => void; extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk' | 'poll' | 'item', x: number, y: number, idx?: number) => void; onScale?: (idx: number, s: number) => void; onRotate?: (idx: number, r: number) => void; onRemove?: (idx: number) => void; sel?: number; onSelect?: (idx: number) => void; xsel?: '' | 'poll' | 'ask'; onXSelect?: (k: 'poll' | 'ask') => void; onXf?: (k: 'poll' | 'ask', p: Partial<StoryXf>) => void; onXRemove?: (k: 'poll' | 'ask') => void }) {
+function StoryOverlays({ extra, onMove, onScale, onRotate, onTextXf, onRemove, sel, onSelect, xsel, onXSelect, onXf, onXRemove, onMention, onTap, onLong }: {
+  onTextXf?: (idx: number, p: { s?: number; r?: number }) => void; onLong?: (idx: number) => void; onTap?: (idx: number) => void; onMention?: (ref: string) => void; extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk' | 'poll' | 'item', x: number, y: number, idx?: number) => void; onScale?: (idx: number, s: number) => void; onRotate?: (idx: number, r: number) => void; onRemove?: (idx: number) => void; sel?: number; onSelect?: (idx: number) => void; xsel?: '' | 'poll' | 'ask'; onXSelect?: (k: 'poll' | 'ask') => void; onXf?: (k: 'poll' | 'ask', p: Partial<StoryXf>) => void; onXRemove?: (k: 'poll' | 'ask') => void }) {
   const root = useRef<HTMLDivElement>(null);
   const ptrs = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ d: number; s: number; a: number; r: number } | null>(null);
   const tapRef = useRef({ x: 0, y: 0, moved: false, multi: false });
   const lpT = useRef(0); const longFired = useRef(false);
+  const tps = useRef(new Map<number, { x: number; y: number }>());
+  const tpinch = useRef<{ d: number; s: number; a: number; r: number } | null>(null);
   const xp = useRef<{ key: string; ptrs: Map<number, { x: number; y: number }>; pinch: { d: number; s: number; a: number; r: number } | null }>({ key: '', ptrs: new Map(), pinch: null });
   const [gd, setGd] = useState({ x: false, y: false });
   if (!extra) return null;
-  const clamp = (n: number) => Math.max(4, Math.min(96, n));
+  const clamp = (n: number) => Math.max(0, Math.min(100, n));
   // Pointer position in % of the story, snapping to the centre lines (and showing a guide) when close.
   const pos = (cx: number, cy: number) => {
     const r = root.current!.getBoundingClientRect();
@@ -3934,14 +3960,29 @@ function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSele
   };
   const endGd = () => setGd(g => (g.x || g.y ? { x: false, y: false } : g));
   const drag = (k: 'text' | 'stk' | 'poll', idx?: number) => (onMove ? {
-    onPointerDown: (e: React.PointerEvent<HTMLElement>) => { e.currentTarget.setPointerCapture(e.pointerId); e.stopPropagation(); },
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      e.currentTarget.setPointerCapture(e.pointerId); e.stopPropagation();
+      if (k === 'text' && onTextXf) {
+        tps.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (tps.current.size === 2) { const [a, b] = [...tps.current.values()]; const t0 = idx === undefined ? undefined : extra?.texts?.[idx]; tpinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: t0?.s ?? 24, a: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI, r: t0?.r ?? 0 }; }
+      }
+    },
     onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      if (k === 'text' && onTextXf && tps.current.has(e.pointerId)) {
+        tps.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (tps.current.size >= 2 && tpinch.current && idx !== undefined) {
+          const [a, b] = [...tps.current.values()];
+          onTextXf(idx, { s: Math.max(8, Math.min(400, Math.round((tpinch.current.s * Math.hypot(a.x - b.x, a.y - b.y)) / tpinch.current.d))), r: snapAng(tpinch.current.r + (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI - tpinch.current.a) });
+          return;
+        }
+      }
       if (!e.currentTarget.hasPointerCapture(e.pointerId) || !root.current) return;
+      if (k === 'text' && tps.current.size >= 2) return;
       const p = pos(e.clientX, e.clientY);
       onMove(k, p.x, p.y, idx);
     },
-    onPointerUp: endGd,
-    onPointerCancel: endGd,
+    onPointerUp: (e: React.PointerEvent<HTMLElement>) => { tps.current.delete(e.pointerId); if (tps.current.size < 2) tpinch.current = null; endGd(); },
+    onPointerCancel: (e: React.PointerEvent<HTMLElement>) => { tps.current.delete(e.pointerId); if (tps.current.size < 2) tpinch.current = null; endGd(); },
     className: 'pointer-events-auto cursor-grab touch-none',
   } : { className: '' });
   // Move / pinch-zoom / twist for the poll and the question box.
@@ -3960,14 +4001,14 @@ function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSele
       st.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (st.ptrs.size >= 2 && st.pinch) {
         const [a, b] = [...st.ptrs.values()];
-        onXf?.(key, { s: Math.max(0.5, Math.min(2.4, (st.pinch.s * Math.hypot(a.x - b.x, a.y - b.y)) / st.pinch.d)), r: snapAng(st.pinch.r + (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI - st.pinch.a) });
+        onXf?.(key, { s: Math.max(0.2, Math.min(6, (st.pinch.s * Math.hypot(a.x - b.x, a.y - b.y)) / st.pinch.d)), r: snapAng(st.pinch.r + (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI - st.pinch.a) });
         return;
       }
       if (st.ptrs.size === 1) onXf?.(key, pos(e.clientX, e.clientY));
     },
     onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => { const st = xp.current; st.ptrs.delete(e.pointerId); if (st.ptrs.size < 2) st.pinch = null; endGd(); },
     onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => { const st = xp.current; st.ptrs.delete(e.pointerId); st.pinch = null; endGd(); },
-    onWheel: (e: React.WheelEvent<HTMLDivElement>) => onXf?.(key, { s: Math.max(0.5, Math.min(2.4, (cur.s ?? 1) - e.deltaY * 0.002)) }),
+    onWheel: (e: React.WheelEvent<HTMLDivElement>) => onXf?.(key, { s: Math.max(0.2, Math.min(6, (cur.s ?? 1) - e.deltaY * 0.002)) }),
   });
   const xfCard = (key: 'poll' | 'ask', cur: StoryXf, body: React.ReactNode) => (
     <div key={key} {...xfProps(key, cur)} className="absolute w-[72%] rounded-2xl bg-black/55 p-3 text-white pointer-events-auto cursor-grab touch-none" style={{ left: `${cur.x}%`, top: `${cur.y}%`, transform: `translate(-50%,-50%) rotate(${cur.r ?? 0}deg) scale(${cur.s ?? 1})`, zIndex: 40 }}>
@@ -4010,7 +4051,7 @@ function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSele
             if (Math.hypot(e.clientX - tapRef.current.x, e.clientY - tapRef.current.y) > 8) tapRef.current.moved = true;
             if (ptrs.current.size >= 2 && pinch.current) {
               const [a, b] = [...ptrs.current.values()];
-              onScale?.(i, Math.max(14, Math.min(360, (pinch.current.s * Math.hypot(a.x - b.x, a.y - b.y)) / pinch.current.d)));
+              onScale?.(i, Math.max(5, Math.min(1200, (pinch.current.s * Math.hypot(a.x - b.x, a.y - b.y)) / pinch.current.d)));
               onRotate?.(i, snapAng(pinch.current.r + (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI - pinch.current.a));
               return;
             }
@@ -4018,7 +4059,7 @@ function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSele
           },
           onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => { const tp = tapRef.current; window.clearTimeout(lpT.current); const wasTap = !longFired.current && ptrs.current.size === 1 && !tp.moved && !tp.multi; ptrs.current.delete(e.pointerId); if (ptrs.current.size < 2) pinch.current = null; endGd(); if (wasTap) onTap?.(i); },
           onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => { window.clearTimeout(lpT.current); ptrs.current.delete(e.pointerId); pinch.current = null; endGd(); },
-          onWheel: (e: React.WheelEvent<HTMLDivElement>) => onScale?.(i, Math.max(14, Math.min(360, it.s - e.deltaY * 0.2))),
+          onWheel: (e: React.WheelEvent<HTMLDivElement>) => { if (e.shiftKey) onRotate?.(i, snapAng((it.r ?? 0) + e.deltaY * 0.1)); else onScale?.(i, Math.max(5, Math.min(1200, it.s - e.deltaY * (0.2 + it.s * 0.002)))); },
         } : {};
         return (
           <div key={`it${i}`} {...h} className={`absolute ${editable ? 'pointer-events-auto touch-none cursor-grab' : ''}`} style={{ left: `${it.x}%`, top: `${it.y}%`, transform: `translate(-50%,-50%) rotate(${it.r ?? 0}deg)`, zIndex: i + 1, maxWidth: it.k === 't' ? '88%' : undefined }}>
@@ -4462,9 +4503,9 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const extra: StoryExtra = {
     texts: (() => {
       const all: NonNullable<StoryExtra['texts']> = [];
-      if (loc.trim()) all.push({ t: loc.trim().slice(0, 40), y: locP.y, x: locP.x, r: locP.r || undefined, s: 22, bg: true, k: 'loc' });
-      if (menUser) all.push({ t: '@' + menUser.username, y: menP.y, x: menP.x, r: menP.r || undefined, c: '#a5f3fc', s: 24, bg: true, k: 'men', u: menUser.id });
-      if (lnk.trim()) all.push({ t: lnk.trim().slice(0, 40), y: lnkP.y, x: lnkP.x, r: lnkP.r || undefined, s: 20, bg: true, k: 'lnk' });
+      if (loc.trim()) all.push({ t: loc.trim().slice(0, 40), y: locP.y, x: locP.x, r: locP.r || undefined, s: locP.s ?? 22, bg: true, k: 'loc' });
+      if (menUser) all.push({ t: '@' + menUser.username, y: menP.y, x: menP.x, r: menP.r || undefined, c: '#a5f3fc', s: menP.s ?? 24, bg: true, k: 'men', u: menUser.id });
+      if (lnk.trim()) all.push({ t: lnk.trim().slice(0, 40), y: lnkP.y, x: lnkP.x, r: lnkP.r || undefined, s: lnkP.s ?? 20, bg: true, k: 'lnk' });
       return all.length ? all : undefined;
     })(),
     sp: stk.length ? stkPos : undefined,
@@ -4603,7 +4644,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const selControls = selItem ? (
     <div className="mt-2 space-y-2">
       {selItem.k === 't' && <input value={selItem.v} onChange={e => patchSel({ v: e.target.value.slice(0, 200) })} dir="auto" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white focus:outline-none" />}
-      <div className="flex items-center gap-3 px-1"><span className="text-white/80 text-xs shrink-0">الحجم</span><input type="range" min={selItem.k === 't' ? 14 : 24} max={360} value={selItem.s} onChange={e => patchSel({ s: Number(e.target.value) })} className="flex-1 accent-white" /><button onClick={() => removeItem(sel)} className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0" aria-label="حذف"><Trash2 size={16} color="#fff" /></button></div>
+      <div className="flex items-center gap-3 px-1"><span className="text-white/80 text-xs shrink-0">الحجم</span><input type="range" min={selItem.k === 't' ? 8 : 6} max={1200} value={selItem.s} onChange={e => patchSel({ s: Number(e.target.value) })} className="flex-1 accent-white" /><button onClick={() => removeItem(sel)} className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0" aria-label="حذف"><Trash2 size={16} color="#fff" /></button></div>
       {selItem.k === 't' && <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">{TXT_COLORS.map(c => <button key={c} onClick={() => patchSel({ c })} aria-label="لون" className={`shrink-0 w-7 h-7 rounded-full border-2 ${(selItem.c ?? '#ffffff') === c ? 'border-white scale-110' : 'border-white/30'}`} style={{ background: c }} />)}<button onClick={() => patchSel({ b: !selItem.b })} className={`shrink-0 px-3 h-8 rounded-full text-xs font-semibold ${selItem.b ? 'bg-white text-black' : 'bg-white/15 text-white'}`}>خلفية</button><button onClick={() => patchSel({ f: ((selItem.f ?? 0) + 1) % STORY_FONTS.length })} className="shrink-0 px-3 h-8 rounded-full bg-white/15 text-white text-xs font-semibold" style={{ fontFamily: STORY_FONTS[selItem.f ?? 0] }}>خط: {STORY_FONT_NAMES[selItem.f ?? 0]}</button></div>}
       {!IS_TOUCH && <div className="flex items-center gap-3 px-1"><span className="text-white/80 text-xs shrink-0">الدوران</span><input type="range" min={-180} max={180} value={selItem.r ?? 0} onChange={e => patchSel({ r: Number(e.target.value) })} className="flex-1 accent-white" /><button onClick={() => patchSel({ r: 0 })} className="shrink-0 px-3 h-8 rounded-full bg-white/15 text-white text-xs">0°</button></div>}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -4655,7 +4696,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent pointer-events-none z-[5]" />
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
           {remoteM && !music && musicMode === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={q => setTp(o => ({ ...q, r: o?.r, s: o?.s }))} />}
-          {(music || remoteM) && ly.on && lyShown.length > 0 && <StoryLyrics ly={{ l: lyShown, st: ly.st, c: ly.c, p: ly.p, f: ly.f }} idx={lyIdx} onMove={tool === 'music' ? (q => patchLy({ p: { ...ly.p, x: q.x, y: q.y } })) : undefined} onScale={tool === 'music' ? (sc => patchLy({ p: { ...ly.p, s: sc } })) : undefined} />}
+          {(music || remoteM) && ly.on && lyShown.length > 0 && <StoryLyrics ly={{ l: lyShown, st: ly.st, c: ly.c, p: ly.p, f: ly.f }} idx={lyIdx} onMove={tool === 'music' ? (q => patchLy({ p: { ...ly.p, x: q.x, y: q.y } })) : undefined} onScale={tool === 'music' ? (sc => patchLy({ p: { ...ly.p, s: sc } })) : undefined} onRotate={tool === 'music' ? (rr => patchLy({ p: { ...ly.p, r: rr } })) : undefined} />}
           <FilterFx i={flt} k={isVideo ? 1 : fk / 100} />
           {IS_TOUCH && selItem && tool !== 'draw' && (
             <div className="absolute top-14 inset-x-0 z-[32] flex justify-center pointer-events-none">
@@ -4669,7 +4710,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
             </div>
           )}
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
-          <StoryOverlays extra={extra} sel={sel} xsel={xsel} onTap={tapItem} onLong={fontItem} onXSelect={k => { setXsel(k); setSel(-1); setTool(k); }} onXf={(k, p) => (k === 'poll' ? setPollPos(o => ({ ...o, ...p })) : setAskPos(o => ({ ...o, ...p })))} onXRemove={k => { if (k === 'poll') { setPq(''); setPa(''); setPb(''); setPxs([]); } else setAsk(''); setXsel(''); }} onSelect={i => { setSel(i); setXsel(''); if (items[i]?.k === 't' && !IS_TOUCH) setTool('text'); }} onRemove={removeItem} onScale={(i, sz) => setItems(a => a.map((x, k) => (k === i ? { ...x, s: sz } : x)))} onRotate={(i, r) => setItems(a => a.map((x, k) => (k === i ? { ...x, r } : x)))} onMove={(k, x, y, idx) => { if (k === 'text') { const tk = extra.texts?.[idx ?? -1]?.k; if (tk === 'loc') setLocP(o => ({ ...o, x, y })); else if (tk === 'men') setMenP(o => ({ ...o, x, y })); else if (tk === 'lnk') setLnkP(o => ({ ...o, x, y })); } else if (k === 'poll') setPollPos(o => ({ ...o, x, y })); else if (k === 'item' && idx !== undefined) setItems(a => a.map((it, i) => (i === idx ? { ...it, x, y } : it))); else setStkPos({ x, y }); }} />
+          <StoryOverlays extra={extra} sel={sel} xsel={xsel} onTextXf={(ti, q) => { const tk = extra.texts?.[ti]?.k; const f = (o: Pct): Pct => ({ ...o, ...q }); if (tk === 'loc') setLocP(f); else if (tk === 'men') setMenP(f); else if (tk === 'lnk') setLnkP(f); }} onTap={tapItem} onLong={fontItem} onXSelect={k => { setXsel(k); setSel(-1); setTool(k); }} onXf={(k, p) => (k === 'poll' ? setPollPos(o => ({ ...o, ...p })) : setAskPos(o => ({ ...o, ...p })))} onXRemove={k => { if (k === 'poll') { setPq(''); setPa(''); setPb(''); setPxs([]); } else setAsk(''); setXsel(''); }} onSelect={i => { setSel(i); setXsel(''); if (items[i]?.k === 't' && !IS_TOUCH) setTool('text'); }} onRemove={removeItem} onScale={(i, sz) => setItems(a => a.map((x, k) => (k === i ? { ...x, s: sz } : x)))} onRotate={(i, r) => setItems(a => a.map((x, k) => (k === i ? { ...x, r } : x)))} onMove={(k, x, y, idx) => { if (k === 'text') { const tk = extra.texts?.[idx ?? -1]?.k; if (tk === 'loc') setLocP(o => ({ ...o, x, y })); else if (tk === 'men') setMenP(o => ({ ...o, x, y })); else if (tk === 'lnk') setLnkP(o => ({ ...o, x, y })); } else if (k === 'poll') setPollPos(o => ({ ...o, x, y })); else if (k === 'item' && idx !== undefined) setItems(a => a.map((it, i) => (i === idx ? { ...it, x, y } : it))); else setStkPos({ x, y }); }} />
         </div>
       </div>
       <div className="relative shrink-0 z-30">
@@ -4934,9 +4975,44 @@ function lyActive(l: [number, string][], t: number): number {
 }
 
 // Song lyrics shown over a story, in step with the music (Instagram style), with 6 looks and any colour.
-function StoryLyrics({ ly, idx, onMove, onScale }: { ly: StoryLy; idx: number; onMove?: (p: Pct) => void; onScale?: (s: number) => void }) {
-  const p = ly.p ?? { x: 50, y: 42, s: 1 };
-  const pin = useRef<{ d: number; s: number } | null>(null);
+function StoryLyrics({ ly, idx, onMove, onScale, onRotate }: { ly: StoryLy; idx: number; onMove?: (p: Pct) => void; onScale?: (s: number) => void; onRotate?: (r: number) => void }) {
+  const p: Pct = ly.p ?? { x: 50, y: 42, s: 1 };
+  const g = useRef({ ptrs: new Map<number, { x: number; y: number }>(), d: 1, a: 0, s: 1, r: 0, ox: 0, oy: 0 });
+  const pctOf = (el: HTMLElement, cx: number, cy: number) => { const b = el.parentElement?.getBoundingClientRect(); return b && b.width && b.height ? { x: ((cx - b.left) / b.width) * 100, y: ((cy - b.top) / b.height) * 100 } : null; };
+  // One finger drags (it keeps the spot you grabbed, no jump); two fingers resize AND twist at once; mouse wheel resizes, Shift+wheel twists.
+  const lyDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!onMove) return;
+    e.stopPropagation();
+    const st = g.current;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    st.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (st.ptrs.size === 1) { const q = pctOf(e.currentTarget, e.clientX, e.clientY); if (q) { st.ox = q.x - p.x; st.oy = q.y - p.y; } }
+    else if (st.ptrs.size === 2) { const [a, c] = [...st.ptrs.values()]; st.d = Math.hypot(a.x - c.x, a.y - c.y) || 1; st.a = (Math.atan2(c.y - a.y, c.x - a.x) * 180) / Math.PI; st.s = p.s ?? 1; st.r = p.r ?? 0; }
+  };
+  const lyMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const st = g.current;
+    if (!onMove || !st.ptrs.has(e.pointerId)) return;
+    st.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (st.ptrs.size >= 2) {
+      const [a, c] = [...st.ptrs.values()];
+      onScale?.(Math.max(0.2, Math.min(6, Math.round(((st.s * Math.hypot(a.x - c.x, a.y - c.y)) / st.d) * 100) / 100)));
+      onRotate?.(snapAng(st.r + (Math.atan2(c.y - a.y, c.x - a.x) * 180) / Math.PI - st.a));
+      return;
+    }
+    const q = pctOf(e.currentTarget, e.clientX, e.clientY);
+    if (q) onMove({ x: Math.max(0, Math.min(100, q.x - st.ox)), y: Math.max(0, Math.min(100, q.y - st.oy)) });
+  };
+  const lyUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const st = g.current;
+    st.ptrs.delete(e.pointerId);
+    if (st.ptrs.size === 1) { const [r1] = [...st.ptrs.values()]; const q = pctOf(e.currentTarget, r1.x, r1.y); if (q) { st.ox = q.x - p.x; st.oy = q.y - p.y; } }
+  };
+  const lyWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!onMove) return;
+    e.stopPropagation();
+    if (e.shiftKey) onRotate?.(snapAng((p.r ?? 0) + e.deltaY * 0.1));
+    else onScale?.(Math.max(0.2, Math.min(6, Math.round(((p.s ?? 1) - e.deltaY * 0.002) * 100) / 100)));
+  };
   useEffect(() => { loadLyFonts(); }, []);
   const c = ly.c || '#ffffff';
   const ink = lyInk(c);
@@ -4963,11 +5039,8 @@ function StoryLyrics({ ly, idx, onMove, onScale }: { ly: StoryLy; idx: number; o
   else if (ly.st === 6) body = cur && <div key={idx} className="text-[28px] font-black leading-tight" style={{ backgroundImage: `linear-gradient(100deg, ${c}, #ff5d8f 55%, #4cc9f0)`, WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 2px 10px rgba(0,0,0,.45))', ...anim }}>{cur}</div>;
   else body = cur && <div key={idx} style={anim}><span className="inline-block text-[21px] font-bold leading-snug px-5 py-3 rounded-[26px]" style={{ background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(16px) saturate(1.6)', WebkitBackdropFilter: 'blur(16px) saturate(1.6)', border: '1px solid rgba(255,255,255,.38)', boxShadow: '0 8px 30px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.4)', color: c }}>{cur}</span></div>;
   return (
-    <div onPointerDown={pctDrag(onMove)}
-      onTouchStart={e => { if (onScale && e.touches.length === 2) pin.current = { d: Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY) || 1, s: p.s ?? 1 }; }}
-      onTouchMove={e => { if (onScale && pin.current && e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); onScale(Math.max(0.4, Math.min(3, Math.round(pin.current.s * (d / pin.current.d) * 100) / 100))); } }}
-      onTouchEnd={e => { if (e.touches.length < 2) pin.current = null; }}
-      style={{ left: `${p.x}%`, top: `${p.y}%`, transform: `translate(-50%,-50%) scale(${p.s ?? 1})`, touchAction: onMove ? 'none' : undefined, color: '#fff', fontFamily: LY_FONTS[ly.f ?? 0]?.css ?? 'inherit' }}
+    <div onPointerDown={lyDown} onPointerMove={lyMove} onPointerUp={lyUp} onPointerCancel={lyUp} onWheel={lyWheel}
+      style={{ left: `${p.x}%`, top: `${p.y}%`, transform: `translate(-50%,-50%) rotate(${p.r ?? 0}deg) scale(${p.s ?? 1})`, touchAction: onMove ? 'none' : undefined, willChange: onMove ? 'transform' : undefined, color: '#fff', fontFamily: LY_FONTS[ly.f ?? 0]?.css ?? 'inherit' }}
       className={`absolute z-10 w-[88%] text-center kan-always-white break-words ${onMove ? 'min-h-[3rem] cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-2xl p-1' : 'pointer-events-none'}`}>
       <style>{'@keyframes kyIn{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}@keyframes kyWord{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}'}</style>
       {body || (onMove ? <div className="text-sm opacity-60">كلمات الأغنية</div> : null)}
@@ -5062,8 +5135,9 @@ function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPl
             {LY_COLORS.map(col => <button key={col} onClick={() => patch({ c: col })} aria-label="لون الكلمات" className={`shrink-0 w-7 h-7 rounded-full border-2 ${ly.c === col ? 'border-white scale-110' : 'border-white/30'}`} style={{ background: col }} />)}
             <input type="color" value={/^#[0-9a-f]{6}$/i.test(ly.c) ? ly.c : '#ffffff'} onChange={e => patch({ c: e.target.value })} aria-label="لون مخصص" className="shrink-0 w-7 h-7 rounded-full bg-transparent border-2 border-white/30 p-0" />
           </div>
-          <div className="mt-2 flex items-center gap-2 px-1"><span className="text-[11px] text-gray-300 shrink-0">الحجم</span><button onClick={() => patch({ p: { ...ly.p, s: Math.max(0.4, Math.round(((ly.p.s ?? 1) - 0.1) * 100) / 100) } })} className="shrink-0 w-8 h-8 rounded-full bg-white/10 text-white text-base font-bold active:scale-90">−</button><input type="range" min={0.4} max={3} step={0.05} value={ly.p.s ?? 1} onChange={e => patch({ p: { ...ly.p, s: Number(e.target.value) } })} className="flex-1 min-w-0 accent-white" /><button onClick={() => patch({ p: { ...ly.p, s: Math.min(3, Math.round(((ly.p.s ?? 1) + 0.1) * 100) / 100) } })} className="shrink-0 w-8 h-8 rounded-full bg-white/10 text-white text-base font-bold active:scale-90">+</button></div>
-          <p className="px-1 text-[10.5px] text-white/55">اسحب الكلمات لتحريكها، وبإصبعين كبّرها أو صغّرها على الصورة</p>
+          <div className="mt-2 flex items-center gap-2 px-1"><span className="text-[11px] text-gray-300 shrink-0">الحجم</span><button onClick={() => patch({ p: { ...ly.p, s: Math.max(0.2, Math.round(((ly.p.s ?? 1) - 0.1) * 100) / 100) } })} className="shrink-0 w-8 h-8 rounded-full bg-white/10 text-white text-base font-bold active:scale-90">−</button><input type="range" min={0.2} max={6} step={0.05} value={ly.p.s ?? 1} onChange={e => patch({ p: { ...ly.p, s: Number(e.target.value) } })} className="flex-1 min-w-0 accent-white" /><button onClick={() => patch({ p: { ...ly.p, s: Math.min(6, Math.round(((ly.p.s ?? 1) + 0.1) * 100) / 100) } })} className="shrink-0 w-8 h-8 rounded-full bg-white/10 text-white text-base font-bold active:scale-90">+</button></div>
+          <div className="mt-2 flex items-center gap-2 px-1"><span className="text-[11px] text-gray-300 shrink-0">الدوران</span><input type="range" min={-180} max={180} step={1} value={Math.round(ly.p.r ?? 0)} onChange={e => patch({ p: { ...ly.p, r: Number(e.target.value) } })} className="flex-1 min-w-0 accent-white" /><button onClick={() => patch({ p: { ...ly.p, r: 0, s: 1 } })} className="shrink-0 px-3 h-8 rounded-full bg-white/10 text-white text-[11px] font-semibold active:scale-90">إعادة</button></div>
+          <p className="px-1 mt-1 text-[10.5px] text-white/55">اسحب الكلمات لتحريكها، وبإصبعين كبّرها وصغّرها ودوّرها في نفس الوقت (على الكمبيوتر: العجلة للحجم و Shift + العجلة للدوران)</p>
           <div className="mt-2 flex gap-2 overflow-x-auto no-scrollbar">{LY_FONTS.map((f, i) => <button key={f.n} onClick={() => patch({ f: i })} style={{ fontFamily: f.css }} className={chip((ly.f ?? 0) === i)}>{f.n}</button>)}</div>
           <div className="mt-2 flex items-center gap-2">
             <button onClick={() => setPlaying(!playing)} className="shrink-0 px-3 h-8 rounded-full bg-white text-black text-xs font-bold flex items-center gap-1.5">{playing ? <Pause size={13} /> : <Play size={13} />}{playing ? 'إيقاف' : 'جرّب مع الصوت'}</button>
@@ -5854,25 +5928,39 @@ function LocationShareSheet({ onSend, onClose }: { onSend: (l: GeoLoc) => void; 
   );
 }
 
-function ChatPlusPanel({ onPickFiles, onPoll, onLocation, onAi, onGames }: { onPickFiles: (accept: string) => void; onPoll: () => void; onLocation: () => void; onAi: () => void; onGames?: () => void }) {
+function ChatPlusPanel({ onPickFiles, onPoll, onLocation, onAi, onGames, onClose }: { onPickFiles: (accept: string) => void; onPoll: () => void; onLocation: () => void; onAi: () => void; onGames?: () => void; onClose?: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  // Tap anywhere outside the menu (except the + button itself) and it closes.
+  useEffect(() => {
+    const h = (e: PointerEvent) => {
+      const el = e.target as Element | null;
+      if (ref.current && el && !ref.current.contains(el) && !el.closest('[aria-label="المزيد"]')) closeRef.current?.();
+    };
+    document.addEventListener('pointerdown', h, true);
+    return () => document.removeEventListener('pointerdown', h, true);
+  }, []);
   const tiles: { k: string; icon: React.ReactNode; label: string; bg: string; run: () => void }[] = [
-    { k: 'media', icon: <ImageIcon size={26} color="#fff" />, label: 'صورة / فيديو', bg: 'from-pink-500 to-rose-500', run: () => onPickFiles('image/*,video/*') },
-    { k: 'file', icon: <FileText size={26} color="#fff" />, label: 'ملف', bg: 'from-sky-500 to-indigo-500', run: () => onPickFiles('') },
-    { k: 'loc', icon: <MapPin size={26} color="#fff" />, label: 'موقع', bg: 'from-emerald-500 to-teal-500', run: onLocation },
+    { k: 'media', icon: <ImageIcon size={24} color="#fff" />, label: 'صورة / فيديو', bg: 'from-pink-500 to-rose-500', run: () => onPickFiles('image/*,video/*') },
+    { k: 'file', icon: <FileText size={24} color="#fff" />, label: 'ملف', bg: 'from-sky-500 to-indigo-500', run: () => onPickFiles('') },
+    { k: 'loc', icon: <MapPin size={24} color="#fff" />, label: 'موقع', bg: 'from-emerald-500 to-teal-500', run: onLocation },
     { k: 'poll', icon: <span className="text-2xl leading-none">📊</span>, label: 'استطلاع', bg: 'from-amber-500 to-orange-500', run: onPoll },
-    ...(onGames ? [{ k: 'game', icon: <Gamepad2 size={26} color="#fff" />, label: 'العب', bg: 'from-fuchsia-500 to-purple-600', run: onGames }] : []),
-    { k: 'ai', icon: <Sparkles size={26} color="#fff" />, label: 'اسأل KIX', bg: 'from-violet-600 to-cyan-500', run: onAi },
+    ...(onGames ? [{ k: 'game', icon: <Gamepad2 size={24} color="#fff" />, label: 'العب', bg: 'from-fuchsia-500 to-purple-600', run: onGames }] : []),
+    { k: 'ai', icon: <Sparkles size={24} color="#fff" />, label: 'اسأل KIX', bg: 'from-violet-600 to-cyan-500', run: onAi },
   ];
+  // A floating card above the input row: only opacity / transform are animated (no height changes), so it stays smooth.
   return (
-    <motion.div dir={DIR} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()}
-      initial={{ height: 0, opacity: 0 }} animate={{ height: 240, opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', damping: 28, stiffness: 340 }}
-      className="mt-2 w-full overflow-hidden bg-gray-900/70 border-t border-white/10">
-      <div className="grid grid-cols-3 min-[420px]:grid-cols-4 gap-x-3 gap-y-4 p-4">
-        {tiles.map((x, i) => (
-          <motion.button key={x.k} onClick={x.run} initial={{ opacity: 0, y: 22, scale: 0.85 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ delay: 0.04 + i * 0.035, type: 'spring', damping: 18, stiffness: 380 }} whileTap={{ scale: 0.92 }} className="flex flex-col items-center gap-1.5">
+    <motion.div ref={ref} dir={DIR} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()}
+      initial={{ opacity: 0, y: 14, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.97 }} transition={{ duration: 0.16, ease: 'easeOut' }}
+      style={{ transformOrigin: 'bottom center' }}
+      className="absolute bottom-full inset-x-2 min-[400px]:inset-x-3 md:inset-x-auto md:start-3 md:w-80 mb-2 z-30 rounded-3xl bg-gray-900 border border-white/10 shadow-2xl shadow-black/60 will-change-transform">
+      <div className="grid grid-cols-3 gap-x-3 gap-y-4 p-4">
+        {tiles.map(x => (
+          <button key={x.k} onClick={x.run} className="flex flex-col items-center gap-1.5 active:scale-90 transition-transform">
             <span className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${x.bg} flex items-center justify-center shadow-lg`}>{x.icon}</span>
             <span className="text-[11px] text-gray-200 text-center leading-tight">{x.label}</span>
-          </motion.button>
+          </button>
         ))}
       </div>
     </motion.div>
@@ -6723,16 +6811,24 @@ export default function App() {
   // Animated glide to the very top (ease-out). Not the browser's smooth scroll: the feed re-renders while refreshing and cancels that one.
   const topAnim = useRef(0);
   const glideToTop = (done?: () => void) => {
-    const from = window.scrollY;
     cancelAnimationFrame(topAnim.current);
-    if (from < 4) { done?.(); return; }
-    const dur = Math.min(650, Math.max(320, from * 0.35));
+    if (window.scrollY < 4) { done?.(); return; }
+    // Each frame starts from where the page really is NOW (post cards change height while they scroll into view, so a fixed start point never reaches the top).
     const t0 = performance.now();
+    const hardTop = () => { window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; document.body.scrollTop = 0; };
+    const stop = () => cancelAnimationFrame(topAnim.current);
+    window.addEventListener('touchstart', stop, { once: true, passive: true });
     const step = (now: number) => {
-      const k = Math.min(1, (now - t0) / dur);
-      const e = 1 - Math.pow(1 - k, 3);
-      window.scrollTo({ top: Math.round(from * (1 - e)), behavior: 'instant' as ScrollBehavior });
-      if (k < 1) topAnim.current = requestAnimationFrame(step); else { window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; done?.(); }
+      const y = window.scrollY;
+      if (y <= 1 || now - t0 > 900) {
+        hardTop();
+        window.setTimeout(() => { if (window.scrollY > 0) hardTop(); }, 90); // late layout shifts
+        window.removeEventListener('touchstart', stop);
+        done?.();
+        return;
+      }
+      window.scrollTo({ top: Math.floor(y * 0.78), behavior: 'instant' as ScrollBehavior });
+      topAnim.current = requestAnimationFrame(step);
     };
     topAnim.current = requestAnimationFrame(step);
   };
@@ -6839,12 +6935,12 @@ export default function App() {
 
   return (
     <div dir={LANG === 'en' ? 'ltr' : 'rtl'} className="min-h-[100dvh] bg-gray-950 text-white font-sans overflow-x-clip">
-      <style>{'html,body{-webkit-text-size-adjust:100%;overflow-x:hidden;overscroll-behavior-y:none;scroll-behavior:auto;-webkit-tap-highlight-color:transparent}img,video{-webkit-user-drag:none}.post-card{transform:translateZ(0);backface-visibility:hidden}.no-scrollbar,[class*=overflow-y-auto],[class*=overflow-x-auto]{-webkit-overflow-scrolling:touch}button,a{touch-action:manipulation}@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
+      <style>{'html,body{-webkit-text-size-adjust:100%;overflow-x:hidden;overscroll-behavior-y:none;scroll-behavior:auto;-webkit-tap-highlight-color:transparent}img,video{-webkit-user-drag:none}.post-card{contain:layout style}.no-scrollbar,[class*=overflow-y-auto],[class*=overflow-x-auto]{-webkit-overflow-scrolling:touch}button,a{touch-action:manipulation}@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
       <KanDialogHost />
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={popScreen} />}
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/70 backdrop-blur-xl border-b border-white/5">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/90 md:bg-gray-950/70 md:backdrop-blur-xl border-b border-white/5">
         <div className="w-full px-3 min-[400px]:px-4 md:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src={LOGO_URL} alt="" className="w-8 h-8 rounded-lg" />
@@ -6861,7 +6957,7 @@ export default function App() {
                   animate={{ opacity: 1, x: 0, scale: 1 }}
                   exit={{ opacity: 0, x: 14, scale: 0.94 }}
                   transition={{ duration: 0.18, ease: 'easeOut' }}
-                  className="flex items-center gap-0.5 p-1 ml-2 rounded-full bg-gray-900/80 backdrop-blur-md border border-white/10 shadow-lg shadow-black/30"
+                  className="flex items-center gap-0.5 p-1 ml-2 rounded-full bg-gray-900/95 border border-white/10 shadow-lg shadow-black/30"
                 >
                   {([
                     { tab: 'notifications' as const, label: t('الإشعارات'), Icon: Bell, badge: notifUnread },
@@ -8721,11 +8817,11 @@ function VideoCard({ post, author, onOpen, saved, onSave, onChannel, subs }: { p
         {resume > 0 && <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/75 text-[11px] text-white">▶ {fmtClock(resume)}</span>}
         <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/25 transition-colors">
           <div className="w-12 h-12 rounded-full bg-black/55 flex items-center justify-center">
-            <Play size={22} className="text-white" />
+            <Play size={22} color="#fff" fill="#fff" />
           </div>
         </div>
         <button onClick={e => { e.stopPropagation(); onSave(); }} aria-label="مشاهدة لاحقاً" className={`absolute top-2 left-2 w-8 h-8 rounded-full flex items-center justify-center text-white ${saved ? 'bg-violet-600' : 'bg-black/55'}`}>
-          <BookmarkIcon size={15} className={saved ? 'fill-white' : ''} />
+          <BookmarkIcon size={15} color="#fff" fill={saved ? '#fff' : 'none'} />
         </button>
       </div>
       <div className="flex gap-2.5 mt-2">
@@ -8778,7 +8874,7 @@ function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-6 sm:px-4 pb-6">
       <div>
         <button onClick={onBack} className="flex items-center gap-1 text-gray-400 hover:text-white text-sm px-4 sm:px-0 py-3">
-          <ChevronRight size={18} /> {t('رجوع')}
+          <ChevronRight size={18} color="#fff" /> {t('رجوع')}
         </button>
         <div className="aspect-video w-full bg-black sm:rounded-xl overflow-hidden">
           <VideoPlayer key={post.id} src={post.media!.url} poster={post.coverUrl} autoPlay onEnded={autoNext && related[0] ? () => onOpenRelated(related[0].id) : undefined} className="w-full h-full object-contain" />
@@ -8808,26 +8904,26 @@ function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             <div className="flex items-center bg-gray-900 border border-gray-800 rounded-full">
               <button onClick={() => togglePostLike(post, currentUser.id, setPosts)} className={`pl-2 pr-4 py-2 flex items-center gap-2 ${isLiked ? 'text-red-400' : 'text-gray-300'}`}>
-                <Heart size={18} className={isLiked ? 'fill-red-400' : ''} />
+                <Heart size={18} color={isLiked ? '#f87171' : '#fff'} fill={isLiked ? '#f87171' : 'none'} />
               </button>
               <button onClick={() => post.likes.length > 0 && setListModal({ title: 'الإعجابات', ids: post.likes })} className="pl-4 pr-1 py-2 text-sm text-gray-300">
                 {post.likes.length}
               </button>
             </div>
             <button onClick={() => setCommentsOpen(true)} className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-full text-sm text-gray-300 flex items-center gap-2">
-              <MessageCircle size={18} /> {commentCount > 0 ? commentCount : 'تعليق'}
+              <MessageCircle size={18} color="#fff" /> {commentCount > 0 ? commentCount : 'تعليق'}
             </button>
             <button onClick={() => setShareOpen(true)} className="px-4 py-2 bg-gradient-to-r from-violet-600/25 to-cyan-500/20 border border-violet-400/30 rounded-full text-sm text-white flex items-center gap-2 active:scale-95 transition-transform">
-              <Share2 size={16} className="text-cyan-300" /> مشاركة
+              <Share2 size={16} color="#fff" /> مشاركة
             </button>
             <button onClick={() => { void downloadFile(post.media!.url, post.media!.name || 'video.mp4'); }} className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-full text-sm text-gray-300 flex items-center gap-2">
-              <Download size={16} /> تحميل
+              <Download size={16} color="#fff" /> تحميل
             </button>
             <button onClick={() => onToggleWl(post.id)} className={`px-4 py-2 border rounded-full text-sm flex items-center gap-2 ${wl.includes(post.id) ? 'bg-violet-600 border-violet-500 text-white' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
-              <BookmarkIcon size={16} className={wl.includes(post.id) ? 'fill-white' : ''} /> {wl.includes(post.id) ? 'محفوظ' : 'مشاهدة لاحقاً'}
+              <BookmarkIcon size={16} color="#fff" fill={wl.includes(post.id) ? '#fff' : 'none'} /> {wl.includes(post.id) ? 'محفوظ' : 'مشاهدة لاحقاً'}
             </button>
             <button onClick={() => setPlOpen(true)} className={`px-4 py-2 border rounded-full text-sm flex items-center gap-2 ${pls.some(p => p.items.includes(post.id)) ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
-              <Plus size={16} /> قائمة تشغيل
+              <Plus size={16} color="#fff" /> قائمة تشغيل
             </button>
             {plOpen && <PlaylistSheet pls={pls} postId={post.id} onToggle={onTogglePl} onCreate={onCreatePl} onClose={() => setPlOpen(false)} />}
             <button onClick={() => setAutoNext(x => !x)} className={`px-4 py-2 border rounded-full text-sm ${autoNext ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
@@ -9507,7 +9603,7 @@ function ReelLyricsStudio({ file, src, name, start, end, bgUrl, bgType, onPack }
         <>
           <div className="relative mx-auto mt-3 w-40 aspect-[9/16] rounded-2xl overflow-hidden bg-black ring-1 ring-white/15">
             {bgType === 'video' ? <video src={bgUrl} muted playsInline loop autoPlay className="absolute inset-0 w-full h-full object-cover opacity-80" /> : <img src={bgUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-80" />}
-            {shown.length > 0 && <StoryLyrics ly={{ l: shown, st: ly.st, c: ly.c, p: ly.p, f: ly.f }} idx={idx} onMove={q => patch({ p: { ...ly.p, x: q.x, y: q.y } })} onScale={sc => patch({ p: { ...ly.p, s: sc } })} />}
+            {shown.length > 0 && <StoryLyrics ly={{ l: shown, st: ly.st, c: ly.c, p: ly.p, f: ly.f }} idx={idx} onMove={q => patch({ p: { ...ly.p, x: q.x, y: q.y } })} onScale={sc => patch({ p: { ...ly.p, s: sc } })} onRotate={rr => patch({ p: { ...ly.p, r: rr } })} />}
           </div>
           <StoryLyricsEditor ly={ly} patch={patch} name={name} isFile={!!file} start={start} end={end} playing={playing} setPlaying={setPlaying} srcUrl={src} />
         </>
@@ -9699,16 +9795,67 @@ function PostLoc({ text }: { text: string }) {
   );
 }
 
-// Long caption: 5 lines, then a "عرض الكل" button (and "عرض أقل" to fold it back).
+// Long caption, Facebook style: the text is cut after a few lines and "عرض المزيد" shows up ONLY when something is really hidden.
 function ExpandableText({ text, className, lines = 5, light = false }: { text: string; className?: string; lines?: number; light?: boolean }) {
   const [open, setOpen] = useState(false);
-  const long = text.length > 220 || text.split('\n').length > lines;
-  const clamp = !open && long ? { display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' } : undefined;
+  const [over, setOver] = useState(false);
+  const [cut, setCut] = useState<number | null>(null); // desktop: how many characters fit before "… See more"
+  const wrap = useRef<HTMLDivElement>(null);
+  const meas = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    const w = wrap.current; const m = meas.current;
+    if (!w || !m || open) return;
+    const run = () => {
+      m.textContent = text;
+      const cs = getComputedStyle(m);
+      const lh = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) || 14) * 1.45;
+      const max = lh * lines + 2;
+      if (m.scrollHeight <= max) { setOver(false); setCut(null); return; }
+      setOver(true);
+      if (!window.matchMedia?.('(min-width: 768px)').matches) { setCut(null); return; }
+      // Facebook style on a computer: the text stops inside the last line and "… عرض المزيد" sits right after it.
+      const fits = (n: number) => { m.textContent = text.slice(0, n).trimEnd() + '… عرض المزيد'; return m.scrollHeight <= max; };
+      let lo = 0; let hi = text.length;
+      while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (fits(mid)) lo = mid; else hi = mid - 1; }
+      setCut(lo);
+    };
+    run();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(run);
+    ro.observe(w);
+    return () => ro.disconnect();
+  }, [text, lines, open]);
+  const clampStyle: React.CSSProperties = { display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' };
+  const moreCls = light ? 'text-white/80' : 'text-gray-400 hover:text-gray-200';
   return (
-    <>
-      <p className={className} dir="auto" style={clamp}><MentionText text={text} /></p>
-      {long && <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }} className={`mt-1 text-sm font-semibold ${light ? 'text-white/80' : 'text-cyan-300'}`}>{open ? 'عرض أقل' : 'عرض الكل'}</button>}
-    </>
+    <div ref={wrap} className="relative">
+      <p ref={meas} aria-hidden dir="auto" className={className} style={{ position: 'absolute', top: 0, insetInline: 0, visibility: 'hidden', pointerEvents: 'none' }} />
+      {over && !open && cut !== null ? (
+        <p className={className} dir="auto"><MentionText text={text.slice(0, cut).trimEnd()} />… <button onClick={e => { e.stopPropagation(); setOpen(true); }} className={`font-semibold hover:underline ${moreCls}`}>عرض المزيد</button></p>
+      ) : (
+        <>
+          <p className={className} dir="auto" style={!open && over ? clampStyle : undefined}><MentionText text={text} /></p>
+          {!open && over && <button onClick={e => { e.stopPropagation(); setOpen(true); }} className={`mt-0.5 text-sm font-semibold ${moreCls}`}>… عرض المزيد</button>}
+        </>
+      )}
+    </div>
+  );
+}
+// "Save location" next to any location published in a post (same saved places the chat uses).
+function PostLocSave({ loc }: { loc: GeoLoc }) {
+  const [saved, setSaved] = useState(() => readPlaces().some(p => samePlace(p, loc)));
+  const [note, setNote] = useState('');
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const list = readPlaces(); const has = list.some(p => samePlace(p, loc));
+    writePlaces(has ? list.filter(p => !samePlace(p, loc)) : [loc, ...list]);
+    setSaved(!has); setNote(has ? 'اتشال من المحفوظات' : 'اتحفظ ✓');
+    window.setTimeout(() => setNote(''), 1500);
+  };
+  return (
+    <button onClick={toggle} aria-label="حفظ الموقع" className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-white text-xs active:scale-95 transition-transform">
+      <Bookmark size={12} color="#fff" fill={saved ? '#fff' : 'none'} className="shrink-0" />{note || (saved ? 'محفوظ' : 'حفظ الموقع')}
+    </button>
   );
 }
 function PostText({ text, className, clamp = false, hideLoc = false, expandable = false }: { text: string; className?: string; clamp?: boolean; hideLoc?: boolean; expandable?: boolean }) {
@@ -9718,9 +9865,12 @@ function PostText({ text, className, clamp = false, hideLoc = false, expandable 
     <>
       {body && (expandable ? <ExpandableText text={body} className={className} /> : <p className={className} dir="auto"><MentionText text={body} /></p>)}
       {loc && !clamp && !hideLoc && (
-        <button onClick={e => { e.stopPropagation(); if (loc.lat || loc.lng) setMap(true); }} className="mt-2 inline-flex max-w-full items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-white text-xs active:scale-95 transition-transform">
-          <MapPin size={12} color="#fff" className="shrink-0" /><span className="truncate" dir="auto">{loc.name || 'الموقع على الخريطة'}</span>
-        </button>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <button onClick={e => { e.stopPropagation(); if (loc.lat || loc.lng) setMap(true); }} className="inline-flex max-w-full items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-white text-xs active:scale-95 transition-transform">
+            <MapPin size={12} color="#fff" className="shrink-0" /><span className="truncate" dir="auto">{loc.name || 'الموقع على الخريطة'}</span>
+          </button>
+          {(loc.lat || loc.lng) ? <PostLocSave loc={loc} /> : null}
+        </div>
       )}
       {map && loc && <LocationMapModal loc={loc} onClose={() => setMap(false)} />}
     </>
@@ -11138,8 +11288,6 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
           <button onClick={() => setLocOpen(true)} className={`${toolBtn} ${loc ? 'text-white !bg-white/20' : 'text-white'}`}><MapPin size={20} />موقع</button>
           {!videoOnly && <button onClick={() => openPicker('*/*')} className={`${toolBtn} text-white`}><Paperclip size={20} />ملف</button>}
         </div>
-        <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }} onGames={() => { setToolsOpen(false); inputRef.current?.blur(); setShowGames(true); }} />}</AnimatePresence>
-          {locSheet && <LocationShareSheet onClose={() => setLocSheet(false)} onSend={l => { setLocSheet(false); void send({ text: locMsgText(l) }); }} />}
           {emojiOpen && <EmojiPicker docked onPick={e => setText(t => t + e)} onClose={() => setEmojiOpen(false)} />}
         <motion.button whileTap={{ scale: 0.97 }} onClick={handlePost} className="mt-4 w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-bold text-base disabled:opacity-60">
           {kind === 'reel' ? 'نشر الريل' : kind === 'video' ? 'نشر الفيديو' : 'نشر'}
@@ -12594,7 +12742,7 @@ async function videoToSticker(file: File, start: number, len: number): Promise<B
 // Works out of the box with Google's animated emoji (no key). If VITE_GIPHY_KEY is set, the search also pulls Giphy stickers.
 const GIPHY_KEY = (import.meta.env.VITE_GIPHY_KEY as string | undefined) ?? '';
 const NOTO_BASE = 'https://fonts.gstatic.com/s/e/notoemoji/latest';
-type StoreSticker = { id: string; gif: string; webp: string; thumb: string; kind?: 'sticker' | 'gif' };
+type StoreSticker = { id: string; gif: string; webp: string; thumb: string; still?: string; kind?: 'sticker' | 'gif' };
 type GiphyRow = { id: string; images?: Record<string, { url?: string } | undefined> };
 const STORE_CATS: [string, string][] = [['all', 'الكل'], ['faces', 'وجوه'], ['hearts', 'قلوب'], ['party', 'احتفال'], ['hands', 'إيدين'], ['sports', 'كورة ورياضة'], ['medals', 'ميداليات'], ['clothes', 'ملابس'], ['flags', 'أعلام'], ['food', 'أكل'], ['animals', 'حيوانات'], ['travel', 'سفر'], ['objects', 'أدوات'], ['symbols', 'رموز'], ['fun', 'حاجات'], ['nature', 'طبيعة']];
 const STORE_ITEMS: [string, string, string][] = [
@@ -13166,7 +13314,7 @@ const STORE_ITEMS: [string, string, string][] = [
   ['1f1e7_1f1ed', 'flags', 'البحرين bahrain'],
   ['1f1fe_1f1ea', 'flags', 'اليمن yemen'],
 ];
-const notoSticker = (cp: string): StoreSticker => ({ id: 'noto-' + cp, gif: `${NOTO_BASE}/${cp}/512.gif`, webp: `${NOTO_BASE}/${cp}/512.webp`, thumb: `${NOTO_BASE}/${cp}/512.webp` });
+const notoSticker = (cp: string): StoreSticker => ({ id: 'noto-' + cp, gif: `${NOTO_BASE}/${cp}/512.gif`, webp: `${NOTO_BASE}/${cp}/512.webp`, thumb: `${NOTO_BASE}/${cp}/512.webp`, still: `${NOTO_BASE}/${cp}/emoji.svg` });
 const GIF_QUICK: [string, string][] = [['😂', 'funny'], ['❤️', 'love'], ['💃', 'dance'], ['😮', 'wow'], ['😢', 'sad'], ['👏', 'clap'], ['🔥', 'fire'], ['😎', 'cool']];
 // A store pick becomes a chat file: stickers keep the sticker look, GIFs go out as ordinary animated images.
 const storeToSaved = async (st: StoreSticker): Promise<SavedSticker | null> => {
@@ -13184,6 +13332,12 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
   const [net, setNet] = useState<StoreSticker[]>([]);
   const [busy, setBusy] = useState(false);
   const [pickBusy, setPickBusy] = useState('');
+  // Smooth grid: static (light) pictures, the animation only plays under your finger / mouse, and the list loads page by page.
+  const [hot, setHot] = useState('');
+  const [noStill, setNoStill] = useState<Set<string>>(() => new Set());
+  const [count, setCount] = useState(40);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const local = STORE_ITEMS.filter(([cp, c, k]) => {
     if (cat !== 'all' && !words.length && c !== cat) return false;
@@ -13210,6 +13364,15 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
   }, [q, kind]);
   const gifOnline = kind === 'gif' && !!GIPHY_KEY;
   const all = gifOnline && net.length ? net : [...local, ...net];
+  useEffect(() => { setCount(40); scrollRef.current?.scrollTo({ top: 0 }); }, [q, kind, cat]);
+  const visible = all.slice(0, count);
+  useEffect(() => {
+    const el = moreRef.current; const rootEl = scrollRef.current;
+    if (!el || !rootEl || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(es => { if (es.some(x => x.isIntersecting)) setCount(c => c + 40); }, { root: rootEl, rootMargin: '500px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [all.length, count]);
   const choose = async (st: StoreSticker) => { if (pickBusy) return; setPickBusy(st.id); try { await onPick(st); } finally { setPickBusy(''); } };
   const body = (
     <div className={inline ? 'flex flex-col h-64 bg-gray-950/60' : 'w-full sm:max-w-md h-[80vh] rounded-t-[28px] sm:rounded-[28px] bg-gray-950 ring-1 ring-white/15 flex flex-col overflow-hidden'} onClick={e => e.stopPropagation()}>
@@ -13230,19 +13393,20 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
           ? GIF_QUICK.map(([e, w]) => <button key={w} onClick={() => setQ(w)} className={`shrink-0 px-3.5 h-9 rounded-full text-sm font-bold active:scale-95 ${q === w ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{e} {w}</button>)
           : STORE_CATS.map(([k, l]) => <button key={k} onClick={() => setCat(k)} className={`shrink-0 px-3.5 h-9 rounded-full text-xs font-bold active:scale-95 ${cat === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 [-webkit-overflow-scrolling:touch] [transform:translateZ(0)]">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 [-webkit-overflow-scrolling:touch] [transform:translateZ(0)]">
         {!all.length && !busy && <p className="text-center text-white/60 text-xs py-10">مفيش نتائج، جرّب كلمة تانية</p>}
         {kind === 'gif' && !GIPHY_KEY && <p className="text-center text-white/50 text-[11px] pb-2">دي GIF متحركة جاهزة. للبحث في ملايين الـ GIF أضف VITE_GIPHY_KEY.</p>}
         <div className={`grid gap-2 ${gifOnline ? 'grid-cols-3' : 'grid-cols-4 min-[420px]:grid-cols-5'}`}>
-          {all.map(st => <button key={st.id} onClick={() => void choose(st)} className={`relative aspect-square rounded-2xl bg-white/5 ${gifOnline ? 'p-0.5 overflow-hidden' : 'p-1.5'} active:scale-90 transition-transform ${pickBusy === st.id ? 'opacity-50' : ''}`}><img src={st.thumb} alt="" loading="lazy" draggable={false} onError={() => setBad(b => new Set(b).add(st.id))} className={`w-full h-full ${gifOnline ? 'object-cover rounded-xl' : 'object-contain'}`} /></button>)}
+          {visible.map(st => { const still = !gifOnline && !!st.still && hot !== st.id && !noStill.has(st.id); return <button key={st.id} onClick={() => void choose(st)} onPointerEnter={e => { if (e.pointerType === 'mouse') setHot(st.id); }} onPointerLeave={e => { if (e.pointerType === 'mouse') setHot(h => (h === st.id ? '' : h)); }} onPointerDown={() => setHot(st.id)} className={`relative aspect-square rounded-2xl bg-white/5 ${gifOnline ? 'p-0.5 overflow-hidden' : 'p-1.5'} active:scale-90 transition-transform ${pickBusy === st.id ? 'opacity-50' : ''}`}><img src={still ? st.still : st.thumb} alt="" loading="lazy" decoding="async" draggable={false} onError={() => { if (still) setNoStill(s => new Set(s).add(st.id)); else setBad(b => new Set(b).add(st.id)); }} className={`w-full h-full ${gifOnline ? 'object-cover rounded-xl' : 'object-contain'}`} /></button>; })}
         </div>
+        {visible.length < all.length && <div ref={moreRef} className="h-10" />}
         {busy && <p className="text-center text-white/50 text-[11px] py-3">جارٍ تحميل المزيد...</p>}
       </div>
     </div>
   );
   if (inline) return <div onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>{body}</div>;
   return createPortal(
-    <div dir={DIR} className="kan-always-white fixed inset-0 z-[170] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={onClose} onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+    <div dir={DIR} className="kan-always-white fixed inset-0 z-[170] bg-black/80 flex items-end sm:items-center justify-center" onClick={onClose} onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
       {body}
     </div>,
     document.body,
@@ -14079,6 +14243,12 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       window.clearTimeout(typingTimer.current);
       typingTimer.current = window.setTimeout(() => setPeerTyping(false), 3500);
     });
+    channel.on('broadcast', { event: 'seen' }, payload => { // the other person just saw my messages: show it at once, no database round trip
+      const m = payload.payload as { ids?: string[]; from?: string } | undefined;
+      if (!m || m.from !== chatUser.id || !Array.isArray(m.ids)) return;
+      const ids = m.ids;
+      setConversations(prev => prev.map(c => (c.id !== convId ? c : { ...c, messages: c.messages.map(x => (ids.includes(x.id) && x.senderId === currentUser.id && !x.read ? { ...x, read: true, delivered: true } : x)) })));
+    });
     channel.on('broadcast', { event: 'game' }, payload => {
       const m = payload.payload as { id?: string; text?: string; from?: string } | undefined;
       if (!m || !m.id || !m.text || m.from !== chatUser.id || !parseGame(m.text)) return;
@@ -14130,6 +14300,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     ids => {
       if (!convId) return;
       setConversations(prev => prev.map(c => c.id !== convId ? c : { ...c, messages: c.messages.map(m => (ids.includes(m.id) && m.senderId !== currentUser.id ? { ...m, read: true } : m)) }));
+      void typingChannel.current?.send({ type: 'broadcast', event: 'seen', payload: { ids, from: currentUser.id } });
       void supabase.from('messages').update({ read_at: new Date().toISOString() }).in('id', ids).neq('sender_id', currentUser.id).is('read_at', null).then(({ error }) => { if (error) console.error(error); });
     },
   );
@@ -14443,7 +14614,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
         />
       )}
       {/* Chat Header */}
-      <div className="flex items-center gap-3 p-4 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 relative z-10">
+      <div className="flex items-center gap-3 p-4 bg-gray-900 border-b border-gray-800 relative z-10">
         <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors">
           <ChevronRight size={20} />
         </button>
@@ -14509,7 +14680,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               id={`msg-${msg.id}`}
               data-unread={!isMine && !msg.read ? '1' : undefined}
               data-mids={(albumMap.first.get(msg.id) ?? [msg]).map(x => x.id).join(',')}
-              initial={{ opacity: 0, y: 10 }}
+              initial={idx >= messages.length - 3 ? { opacity: 0, y: 10 } : false}
               animate={{ opacity: 1, y: 0 }}
               className={`flex items-end gap-2 ${isMine ? 'flex-row-reverse' : ''}`}
             >
@@ -14528,7 +14699,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                     isStickerName(msg.media?.name) && !msg.text ? 'bg-transparent !p-0'
                     : isMine
                       ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded-bl-sm'
-                      : 'bg-gray-800/90 backdrop-blur-sm text-gray-200 rounded-br-sm'
+                      : 'bg-gray-800 text-gray-200 rounded-br-sm'
                   }`}
                 >
                   {coinMsgId === msg.id && <CoinBurst size="sm" />}
@@ -14694,6 +14865,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                         <Pencil size={12} /> تعديل
                       </button>
                     )}
+                    {!!msg.text && !parsePoll(msg.text) && !parseLocMsg(msg.text) && <button onClick={() => { void navigator.clipboard?.writeText(msg.text ?? '').catch(() => undefined); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Copy size={12} /> نسخ</button>}
                     <button onClick={() => { setSel([msg.id]); setActiveMsgId(null); setReactingTo(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Check size={12} /> تحديد</button>
                     {isMine && (
                       <button
@@ -14724,7 +14896,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
       {/* Media Preview */}
       {media && (
-        <div className="px-4 py-2 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
+        <div className="px-4 py-2 bg-gray-900 border-t border-gray-800 relative z-10">
           <div className="relative inline-block">
             {media.type === 'image' ? (
               <img src={media.url} alt="" className="h-20 rounded-lg" />
@@ -14764,7 +14936,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
       {/* Voice Recording */}
       {recording && (
-        <div className="px-3 py-2 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10">
+        <div className="px-3 py-2 bg-gray-900 border-t border-gray-800 relative z-10">
           <VoiceRecorder
             onSend={sendVoice}
             onCancel={() => setRecording(false)}
@@ -14774,7 +14946,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
       {/* Input: one slim row [+] [message] [send], so the send button is always on screen */}
       {(
-        <div className={`px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900/95 backdrop-blur-md border-t border-gray-800 relative z-10 ${recording ? 'hidden' : ''}`}>
+        <div className={`px-2 min-[400px]:px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-gray-900 border-t border-gray-800 relative z-10 ${recording ? 'hidden' : ''}`}>
           <input ref={fileRef} type="file" multiple onChange={handleFile} className="hidden" />
           <AnimatePresence>
             {pollOpen && <PollComposer onClose={() => setPollOpen(false)} onSend={(q, o) => { setPollOpen(false); void send({ text: POLL_TAG + JSON.stringify({ q, o }) }); }} />}
@@ -14817,6 +14989,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               </motion.button>
             )}
           </div>
+          <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onClose={() => setToolsOpen(false)} onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }} onGames={() => { setToolsOpen(false); inputRef.current?.blur(); setShowGames(true); }} />}</AnimatePresence>
+          {locSheet && <LocationShareSheet onClose={() => setLocSheet(false)} onSend={l => { setLocSheet(false); void send({ text: locMsgText(l) }); }} />}
           {emojiOpen && <EmojiPicker key={stickerStart ? 's' : 'e'} docked onPick={insertEmoji} onClose={() => setEmojiOpen(false)} startOnStickers={stickerStart} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `${st.gif ? 'kix-gif' : 'kan-sticker'}.${stkExt(st.blob, st.kind)}` }); }} />}
         </div>
       )}
