@@ -2832,11 +2832,11 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     </div>
                   )}
                   {active && reactingTo === m.id && (
-                    <div data-msg-ui className={`kan-pop flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full shadow-lg ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
-                      {QUICK_REACTIONS.map(em => (
-                        <button key={em} onClick={() => { void react(m, em); setReactingTo(null); setActiveMsgId(null); }} className="w-9 h-9 text-xl rounded-full hover:bg-gray-700 active:scale-125 transition-transform">{em}</button>
-                      ))}
-                    </div>
+                    <ReactionSheet
+                      current={m.reactions.find(r => r.userId === currentUser.id)?.emoji}
+                      onClose={() => { setReactingTo(null); setActiveMsgId(null); }}
+                      onPick={em => { void react(m, em); setReactingTo(null); setActiveMsgId(null); }}
+                    />
                   )}
                   {active && (
                     <div data-msg-ui className={`flex flex-wrap items-center gap-1.5 mt-1 ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
@@ -3777,7 +3777,9 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
 
 // ============ Story extras: text + stickers, poll, question box, close friends, highlights ============
 const STORY_BGS = ['linear-gradient(135deg,#6d28d9,#c026d3,#06b6d4)', 'linear-gradient(135deg,#f97316,#ec4899)', 'linear-gradient(135deg,#0ea5e9,#6366f1)', 'linear-gradient(135deg,#10b981,#0e7490)', 'linear-gradient(135deg,#ef4444,#7c2d12)', 'linear-gradient(135deg,#111827,#4b5563)'];
-type StoryFx = { v?: number; t?: [string, string, number] };
+// fx layers on top of the CSS filter: t = flat tint [colour, blend, opacity], v = vignette, g = linear gradient [from, to, blend, opacity, angle],
+// lk = light leak [colour, opacity, corner], gr = film grain, fd = faded blacks, bl = soft glow.
+type StoryFx = { v?: number; t?: [string, string, number]; g?: [string, string, string, number, number]; lk?: [string, number, 'tr' | 'tl' | 'br' | 'bl']; gr?: number; fd?: number; bl?: number };
 const STORY_FILTERS: { n: string; f: string; fx?: StoryFx }[] = [{ n: 'عادي', f: 'none' }, { n: 'دافئ', f: 'sepia(0.35) saturate(1.4) contrast(1.05)' }, { n: 'بارد', f: 'hue-rotate(185deg) saturate(1.1) brightness(1.05)' }, { n: 'أبيض وأسود', f: 'grayscale(1) contrast(1.1)' }, { n: 'ساطع', f: 'brightness(1.2) saturate(1.3)' }, { n: 'كلاسيك', f: 'sepia(0.7) contrast(0.95) brightness(1.05)' }, { n: 'دراما', f: 'contrast(1.4) saturate(0.9) brightness(0.92)' }, { n: 'سينمائي', f: 'contrast(1.25) sepia(0.2) hue-rotate(-12deg) saturate(1.2) brightness(0.95)' }, { n: 'نيون', f: 'saturate(2.1) contrast(1.2) hue-rotate(320deg) brightness(1.05)' }, { n: 'غروب', f: 'sepia(0.5) saturate(1.9) hue-rotate(-18deg) brightness(1.08)' }, { n: 'ذهبي', f: 'sepia(0.6) saturate(2) hue-rotate(-8deg) brightness(1.1) contrast(1.05)' }, { n: 'شتوي', f: 'hue-rotate(200deg) saturate(0.8) brightness(1.12) contrast(1.05)' }, { n: 'بوب', f: 'saturate(2.3) contrast(1.15) brightness(1.03)' }, { n: 'ليلي', f: 'brightness(0.82) contrast(1.3) hue-rotate(210deg) saturate(1.3)' }, { n: 'حلم', f: 'brightness(1.12) contrast(0.88) saturate(1.35) sepia(0.12)' }, { n: 'فيلم', f: 'contrast(1.15) sepia(0.15) saturate(0.85) brightness(0.97)' }, { n: 'مضيء', f: 'brightness(1.18) contrast(0.95) saturate(1.1)' }, { n: 'عميق', f: 'contrast(1.35) saturate(1.25) brightness(0.9)' }, { n: 'ربيع', f: 'hue-rotate(-10deg) saturate(1.5) brightness(1.08)' }, { n: 'ريترو', f: 'sepia(0.45) contrast(1.1) saturate(0.8) hue-rotate(-15deg)' }, { n: 'جليد', f: 'hue-rotate(170deg) saturate(0.7) brightness(1.15) contrast(1.1)' }, { n: 'قوي', f: 'contrast(1.5) saturate(1.5)' }, { n: 'فينتج', f: 'sepia(0.3) contrast(1.1) saturate(1.3) hue-rotate(-8deg) brightness(1.05)' }, { n: 'بورتريه', f: 'brightness(1.08) contrast(1.05) saturate(1.15) sepia(0.08)' }, { n: 'تباين', f: 'contrast(1.6) brightness(0.95)' }, { n: 'باستيل', f: 'saturate(0.7) brightness(1.2) contrast(0.9)' }, { n: 'سايبر', f: 'hue-rotate(260deg) saturate(1.8) contrast(1.15)' }, { n: 'فجر', f: 'sepia(0.25) hue-rotate(-30deg) saturate(1.6) brightness(1.1)' }, { n: 'غابة', f: 'hue-rotate(60deg) saturate(1.3) contrast(1.05) brightness(0.98)' }, { n: 'محيط', f: 'hue-rotate(150deg) saturate(1.4) brightness(1.05)' }, { n: 'توهج', f: 'brightness(1.25) contrast(0.9) saturate(1.4)' }, { n: 'ظلام', f: 'brightness(0.7) contrast(1.4) saturate(0.8)' }, { n: 'نقي', f: 'contrast(1.08) saturate(1.1) brightness(1.04)' }, { n: 'رمادي ناعم', f: 'grayscale(0.7) brightness(1.08) contrast(0.95)' }, { n: 'كرز', f: 'hue-rotate(-25deg) saturate(1.7) contrast(1.1)' }, { n: 'ليمون', f: 'hue-rotate(35deg) saturate(1.6) brightness(1.1)' }, { n: 'بنفسج', f: 'hue-rotate(250deg) saturate(1.4) brightness(1.02)' }, { n: 'كودك', f: 'sepia(0.35) saturate(1.5) contrast(1.15) brightness(1.02) hue-rotate(-6deg)' }, { n: 'نوار', f: 'grayscale(1) contrast(1.6) brightness(0.9)' }, { n: 'صيف', f: 'saturate(1.6) brightness(1.12) sepia(0.15)' }, { n: 'خريف', f: 'sepia(0.5) hue-rotate(-20deg) saturate(1.5) contrast(1.05)' },
   { n: 'سينما+', f: 'contrast(1.2) saturate(1.1) brightness(0.96)', fx: { v: 0.55, t: ['#ff8a3d', 'soft-light', 0.35] } },
   { n: 'بولارويد', f: 'sepia(0.25) contrast(0.95) brightness(1.08) saturate(1.2)', fx: { v: 0.35, t: ['#ffd9a8', 'soft-light', 0.45] } },
@@ -3788,16 +3790,84 @@ const STORY_FILTERS: { n: string; f: string; fx?: StoryFx }[] = [{ n: 'عادي'
   { n: 'ذهب وردي', f: 'saturate(1.25) brightness(1.06) contrast(1.04)', fx: { v: 0.25, t: ['#ff8fa3', 'soft-light', 0.45] } },
   { n: 'مسرحي', f: 'contrast(1.35) saturate(1.2) brightness(0.9)', fx: { v: 0.7 } },
   { n: 'ضباب', f: 'contrast(0.85) brightness(1.1) saturate(0.9)', fx: { t: ['#ffffff', 'soft-light', 0.5] } },
-  { n: 'تيل وبرتقالي', f: 'contrast(1.15) saturate(1.3)', fx: { v: 0.3, t: ['#0fb5ae', 'overlay', 0.3] } }];
+  { n: 'تيل وبرتقالي', f: 'contrast(1.15) saturate(1.3)', fx: { v: 0.3, t: ['#0fb5ae', 'overlay', 0.3] } },
+  // ---- Instagram-style looks (strong on purpose) ----
+  { n: 'كلارندون', f: 'contrast(1.25) saturate(1.45) brightness(1.08)', fx: { g: ['#2b6cff', '#ff9a3c', 'soft-light', 0.38, 180], v: 0.22 } },
+  { n: 'جينجهام', f: 'contrast(.9) brightness(1.1) saturate(.85) hue-rotate(-6deg)', fx: { fd: 0.14, t: ['#cfd8ff', 'soft-light', 0.35] } },
+  { n: 'جونو', f: 'contrast(1.15) saturate(1.7) brightness(1.04) sepia(.1)', fx: { g: ['#ffd36b', '#2a7bff', 'overlay', 0.3, 160], lk: ['#ffb347', 0.35, 'tr'] } },
+  { n: 'لارك', f: 'contrast(.92) brightness(1.18) saturate(1.3)', fx: { t: ['#a8ffe8', 'soft-light', 0.35], bl: 0.2 } },
+  { n: 'لودفيج', f: 'contrast(1.1) brightness(1.02) saturate(1.1) sepia(.12)', fx: { g: ['#ffe9c7', '#3b2f50', 'overlay', 0.38, 170], gr: 0.12, v: 0.35 } },
+  { n: 'فالنسيا', f: 'contrast(1.05) brightness(1.1) saturate(1.2) sepia(.28)', fx: { t: ['#ffd9a0', 'soft-light', 0.5], fd: 0.1 } },
+  { n: 'إكس برو', f: 'contrast(1.4) saturate(1.35) sepia(.2) hue-rotate(-8deg)', fx: { v: 0.65, g: ['#ffd54f', '#2b1b6b', 'overlay', 0.35, 165] } },
+  { n: 'لو فاي', f: 'contrast(1.55) saturate(1.7) brightness(.96)', fx: { v: 0.6, gr: 0.1 } },
+  { n: 'ناشفيل', f: 'sepia(.25) contrast(1.15) brightness(1.08) saturate(1.3) hue-rotate(-12deg)', fx: { g: ['#ff8fb1', '#2d3a8c', 'soft-light', 0.45, 180], v: 0.25 } },
+  { n: 'ريس', f: 'sepia(.35) contrast(.88) brightness(1.15) saturate(.75)', fx: { fd: 0.2, t: ['#ffcfa3', 'soft-light', 0.4] } },
+  { n: 'مون', f: 'grayscale(1) contrast(1.1) brightness(1.1)', fx: { v: 0.4, bl: 0.15 } },
+  { n: 'عدن', f: 'contrast(.88) brightness(1.2) saturate(.85) hue-rotate(-18deg)', fx: { t: ['#a9ffc9', 'soft-light', 0.3], fd: 0.12 } },
+  { n: 'سلمبر', f: 'saturate(.65) contrast(1.15) brightness(1.02)', fx: { g: ['#a6c8ff', '#ffb7c8', 'soft-light', 0.4, 150], fd: 0.12 } },
+  { n: 'كريما', f: 'sepia(.25) contrast(.95) brightness(1.1) saturate(.9)', fx: { t: ['#d7c4a3', 'soft-light', 0.45] } },
+  { n: 'هدسون', f: 'contrast(1.2) brightness(1.2) saturate(1.1) hue-rotate(-10deg)', fx: { t: ['#7aa8ff', 'soft-light', 0.4], v: 0.3 } },
+  { n: 'ويلو', f: 'grayscale(.55) contrast(.95) brightness(1.12) sepia(.15)', fx: { fd: 0.15, g: ['#ffd1e8', '#2f3b6b', 'soft-light', 0.3, 170] } },
+  { n: 'إيرلي بيرد', f: 'sepia(.45) contrast(1.15) brightness(1.1) saturate(1.2)', fx: { v: 0.5, t: ['#ffbf6b', 'soft-light', 0.35], gr: 0.08 } },
+  { n: 'توستر', f: 'sepia(.3) contrast(1.35) brightness(1.1) saturate(1.45)', fx: { lk: ['#ff7a30', 0.55, 'tl'], v: 0.55 } },
+  { n: 'برانان', f: 'sepia(.35) contrast(1.3) brightness(.95) saturate(1.1)', fx: { g: ['#e6e0a6', '#1c2a1c', 'overlay', 0.35, 170], v: 0.35 } },
+  { n: 'إنك ويل', f: 'grayscale(1) contrast(1.9) brightness(.95)', fx: { v: 0.35, gr: 0.14 } },
+  // ---- colour grading ----
+  { n: 'تيل وبرتقال+', f: 'contrast(1.25) saturate(1.35)', fx: { g: ['#0e8c9e', '#ff8a3d', 'overlay', 0.55, 180], v: 0.3 } },
+  { n: 'فابور ويف', f: 'contrast(1.1) saturate(1.6) brightness(1.05)', fx: { g: ['#ff4fd8', '#33d1ff', 'color', 0.45, 160], bl: 0.2 } },
+  { n: 'سايبر بانك', f: 'contrast(1.35) saturate(1.8) brightness(.95)', fx: { g: ['#00f0ff', '#ff2bd6', 'overlay', 0.55, 150], v: 0.45, bl: 0.2 } },
+  { n: 'دو تون ذهبي', f: 'grayscale(1) contrast(1.2) brightness(1.05)', fx: { g: ['#2a1200', '#ffc86b', 'color', 0.9, 180], v: 0.3 } },
+  { n: 'دو تون أزرق', f: 'grayscale(1) contrast(1.25)', fx: { g: ['#08124a', '#7cc8ff', 'color', 0.9, 180], v: 0.3 } },
+  { n: 'دو تون وردي', f: 'grayscale(1) contrast(1.15) brightness(1.05)', fx: { g: ['#3a0a4a', '#ff8fc7', 'color', 0.9, 180], v: 0.25 } },
+  { n: 'ماتريكس+', f: 'grayscale(1) contrast(1.4) brightness(.9)', fx: { t: ['#00ff66', 'color', 0.85], v: 0.5, gr: 0.1 } },
+  { n: 'كوداك 400', f: 'sepia(.2) contrast(1.15) saturate(1.35) brightness(1.04)', fx: { g: ['#1b4d3a', '#ffd9a0', 'soft-light', 0.5, 180], gr: 0.16, v: 0.3 } },
+  { n: 'فوجي', f: 'contrast(1.1) saturate(1.2) hue-rotate(8deg) brightness(1.04)', fx: { g: ['#3aa876', '#e65a8a', 'soft-light', 0.38, 170], gr: 0.1 } },
+  { n: 'وايك Y2K', f: 'contrast(1.2) saturate(1.5) brightness(1.15)', fx: { bl: 0.35, t: ['#ffc2f0', 'screen', 0.22], fd: 0.08 } },
+  { n: 'نوار ملون', f: 'contrast(1.7) saturate(.5) brightness(.85)', fx: { g: ['#0a0f3a', '#a8192b', 'overlay', 0.5, 170], v: 0.7 } },
+  { n: 'ساعة ذهبية', f: 'contrast(1.1) saturate(1.45) brightness(1.1) sepia(.2)', fx: { lk: ['#ffb347', 0.6, 'tr'], g: ['#ffd27a', '#ff6a3d', 'soft-light', 0.45, 190] } },
+  { n: 'ليل مطر', f: 'contrast(1.3) saturate(.9) brightness(.82) hue-rotate(205deg)', fx: { g: ['#06143a', '#1c7bbf', 'overlay', 0.5, 180], v: 0.55, bl: 0.15 } },
+  { n: 'حلم باستيل', f: 'contrast(.85) brightness(1.22) saturate(.95)', fx: { g: ['#ffc6e8', '#bfe4ff', 'soft-light', 0.55, 160], bl: 0.35, fd: 0.14 } },
+  { n: 'حرق ضوء', f: 'contrast(1.1) saturate(1.3) brightness(1.1)', fx: { lk: ['#ff5a2a', 0.65, 'tr'], gr: 0.12, v: 0.3 } },
+  { n: 'سينما أزرق', f: 'contrast(1.3) saturate(.85) brightness(.92)', fx: { t: ['#1d5fa8', 'soft-light', 0.5], v: 0.55 } },
+  { n: 'ظل وردي', f: 'contrast(1.05) saturate(1.2) brightness(1.08)', fx: { g: ['#ff7aa8', '#ffe0c2', 'soft-light', 0.5, 200], bl: 0.2 } }];
+// Shown order in the picker: none, then the strong Instagram / grading looks first, then the older simple ones.
+const STORY_FILTER_ORDER: number[] = (() => { const n = STORY_FILTERS.length; const first = STORY_FILTERS.findIndex(f => f.n === 'كلارندون'); const fresh = Array.from({ length: n - first }, (_, k) => first + k); const old = Array.from({ length: first - 1 }, (_, k) => k + 1); return [0, ...fresh, ...old]; })();
+const GRAIN_URL = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 1.1 -.1'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")";
 function FilterFx({ i }: { i: number }) {
   const fx = STORY_FILTERS[i]?.fx;
   if (!fx) return null;
+  const cls = 'absolute inset-0 pointer-events-none z-[3]';
+  const bm = (m: string) => m as React.CSSProperties['mixBlendMode'];
+  const corner = { tr: '100% 0%', tl: '0% 0%', br: '100% 100%', bl: '0% 100%' } as const;
   return (
     <>
-      {fx.t && <div className="absolute inset-0 pointer-events-none z-[3]" style={{ background: fx.t[0], mixBlendMode: fx.t[1] as React.CSSProperties['mixBlendMode'], opacity: fx.t[2] }} />}
-      {fx.v ? <div className="absolute inset-0 pointer-events-none z-[3]" style={{ background: `radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,${fx.v}) 100%)` }} /> : null}
+      {fx.t && <div className={cls} style={{ background: fx.t[0], mixBlendMode: bm(fx.t[1]), opacity: fx.t[2] }} />}
+      {fx.g && <div className={cls} style={{ background: `linear-gradient(${fx.g[4]}deg, ${fx.g[0]}, ${fx.g[1]})`, mixBlendMode: bm(fx.g[2]), opacity: fx.g[3] }} />}
+      {fx.fd ? <div className={cls} style={{ background: 'rgb(48,40,64)', mixBlendMode: 'lighten', opacity: Math.min(1, fx.fd * 2.2) }} /> : null}
+      {fx.bl ? <div className={cls} style={{ background: 'radial-gradient(circle at 50% 38%, rgba(255,255,255,.95), rgba(255,255,255,0) 72%)', mixBlendMode: 'soft-light', opacity: Math.min(1, fx.bl * 2.4) }} /> : null}
+      {fx.lk && <div className={cls} style={{ background: `radial-gradient(circle at ${corner[fx.lk[2]]}, ${fx.lk[0]}, rgba(0,0,0,0) 62%)`, mixBlendMode: 'screen', opacity: fx.lk[1] }} />}
+      {fx.gr ? <div className={cls} style={{ backgroundImage: GRAIN_URL, backgroundSize: '180px 180px', mixBlendMode: 'overlay', opacity: Math.min(1, fx.gr * 5) }} /> : null}
+      {fx.v ? <div className={cls} style={{ background: `radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,${fx.v}) 100%)` }} /> : null}
     </>
   );
+}
+// Paints the same layers as <FilterFx/> onto a canvas, so a published photo looks exactly like the preview.
+function paintStoryFx(ctx: CanvasRenderingContext2D, W: number, H: number, fx: StoryFx) {
+  const blend = (op: string, alpha: number, fill: string | CanvasGradient | CanvasPattern) => { ctx.save(); ctx.globalCompositeOperation = op as GlobalCompositeOperation; ctx.globalAlpha = alpha; ctx.fillStyle = fill; ctx.fillRect(0, 0, W, H); ctx.restore(); };
+  if (fx.t) blend(fx.t[1], fx.t[2], fx.t[0]);
+  if (fx.g) {
+    const a = (fx.g[4] * Math.PI) / 180; const dx = Math.sin(a), dy = -Math.cos(a); const len = Math.abs(W * dx) + Math.abs(H * dy);
+    const gr = ctx.createLinearGradient(W / 2 - (dx * len) / 2, H / 2 - (dy * len) / 2, W / 2 + (dx * len) / 2, H / 2 + (dy * len) / 2);
+    gr.addColorStop(0, fx.g[0]); gr.addColorStop(1, fx.g[1]); blend(fx.g[2], fx.g[3], gr);
+  }
+  if (fx.fd) blend('lighten', Math.min(1, fx.fd * 2.2), 'rgb(48,40,64)');
+  if (fx.bl) { const gr = ctx.createRadialGradient(W / 2, H * 0.38, 0, W / 2, H * 0.38, Math.max(W, H) * 0.72); gr.addColorStop(0, 'rgba(255,255,255,.95)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); blend('soft-light', Math.min(1, fx.bl * 2.4), gr); }
+  if (fx.lk) {
+    const [cx, cy] = fx.lk[2] === 'tr' ? [W, 0] : fx.lk[2] === 'tl' ? [0, 0] : fx.lk[2] === 'br' ? [W, H] : [0, H];
+    const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(W, H) * 0.62); gr.addColorStop(0, fx.lk[0]); gr.addColorStop(1, 'rgba(0,0,0,0)'); blend('screen', fx.lk[1], gr);
+  }
+  if (fx.gr) { const pat = ctx.createPattern(getGrain(), 'repeat'); if (pat) blend('overlay', Math.min(1, fx.gr * 5), pat); }
+  if (fx.v) { const r = Math.hypot(W, H) / 2; const g = ctx.createRadialGradient(W / 2, H / 2, r * 0.45, W / 2, H / 2, r); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${fx.v})`); blend('source-over', 1, g); }
 }
 const bakeFilter = async (f: File, css: string, fxIdx = 0): Promise<File | null> => {
   try {
@@ -3810,11 +3880,7 @@ const bakeFilter = async (f: File, css: string, fxIdx = 0): Promise<File | null>
     ctx.filter = css;
     ctx.drawImage(bmp, 0, 0, c.width, c.height);
     const fx = STORY_FILTERS[fxIdx]?.fx;
-    if (fx) {
-      ctx.filter = 'none';
-      if (fx.t) { ctx.globalCompositeOperation = fx.t[1] as GlobalCompositeOperation; ctx.globalAlpha = fx.t[2]; ctx.fillStyle = fx.t[0]; ctx.fillRect(0, 0, c.width, c.height); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
-      if (fx.v) { const r = Math.hypot(c.width, c.height) / 2; const g = ctx.createRadialGradient(c.width / 2, c.height / 2, r * 0.45, c.width / 2, c.height / 2, r); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${fx.v})`); ctx.fillStyle = g; ctx.fillRect(0, 0, c.width, c.height); }
-    }
+    if (fx) { ctx.filter = 'none'; paintStoryFx(ctx, c.width, c.height, fx); }
     const blob = await new Promise<Blob | null>(r => c.toBlob(r, 'image/jpeg', 0.92));
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
@@ -3837,17 +3903,20 @@ function CountdownSticker({ target, title, size }: { target: string; title?: str
     </div>
   );
 }
+// Phones and touch screens: pinch already rotates, so the rotation sliders are hidden there and a tap recolours text.
+const IS_TOUCH = typeof window !== 'undefined' && (!!window.matchMedia?.('(pointer: coarse)').matches || (navigator.maxTouchPoints ?? 0) > 0);
 const TXT_COLORS = ['#ffffff', '#fde047', '#fb7185', '#f472b6', '#a78bfa', '#22d3ee', '#4ade80', '#fb923c', '#000000'];
 type StoryXf = { x: number; y: number; s?: number; r?: number };
 const pollOptions = (p: { a: string; b: string; o?: string[] }): string[] => (p.o && p.o.length >= 2 ? p.o : [p.a, p.b]);
 // Rotation snaps to every 45 degrees when you are within a few degrees of it.
 const snapAng = (r: number) => { const n = ((((r + 540) % 360) + 360) % 360) - 180; const m = Math.round(n / 45) * 45; return Math.abs(n - m) < 3.5 ? m : n; };
 
-function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSelect, xsel, onXSelect, onXf, onXRemove, onMention }: {
-  onMention?: (ref: string) => void; extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk' | 'poll' | 'item', x: number, y: number, idx?: number) => void; onScale?: (idx: number, s: number) => void; onRotate?: (idx: number, r: number) => void; onRemove?: (idx: number) => void; sel?: number; onSelect?: (idx: number) => void; xsel?: '' | 'poll' | 'ask'; onXSelect?: (k: 'poll' | 'ask') => void; onXf?: (k: 'poll' | 'ask', p: Partial<StoryXf>) => void; onXRemove?: (k: 'poll' | 'ask') => void }) {
+function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSelect, xsel, onXSelect, onXf, onXRemove, onMention, onTap }: {
+  onTap?: (idx: number) => void; onMention?: (ref: string) => void; extra?: StoryExtra | null; onMove?: (k: 'text' | 'stk' | 'poll' | 'item', x: number, y: number, idx?: number) => void; onScale?: (idx: number, s: number) => void; onRotate?: (idx: number, r: number) => void; onRemove?: (idx: number) => void; sel?: number; onSelect?: (idx: number) => void; xsel?: '' | 'poll' | 'ask'; onXSelect?: (k: 'poll' | 'ask') => void; onXf?: (k: 'poll' | 'ask', p: Partial<StoryXf>) => void; onXRemove?: (k: 'poll' | 'ask') => void }) {
   const root = useRef<HTMLDivElement>(null);
   const ptrs = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ d: number; s: number; a: number; r: number } | null>(null);
+  const tapRef = useRef({ x: 0, y: 0, moved: false, multi: false });
   const xp = useRef<{ key: string; ptrs: Map<number, { x: number; y: number }>; pinch: { d: number; s: number; a: number; r: number } | null }>({ key: '', ptrs: new Map(), pinch: null });
   const [gd, setGd] = useState({ x: false, y: false });
   if (!extra) return null;
@@ -3926,13 +3995,16 @@ function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSele
         const h = editable ? {
           onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
             e.currentTarget.setPointerCapture(e.pointerId); e.stopPropagation();
+            if (ptrs.current.size === 0) tapRef.current = { x: e.clientX, y: e.clientY, moved: false, multi: false };
             ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
             onSelect?.(i);
+            if (ptrs.current.size >= 2) tapRef.current.multi = true;
             if (ptrs.current.size === 2) { const [a, b] = [...ptrs.current.values()]; pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: it.s, a: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI, r: it.r ?? 0 }; }
           },
           onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
             if (!ptrs.current.has(e.pointerId) || !root.current) return;
             ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (Math.hypot(e.clientX - tapRef.current.x, e.clientY - tapRef.current.y) > 8) tapRef.current.moved = true;
             if (ptrs.current.size >= 2 && pinch.current) {
               const [a, b] = [...ptrs.current.values()];
               onScale?.(i, Math.max(14, Math.min(360, (pinch.current.s * Math.hypot(a.x - b.x, a.y - b.y)) / pinch.current.d)));
@@ -3941,7 +4013,7 @@ function StoryOverlays({ extra, onMove, onScale, onRotate, onRemove, sel, onSele
             }
             if (ptrs.current.size === 1) { const p = pos(e.clientX, e.clientY); onMove!('item', p.x, p.y, i); }
           },
-          onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => { ptrs.current.delete(e.pointerId); if (ptrs.current.size < 2) pinch.current = null; endGd(); },
+          onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => { const tp = tapRef.current; const wasTap = ptrs.current.size === 1 && !tp.moved && !tp.multi; ptrs.current.delete(e.pointerId); if (ptrs.current.size < 2) pinch.current = null; endGd(); if (wasTap) onTap?.(i); },
           onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => { ptrs.current.delete(e.pointerId); pinch.current = null; endGd(); },
           onWheel: (e: React.WheelEvent<HTMLDivElement>) => onScale?.(i, Math.max(14, Math.min(360, it.s - e.deltaY * 0.2))),
         } : {};
@@ -4238,7 +4310,13 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   }, [lyPlay, lySrc, mStart, mEnd]);
   useEffect(() => { if (tool !== 'music') setLyPlay(false); }, [tool]);
   const lyLines = useMemo(() => ly.raw.map(([t, s]) => [t + ly.off, s] as [number, string]), [ly.raw, ly.off]);
-  const lyIdx = lyActive(lyLines, lyPlay ? lyT : mStart + 0.05);
+  // Lyrics begin at the first line of the verse you picked (the clip is only ~30 s), never earlier.
+  const lyFirst = Math.max(0, lyLines.findIndex(([t]) => t >= mStart - 0.4));
+  const lyShown = useMemo(() => lyLines.slice(lyFirst), [lyLines, lyFirst]);
+  const lyAct = lyActive(lyLines, lyPlay ? lyT : mStart + 0.05);
+  const lyIdx = lyPlay ? (lyAct < lyFirst ? -1 : lyAct - lyFirst) : 0;
+  const musicMode: 'lyrics' | 'cover' | 'none' = ly.on ? 'lyrics' : mStyle === 'cover' && !!remoteM?.cover ? 'cover' : 'none';
+  const setMusicMode = (m: 'lyrics' | 'cover' | 'none') => { patchLy({ on: m === 'lyrics' }); setMStyle(m === 'cover' ? 'cover' : 'none'); };
   // Picking a song looks its lyrics up by itself and switches them on when found.
   const mStartRef = useRef(0); mStartRef.current = mStart;
   useEffect(() => {
@@ -4256,7 +4334,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
         const hit = j.find(x => x.syncedLyrics);
         const lrc = hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
         if (dead || !lrc.length) return;
-        setLy(v => ({ ...v, raw: lrc, on: true, off: music ? 0 : Math.round((mStartRef.current - lrc[0][0]) * 10) / 10 }));
+        setLy(v => ({ ...v, raw: lrc, off: music ? 0 : Math.round((mStartRef.current - lrc[0][0]) * 10) / 10 }));
       } catch { /* no lyrics found: the manual editor is still there */ }
     })();
     return () => { dead = true; window.clearTimeout(tm); ctl.abort(); };
@@ -4436,9 +4514,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
       const lyEnd = mEnd > mStart ? mEnd : mStart + 30;
       let lyPack: StoryLy | undefined;
       if (ly.on && lyLines.length > 0 && (music || remoteM)) {
-        const within = lyLines.filter(([t]) => t <= lyEnd);
-        let first = 0; within.forEach(([t], k) => { if (t <= mStart) first = k; });
-        const l = within.slice(first, first + 80).filter(([t]) => Number.isFinite(t)).map(([t, tx]) => [Math.round(t * 100) / 100, tx.slice(0, 140)] as [number, string]);
+        const l = lyLines.filter(([t]) => Number.isFinite(t) && t >= mStart - 0.4 && t <= lyEnd).slice(0, 80).map(([t, tx]) => [Math.round(t * 100) / 100, tx.slice(0, 140)] as [number, string]);
         if (l.length) lyPack = { l, st: ly.st, c: ly.c, p: ly.p };
       }
       let mObj: StoryExtra['m'] = undefined;
@@ -4448,7 +4524,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
         if (mErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); setErr(`تعذّر رفع الموسيقى: ${(mErr as { message?: string }).message ?? ''}`); setBusy(false); return; }
         mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, style: 'none', ...(lyPack ? { ly: lyPack } : {}) };
       } else if (remoteM) {
-        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, cover: remoteM.cover, style: mStyle === 'cover' && remoteM.cover ? 'cover' : 'none', ...(tp && mStyle === 'cover' ? { tp } : {}), ...(lyPack ? { ly: lyPack } : {}) };
+        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, cover: remoteM.cover, style: musicMode === 'cover' && remoteM.cover ? 'cover' : 'none', ...(tp && musicMode === 'cover' ? { tp } : {}), ...(lyPack ? { ly: lyPack } : {}) };
       }
       const doInsert = () => supabase.from('stories').insert({ user_id: currentUser.id, shared_post_id: sharedPostId ?? null, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj, items: uploadedItems }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
       let { error: insErr } = await doInsert();
@@ -4473,10 +4549,23 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
     const copy: StoryItemEdit = { ...it, id: crypto.randomUUID(), x: Math.min(94, it.x + 6), y: Math.min(94, it.y + 6), v: it.k === 'i' && it.file ? URL.createObjectURL(it.file) : it.v };
     setItems(a => [...a, copy]); setSel(items.length);
   };
-  const moveLayer = (d: 1 | -1) => {
+  // Layers: one step forward / back (a long list of stickers can be reordered one by one), or all the way with the double buttons.
+  const moveLayer = (d: 1 | -1, all = false) => {
     if (sel < 0) return;
-    setItems(a => { const it = a[sel]; if (!it) return a; const rest = a.filter((_, k) => k !== sel); return d === 1 ? [...rest, it] : [it, ...rest]; });
-    setSel(d === 1 ? items.length - 1 : 0);
+    const to = all ? (d === 1 ? items.length - 1 : 0) : Math.max(0, Math.min(items.length - 1, sel + d));
+    if (to === sel) return;
+    setItems(a => { const b = [...a]; const [it] = b.splice(sel, 1); b.splice(to, 0, it); return b; });
+    setSel(to);
+  };
+  // Touch screens: a tap on a text recolours it (next colour in the palette).
+  const tapItem = (i: number) => {
+    if (!IS_TOUCH) return;
+    const it = items[i];
+    if (!it || it.k !== 't') return;
+    const cur = TXT_COLORS.indexOf((it.c ?? '#ffffff').toLowerCase());
+    const next = TXT_COLORS[(cur + 1) % TXT_COLORS.length];
+    setItems(a => a.map((x, k) => (k === i ? { ...x, c: next } : x)));
+    try { navigator.vibrate?.(8); } catch { /* ignore */ }
   };
   const normAng = (r: number) => ((((r + 540) % 360) + 360) % 360) - 180;
   const xfControls = (k: 'poll' | 'ask') => {
@@ -4485,7 +4574,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
       <div className="space-y-2">
         <p className="text-white/70 text-[11px]">اسحب الصندوق على الصورة. بإصبعين: كبّر ولُفّ.</p>
         <div className="flex items-center gap-3 px-1"><span className="text-white/80 text-xs shrink-0">الحجم</span><input type="range" min={50} max={240} value={Math.round((v.s ?? 1) * 100)} onChange={e => set(o => ({ ...o, s: Number(e.target.value) / 100 }))} className="flex-1 accent-white" /></div>
-        <div className="flex items-center gap-3 px-1"><span className="text-white/80 text-xs shrink-0">الدوران</span><input type="range" min={-180} max={180} value={v.r ?? 0} onChange={e => set(o => ({ ...o, r: Number(e.target.value) }))} className="flex-1 accent-white" /><button onClick={() => set(o => ({ ...o, r: 0, s: 1, x: 50 }))} className="shrink-0 px-3 h-8 rounded-full bg-white/15 text-white text-xs">إعادة ضبط</button></div>
+        <div className="flex items-center gap-3 px-1">{!IS_TOUCH && <><span className="text-white/80 text-xs shrink-0">الدوران</span><input type="range" min={-180} max={180} value={v.r ?? 0} onChange={e => set(o => ({ ...o, r: Number(e.target.value) }))} className="flex-1 accent-white" /></>}<button onClick={() => set(o => ({ ...o, r: 0, s: 1, x: 50 }))} className={`shrink-0 px-3 h-8 rounded-full bg-white/15 text-white text-xs ${IS_TOUCH ? 'flex-1' : ''}`}>إعادة ضبط</button></div>
       </div>
     );
   };
@@ -4495,9 +4584,9 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
       {selItem.k === 't' && <input value={selItem.v} onChange={e => patchSel({ v: e.target.value.slice(0, 200) })} dir="auto" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white focus:outline-none" />}
       <div className="flex items-center gap-3 px-1"><span className="text-white/80 text-xs shrink-0">الحجم</span><input type="range" min={selItem.k === 't' ? 14 : 24} max={360} value={selItem.s} onChange={e => patchSel({ s: Number(e.target.value) })} className="flex-1 accent-white" /><button onClick={() => removeItem(sel)} className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0" aria-label="حذف"><Trash2 size={16} color="#fff" /></button></div>
       {selItem.k === 't' && <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">{TXT_COLORS.map(c => <button key={c} onClick={() => patchSel({ c })} aria-label="لون" className={`shrink-0 w-7 h-7 rounded-full border-2 ${(selItem.c ?? '#ffffff') === c ? 'border-white scale-110' : 'border-white/30'}`} style={{ background: c }} />)}<button onClick={() => patchSel({ b: !selItem.b })} className={`shrink-0 px-3 h-8 rounded-full text-xs font-semibold ${selItem.b ? 'bg-white text-black' : 'bg-white/15 text-white'}`}>خلفية</button><button onClick={() => patchSel({ f: ((selItem.f ?? 0) + 1) % STORY_FONTS.length })} className="shrink-0 px-3 h-8 rounded-full bg-white/15 text-white text-xs font-semibold" style={{ fontFamily: STORY_FONTS[selItem.f ?? 0] }}>خط: {STORY_FONT_NAMES[selItem.f ?? 0]}</button></div>}
-      {<div className="flex items-center gap-3 px-1"><span className="text-white/80 text-xs shrink-0">الدوران</span><input type="range" min={-180} max={180} value={selItem.r ?? 0} onChange={e => patchSel({ r: Number(e.target.value) })} className="flex-1 accent-white" /><button onClick={() => patchSel({ r: 0 })} className="shrink-0 px-3 h-8 rounded-full bg-white/15 text-white text-xs">0°</button></div>}
+      {!IS_TOUCH && <div className="flex items-center gap-3 px-1"><span className="text-white/80 text-xs shrink-0">الدوران</span><input type="range" min={-180} max={180} value={selItem.r ?? 0} onChange={e => patchSel({ r: Number(e.target.value) })} className="flex-1 accent-white" /><button onClick={() => patchSel({ r: 0 })} className="shrink-0 px-3 h-8 rounded-full bg-white/15 text-white text-xs">0°</button></div>}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-        {([['⧉ نسخ', dupItem], ['↑ للأمام', () => moveLayer(1)], ['↓ للخلف', () => moveLayer(-1)], ['⟲ 15°', () => patchSel({ r: normAng((selItem.r ?? 0) - 15) })], ['⟳ 15°', () => patchSel({ r: normAng((selItem.r ?? 0) + 15) })], ['↔ توسيط', () => patchSel({ x: 50 })]] as const).map(([l, fn]) => <button key={l} onClick={fn} className="shrink-0 px-3 h-8 rounded-full bg-white/15 text-white text-xs font-semibold">{l}</button>)}
+        {([['⧉ نسخ', dupItem], ['↑ قدّام', () => moveLayer(1)], ['↓ ورا', () => moveLayer(-1)], ['⤒ لأول', () => moveLayer(1, true)], ['⤓ لآخر', () => moveLayer(-1, true)], ['⟲ 15°', () => patchSel({ r: normAng((selItem.r ?? 0) - 15) })], ['⟳ 15°', () => patchSel({ r: normAng((selItem.r ?? 0) + 15) })], ['↔ توسيط', () => patchSel({ x: 50 })]] as const).filter(([l]) => !IS_TOUCH || !l.startsWith('⟲') && !l.startsWith('⟳')).map(([l, fn]) => <button key={l} onClick={fn} className="shrink-0 px-3 h-8 rounded-full bg-white/15 text-white text-xs font-semibold">{l}</button>)}
       </div>
     </div>
   ) : null;
@@ -4543,9 +4632,20 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 to-transparent pointer-events-none z-[5]" />
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent pointer-events-none z-[5]" />
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
-          {remoteM && !music && mStyle === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={q => setTp(o => ({ ...q, r: o?.r, s: o?.s }))} />}
-          {(music || remoteM) && ly.on && lyLines.length > 0 && <StoryLyrics ly={{ l: lyLines, st: ly.st, c: ly.c, p: ly.p }} idx={lyIdx} onMove={tool === 'music' ? (q => patchLy({ p: { ...ly.p, x: q.x, y: q.y } })) : undefined} />}
+          {remoteM && !music && musicMode === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={q => setTp(o => ({ ...q, r: o?.r, s: o?.s }))} />}
+          {(music || remoteM) && ly.on && lyShown.length > 0 && <StoryLyrics ly={{ l: lyShown, st: ly.st, c: ly.c, p: ly.p }} idx={lyIdx} onMove={tool === 'music' ? (q => patchLy({ p: { ...ly.p, x: q.x, y: q.y } })) : undefined} />}
           <FilterFx i={flt} />
+          {IS_TOUCH && selItem && tool !== 'draw' && (
+            <div className="absolute top-14 inset-x-0 z-[32] flex justify-center pointer-events-none">
+              <div className="pointer-events-auto flex items-center gap-1 p-1 rounded-full bg-black/55 backdrop-blur-xl ring-1 ring-white/20 shadow-xl ky-fade" onPointerDown={e => e.stopPropagation()}>
+                {selItem.k === 't' && <button onClick={() => tapItem(sel)} className="w-9 h-9 rounded-full flex items-center justify-center active:scale-90" aria-label="لون"><span className="w-5 h-5 rounded-full border-2 border-white" style={{ background: selItem.c ?? '#ffffff' }} /></button>}
+                <button onClick={() => moveLayer(1)} className="px-3 h-9 rounded-full text-white text-xs font-semibold active:scale-95 bg-white/10">↑ قدّام</button>
+                <button onClick={() => moveLayer(-1)} className="px-3 h-9 rounded-full text-white text-xs font-semibold active:scale-95 bg-white/10">↓ ورا</button>
+                <button onClick={dupItem} className="w-9 h-9 rounded-full flex items-center justify-center text-white active:scale-90" aria-label="نسخ"><Copy size={16} color="#fff" /></button>
+                <button onClick={() => removeItem(sel)} className="w-9 h-9 rounded-full flex items-center justify-center text-white active:scale-90" aria-label="حذف"><Trash2 size={16} color="#fff" /></button>
+              </div>
+            </div>
+          )}
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
           <div className="absolute top-3 end-3 z-20 flex flex-col items-center gap-2.5">
             {toolDefs.slice(0, 5).map(([k, Ic, label, on]) => (
@@ -4553,7 +4653,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
             ))}
             <button onClick={() => { setTool(''); setMoreOpen(true); }} aria-label="المزيد" title="المزيد" className={`relative w-11 h-11 rounded-2xl flex items-center justify-center text-white text-xl font-black leading-none active:scale-90 transition-all backdrop-blur-xl bg-black/35 ring-1 ring-white/25`}>⋯{toolDefs.slice(5).some(d => d[3]) && <span className="absolute -top-0.5 -end-0.5 w-3 h-3 rounded-full bg-white ring-2 ring-violet-600" />}</button>
           </div>
-          <StoryOverlays extra={extra} sel={sel} xsel={xsel} onXSelect={k => { setXsel(k); setSel(-1); setTool(k); }} onXf={(k, p) => (k === 'poll' ? setPollPos(o => ({ ...o, ...p })) : setAskPos(o => ({ ...o, ...p })))} onXRemove={k => { if (k === 'poll') { setPq(''); setPa(''); setPb(''); setPxs([]); } else setAsk(''); setXsel(''); }} onSelect={i => { setSel(i); setXsel(''); if (items[i]?.k === 't') setTool('text'); }} onRemove={removeItem} onScale={(i, sz) => setItems(a => a.map((x, k) => (k === i ? { ...x, s: sz } : x)))} onRotate={(i, r) => setItems(a => a.map((x, k) => (k === i ? { ...x, r } : x)))} onMove={(k, x, y, idx) => { if (k === 'text') { const tk = extra.texts?.[idx ?? -1]?.k; if (tk === 'loc') setLocP(o => ({ ...o, x, y })); else if (tk === 'men') setMenP(o => ({ ...o, x, y })); else if (tk === 'lnk') setLnkP(o => ({ ...o, x, y })); } else if (k === 'poll') setPollPos(o => ({ ...o, x, y })); else if (k === 'item' && idx !== undefined) setItems(a => a.map((it, i) => (i === idx ? { ...it, x, y } : it))); else setStkPos({ x, y }); }} />
+          <StoryOverlays extra={extra} sel={sel} xsel={xsel} onTap={tapItem} onXSelect={k => { setXsel(k); setSel(-1); setTool(k); }} onXf={(k, p) => (k === 'poll' ? setPollPos(o => ({ ...o, ...p })) : setAskPos(o => ({ ...o, ...p })))} onXRemove={k => { if (k === 'poll') { setPq(''); setPa(''); setPb(''); setPxs([]); } else setAsk(''); setXsel(''); }} onSelect={i => { setSel(i); setXsel(''); if (items[i]?.k === 't') setTool('text'); }} onRemove={removeItem} onScale={(i, sz) => setItems(a => a.map((x, k) => (k === i ? { ...x, s: sz } : x)))} onRotate={(i, r) => setItems(a => a.map((x, k) => (k === i ? { ...x, r } : x)))} onMove={(k, x, y, idx) => { if (k === 'text') { const tk = extra.texts?.[idx ?? -1]?.k; if (tk === 'loc') setLocP(o => ({ ...o, x, y })); else if (tk === 'men') setMenP(o => ({ ...o, x, y })); else if (tk === 'lnk') setLnkP(o => ({ ...o, x, y })); } else if (k === 'poll') setPollPos(o => ({ ...o, x, y })); else if (k === 'item' && idx !== undefined) setItems(a => a.map((it, i) => (i === idx ? { ...it, x, y } : it))); else setStkPos({ x, y }); }} />
         </div>
       </div>
       <div key={tool || 'none'} className={`absolute inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 ${tool ? 'ky-sheet rounded-[28px] bg-gray-950/80 backdrop-blur-2xl ring-1 ring-white/15 p-3 max-h-[48%] overflow-y-auto no-scrollbar overscroll-contain shadow-2xl shadow-violet-950/50' : 'hidden'}`}>
@@ -4590,13 +4690,13 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           </div>
           {selControls}
         </div>}
-        {sel >= 0 && items[sel] && <div className="flex items-center gap-2 mb-2 rounded-2xl bg-white/10 px-3 py-2">
+        {!IS_TOUCH && sel >= 0 && items[sel] && <div className="flex items-center gap-2 mb-2 rounded-2xl bg-white/10 px-3 py-2">
           <span className="text-white/80 text-xs shrink-0">تدوير العنصر</span>
           <input type="range" min={-180} max={180} step={1} value={Math.round(items[sel].r ?? 0)} onChange={e => patchSel({ r: Number(e.target.value) })} className="flex-1 min-w-0 accent-violet-400" />
           <span className="w-11 text-center text-white text-xs tabular-nums" dir="ltr">{Math.round(items[sel].r ?? 0)}°</span>
           <button onClick={() => patchSel({ r: ((items[sel].r ?? 0) + 90 > 180 ? (items[sel].r ?? 0) - 270 : (items[sel].r ?? 0) + 90) })} className="shrink-0 px-2.5 py-1 rounded-full bg-white/15 text-white text-xs font-semibold">90°</button>
         </div>}
-        {tool === 'filter' && <div className="flex gap-2.5 overflow-x-auto no-scrollbar mb-2">{STORY_FILTERS.map((f, i) => <button key={f.n} onClick={() => pickFlt(i)} className="shrink-0 flex flex-col items-center gap-1 w-16"><span className={`block w-16 h-16 rounded-xl overflow-hidden ${flt === i ? 'ring-2 ring-white' : 'opacity-80'}`}>{isVideo ? <video src={`${previewUrl}#t=0.1`} preload="metadata" muted playsInline style={{ filter: f.f }} className="w-full h-full object-cover pointer-events-none" /> : <img src={previewUrl} alt="" style={{ filter: f.f }} className="w-full h-full object-cover" />}</span><span className={`text-[11px] ${flt === i ? 'text-white font-bold' : 'text-white/70'}`}>{f.n}</span></button>)}</div>}
+        {tool === 'filter' && <div className="flex gap-2.5 overflow-x-auto no-scrollbar mb-2">{STORY_FILTER_ORDER.map(i => ({ f: STORY_FILTERS[i], i })).map(({ f, i }) => <button key={f.n} onClick={() => pickFlt(i)} className="shrink-0 flex flex-col items-center gap-1 w-16"><span className={`relative block w-16 h-16 rounded-xl overflow-hidden isolate ${flt === i ? 'ring-2 ring-white scale-105' : 'opacity-85'}`}>{isVideo ? <video src={`${previewUrl}#t=0.1`} preload="metadata" muted playsInline style={{ filter: f.f }} className="w-full h-full object-cover pointer-events-none" /> : <img src={previewUrl} alt="" style={{ filter: f.f }} className="w-full h-full object-cover" />}<FilterFx i={i} /></span><span className={`text-[11px] ${flt === i ? 'text-white font-bold' : 'text-white/70'}`}>{f.n}</span></button>)}</div>}
         {tool === 'frame' && !isVideo && <div className="space-y-2.5 mb-1">
           <button onClick={() => setBlurBg(b => !b)} className={`w-full py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] ${blurBg ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>🌫️ خلفية ضبابية من نفس الصورة {blurBg ? '✓' : ''}</button>
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -4606,19 +4706,19 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setRot(r => (r + 90 > 180 ? r - 270 : r + 90))} className="shrink-0 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold flex items-center gap-1"><RefreshCw size={13} /> 90°</button>
-            <input type="range" min={-180} max={180} step={1} value={rot} onChange={e => setRot(Number(e.target.value))} className="flex-1 min-w-0 accent-violet-400" />
+            {!IS_TOUCH ? <input type="range" min={-180} max={180} step={1} value={rot} onChange={e => setRot(Number(e.target.value))} className="flex-1 min-w-0 accent-violet-400" /> : <span className="flex-1" />}
             <span className="w-10 text-center text-white text-xs tabular-nums" dir="ltr">{rot}°</span>
             {(bgc !== '#000000' || rot !== 0 || blurBg) && <button onClick={() => { setBgc('#000000'); setRot(0); setBlurBg(false); }} className="shrink-0 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs">إعادة</button>}
           </div>
         </div>}
         {tool === 'music' && <div className="mb-2">{music
-          ? <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2"><div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{music.name}</span><button onClick={() => { setMusic(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div><div className="mt-2"><MusicTrimmer file={music} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div></div>
+          ? <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2"><div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{music.name}</span><button onClick={() => { setMusic(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div><div className="mt-2 px-1"><MusicModeBar mode={musicMode} onMode={setMusicMode} hasCover={false} hasLyrics={ly.raw.length > 0} /></div><div className="mt-2"><MusicTrimmer file={music} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div></div>
           : <div className="space-y-2">
               {remoteM && <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2">
                 <div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{remoteM.name}</span><button onClick={() => { setRemoteM(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div>
-                <div className="flex gap-2 px-2 mt-2">{([['cover', '🖼 غلاف'], ['none', '🚫 بدون غلاف']] as const).filter(([k]) => k !== 'cover' || !!remoteM.cover).map(([k, l]) => <button key={k} onClick={() => setMStyle(k)} className={`flex-1 py-1.5 rounded-full text-xs font-semibold ${mStyle === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}</div>
-                {mStyle === 'cover' && <div className="mt-1.5 flex items-center gap-2 px-2"><span className="text-[11px] text-gray-300 shrink-0">اسحب الغلاف لتحريكه · تدوير</span><input type="range" min={-180} max={180} value={Math.round(tp?.r ?? 0)} onChange={e => setTp(o => ({ x: o?.x ?? 50, y: o?.y ?? 62, s: o?.s, r: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round(tp?.r ?? 0)}°</span></div>}
-                {mStyle === 'cover' && <div className="mt-1.5 flex items-center gap-2 px-2"><span className="text-[11px] text-gray-300 shrink-0">حجم الغلاف</span><input type="range" min={0.4} max={1.6} step={0.05} value={tp?.s ?? 1} onChange={e => setTp(o => ({ x: o?.x ?? 50, y: o?.y ?? 62, r: o?.r, s: Number(e.target.value) }))} className="flex-1 min-w-0 accent-white" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round((tp?.s ?? 1) * 100)}%</span></div>}
+                <div className="px-2 mt-2"><MusicModeBar mode={musicMode} onMode={setMusicMode} hasCover={!!remoteM.cover} hasLyrics={ly.raw.length > 0} /></div>
+                {musicMode === 'cover' && !IS_TOUCH && <div className="mt-1.5 flex items-center gap-2 px-2"><span className="text-[11px] text-gray-300 shrink-0">اسحب الغلاف لتحريكه · تدوير</span><input type="range" min={-180} max={180} value={Math.round(tp?.r ?? 0)} onChange={e => setTp(o => ({ x: o?.x ?? 50, y: o?.y ?? 62, s: o?.s, r: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round(tp?.r ?? 0)}°</span></div>}
+                {musicMode === 'cover' && <div className="mt-1.5 flex items-center gap-2 px-2"><span className="text-[11px] text-gray-300 shrink-0">حجم الغلاف</span><input type="range" min={0.4} max={1.6} step={0.05} value={tp?.s ?? 1} onChange={e => setTp(o => ({ x: o?.x ?? 50, y: o?.y ?? 62, r: o?.r, s: Number(e.target.value) }))} className="flex-1 min-w-0 accent-white" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round((tp?.s ?? 1) * 100)}%</span></div>}
                 <div className="mt-2"><MusicTrimmer key={remoteM.url} src={remoteM.url} name={remoteM.name} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div>
               </div>}
               {remoteM && !libOpen
@@ -4626,16 +4726,16 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
                 : <MusicLibrary onDevice={() => musicPick.current?.click()} onClose={remoteM ? () => setLibOpen(false) : undefined} onPick={t => { setMusic(null); setRemoteM(t); setMStart(t.start ?? 0); setMEnd(t.end ?? 0); setMStyle(t.cover ? 'cover' : 'none'); setLibOpen(false); }} />}
             </div>}
           <input ref={musicPick} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setMusic(f); setRemoteM(null); setMStart(0); setMEnd(0); } }} />
-          {(music || remoteM) && <StoryLyricsEditor ly={ly} patch={patchLy} name={music ? music.name : remoteM?.name ?? ''} isFile={!!music} start={mStart} end={mEnd} playing={lyPlay} setPlaying={setLyPlay} />}</div>}
+          {(music || remoteM) && musicMode === 'lyrics' && <StoryLyricsEditor ly={ly} patch={patchLy} name={music ? music.name : remoteM?.name ?? ''} isFile={!!music} start={mStart} end={mEnd} playing={lyPlay} setPlaying={setLyPlay} />}</div>}
         {tool === 'tags' && <div className="space-y-2 mb-2">{([[MapPin, loc, setLoc, 'أضف موقعاً'], [AtSign, men, setMen, 'منشن لصديق (اسم المستخدم)'], [LinkIcon, lnk, setLnk, 'رابط أو هاشتاج']] as const).map(([Ic, v, set, ph]) => <div key={ph} className="flex items-center gap-2 bg-white/10 rounded-full ps-3"><Ic size={18} color="#fff" strokeWidth={2.2} /><input value={v} onChange={e => set(e.target.value)} placeholder={ph} className="flex-1 min-w-0 px-2 py-2 bg-transparent text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>)}
           {menHints.length > 0 && <div className="flex gap-2 overflow-x-auto no-scrollbar">{menHints.map(u => <button key={u.id} onClick={() => setMen(u.username)} className="shrink-0 flex items-center gap-2 pe-3 ps-1 py-1 rounded-full bg-white/10 text-white text-xs active:scale-95"><Avatar userId={u.id} src={u.avatar} name={u.displayName} size="sm" />@{u.username}</button>)}</div>}
           {menName && !menUser && menHints.length === 0 && <p className="text-[11px] text-amber-300 px-2">مفيش مستخدم بالاسم ده، اختار حد من المقترحات</p>}
           {menUser && <p className="text-[11px] text-emerald-300 px-2">✓ هيظهر @{menUser.username} وأي حد يدوس عليه يفتح بروفايله</p>}
           {(loc.trim() || menUser || lnk.trim()) && <p className="text-[11px] text-gray-400 px-2">اسحبهم على القصة لتحريكهم. الموقع بيفتح خرائط جوجل.</p>}
-          {([[loc.trim(), '📍', locP, setLocP], [menUser ? '1' : '', '@', menP, setMenP], [lnk.trim(), '🔗', lnkP, setLnkP]] as const).filter(r => r[0]).map(([, ic, v, set]) => <div key={ic} className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5"><span className="text-sm shrink-0">{ic}</span><span className="text-white/70 text-[11px] shrink-0">تدوير</span><input type="range" min={-180} max={180} value={Math.round(v.r ?? 0)} onChange={e => set(o => ({ ...o, r: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round(v.r ?? 0)}°</span></div>)}
+          {([[loc.trim(), '📍', locP, setLocP], [menUser ? '1' : '', '@', menP, setMenP], [lnk.trim(), '🔗', lnkP, setLnkP]] as const).filter(r => r[0]).map(([, ic, v, set]) => <div key={ic} className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5"><span className="text-sm shrink-0">{ic}</span>{!IS_TOUCH && <><span className="text-white/70 text-[11px] shrink-0">تدوير</span><input type="range" min={-180} max={180} value={Math.round(v.r ?? 0)} onChange={e => set(o => ({ ...o, r: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round(v.r ?? 0)}°</span></>}</div>)}
         </div>}
         {(xsel === 'poll' || xsel === 'ask') && <div className="mb-2 space-y-1.5 rounded-2xl bg-white/10 px-3 py-2">
-          {([['تدوير', -180, 180, 1, (xsel === 'poll' ? pollPos : askPos).r ?? 0, 'r', '°'], ['الحجم', 0.5, 2, 0.05, (xsel === 'poll' ? pollPos : askPos).s ?? 1, 's', '×']] as const).map(([lb, mn, mx, st, val, key, un]) => <div key={key} className="flex items-center gap-2"><span className="w-12 shrink-0 text-white/80 text-xs">{lb}</span><input type="range" min={mn} max={mx} step={st} value={val} onChange={e => (xsel === 'poll' ? setPollPos : setAskPos)(o => ({ ...o, [key]: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-11 text-center text-white text-xs tabular-nums" dir="ltr">{key === 'r' ? Math.round(val) : val.toFixed(2)}{un}</span></div>)}
+          {([['تدوير', -180, 180, 1, (xsel === 'poll' ? pollPos : askPos).r ?? 0, 'r', '°'], ['الحجم', 0.5, 2, 0.05, (xsel === 'poll' ? pollPos : askPos).s ?? 1, 's', '×']] as const).filter(r => !IS_TOUCH || r[5] !== 'r').map(([lb, mn, mx, st, val, key, un]) => <div key={key} className="flex items-center gap-2"><span className="w-12 shrink-0 text-white/80 text-xs">{lb}</span><input type="range" min={mn} max={mx} step={st} value={val} onChange={e => (xsel === 'poll' ? setPollPos : setAskPos)(o => ({ ...o, [key]: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-11 text-center text-white text-xs tabular-nums" dir="ltr">{key === 'r' ? Math.round(val) : val.toFixed(2)}{un}</span></div>)}
         </div>}
         {tool === 'poll' && <div className="space-y-2 mb-2">
           <input value={pq} onChange={e => setPq(e.target.value)} placeholder="سؤال الاستطلاع" className="w-full px-4 py-2 bg-white/10 rounded-full text-[16px] text-white placeholder-gray-400 focus:outline-none" />
@@ -4724,7 +4824,7 @@ function pctDrag(onMove?: (p: Pct) => void) {
 
 type StoryLy = { l: [number, string][]; st: number; c: string; p?: Pct };
 type LyState = { on: boolean; raw: [number, string][]; off: number; st: number; c: string; p: Pct };
-const LY_STYLES = ['كلاسيك', 'كاريوكي', 'صندوق', 'نيون', 'كلمة كلمة', 'ملصق'];
+const LY_STYLES = ['كلاسيك', 'كاريوكي', 'صندوق', 'نيون', 'كلمة كلمة', 'ملصق', 'تدرّج', 'زجاج'];
 const LY_COLORS = ['#ffffff', '#ffd23f', '#ff5d8f', '#4cc9f0', '#80ed99', '#b388ff', '#ff9e00', '#111111'];
 function lyInk(hex: string): string {
   const h = hex.replace('#', '');
@@ -4773,12 +4873,29 @@ function StoryLyrics({ ly, idx, onMove }: { ly: StoryLy; idx: number; onMove?: (
   else if (ly.st === 2) body = cur && <div key={idx} style={anim}><span className="text-[22px] font-extrabold leading-[1.75] px-2.5 py-0.5 rounded-lg" style={{ background: c, color: ink, boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone' }}>{cur}</span></div>;
   else if (ly.st === 3) body = cur && <div key={idx} className={big} style={{ color: '#fff', textShadow: `0 0 6px ${c}, 0 0 16px ${c}, 0 0 34px ${c}`, ...anim }}>{cur}</div>;
   else if (ly.st === 4) body = cur && <div key={idx} className={big} style={{ color: c, textShadow: sh }}>{cur.split(/\s+/).map((w, k, a) => <span key={k} className="inline-block" style={{ animation: 'kyWord .3s both', animationDelay: `${(k * dur * 0.7) / a.length}s`, marginInlineEnd: '0.28em' }}>{w}</span>)}</div>;
-  else body = cur && <div key={idx} style={anim}><span className="inline-block text-[22px] font-extrabold leading-tight px-4 py-2 rounded-2xl shadow-xl" style={{ background: c, color: ink, transform: `rotate(${idx % 2 ? -3 : 3}deg)` }}>{cur}</span></div>;
+  else if (ly.st === 5) body = cur && <div key={idx} style={anim}><span className="inline-block text-[22px] font-extrabold leading-tight px-4 py-2 rounded-2xl shadow-xl" style={{ background: c, color: ink, transform: `rotate(${idx % 2 ? -3 : 3}deg)` }}>{cur}</span></div>;
+  else if (ly.st === 6) body = cur && <div key={idx} className="text-[28px] font-black leading-tight" style={{ backgroundImage: `linear-gradient(100deg, ${c}, #ff5d8f 55%, #4cc9f0)`, WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 2px 10px rgba(0,0,0,.45))', ...anim }}>{cur}</div>;
+  else body = cur && <div key={idx} style={anim}><span className="inline-block text-[21px] font-bold leading-snug px-5 py-3 rounded-[26px]" style={{ background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(16px) saturate(1.6)', WebkitBackdropFilter: 'blur(16px) saturate(1.6)', border: '1px solid rgba(255,255,255,.38)', boxShadow: '0 8px 30px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.4)', color: c }}>{cur}</span></div>;
   return (
     <div onPointerDown={pctDrag(onMove)} style={{ left: `${p.x}%`, top: `${p.y}%`, transform: `translate(-50%,-50%) scale(${p.s ?? 1})`, touchAction: onMove ? 'none' : undefined, color: '#fff' }}
       className={`absolute z-10 w-[88%] text-center kan-always-white break-words ${onMove ? 'min-h-[3rem] cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-2xl p-1' : 'pointer-events-none'}`}>
       <style>{'@keyframes kyIn{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}@keyframes kyWord{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}'}</style>
       {body || (onMove ? <div className="text-sm opacity-60">كلمات الأغنية</div> : null)}
+    </div>
+  );
+}
+
+// Three choices for the song on a story: its lyrics, its cover, or nothing on screen.
+function MusicModeBar({ mode, onMode, hasCover, hasLyrics }: { mode: 'lyrics' | 'cover' | 'none'; onMode: (m: 'lyrics' | 'cover' | 'none') => void; hasCover: boolean; hasLyrics: boolean }) {
+  const items = [['lyrics', 'كلمات', TypeIcon, true], ['cover', 'غلاف', ImageIcon, hasCover], ['none', 'بدون', X, true]] as const;
+  return (
+    <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-black/30 ring-1 ring-white/10 backdrop-blur-xl">
+      {items.map(([k, l, Ic, ok]) => (
+        <button key={k} disabled={!ok} onClick={() => onMode(k)} className={`relative h-10 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all duration-200 active:scale-95 disabled:opacity-35 ${mode === k ? 'bg-gradient-to-br from-violet-500 to-cyan-400 text-white shadow-lg shadow-violet-500/30' : 'text-white/75'}`}>
+          <Ic size={15} color="#fff" strokeWidth={2.3} />{l}
+          {k === 'lyrics' && hasLyrics && mode !== 'lyrics' && <span className="absolute top-1.5 end-2 w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+        </button>
+      ))}
     </div>
   );
 }
@@ -4824,9 +4941,7 @@ function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPl
     <div className="mt-2 rounded-2xl bg-white/5 ring-1 ring-white/10 p-2 max-h-[46svh] overflow-y-auto no-scrollbar overscroll-contain">
       <div className="flex items-center justify-between gap-2 px-1">
         <span className="text-xs font-bold text-white flex items-center gap-1.5"><TypeIcon size={14} />كلمات الأغنية</span>
-        <button onClick={() => patch({ on: !ly.on })} role="switch" aria-checked={ly.on} aria-label="كلمات الأغنية" className={`w-11 h-6 rounded-full p-0.5 transition-colors ${ly.on ? 'bg-white' : 'bg-white/20'}`}>
-          <span className={`block w-5 h-5 rounded-full transition-transform ${ly.on ? 'bg-black rtl:-translate-x-5 ltr:translate-x-5' : 'bg-white'}`} />
-        </button>
+        <span className="text-[10px] text-white/60">مقطع {Math.round(clip)} ث بس</span>
       </div>
       {ly.on && <>
         <div className="flex gap-2 mt-2">
@@ -4855,9 +4970,12 @@ function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPl
               <button onClick={() => patch({ off: Math.round((ly.off + 0.5) * 10) / 10 })} className="px-2.5 h-8 rounded-full bg-white/10 text-white text-[11px]">أبطأ</button>
             </div>
           </div>
-          <p className="mt-2 px-1 text-[11px] text-white/70">اضغط على السطر اللي بيبدأ عنده الصوت المختار عشان تظبط التزامن</p>
-          <div className="mt-1 max-h-28 overflow-y-auto no-scrollbar overscroll-contain rounded-xl bg-black/30 p-1">
-            {ly.raw.map(([t, s], i) => <button key={i} onClick={() => patch({ off: Math.round((start - t) * 10) / 10 })} className={`block w-full text-start px-2 py-1 rounded-lg text-[12px] ${Math.abs(t + ly.off - start) < 0.3 ? 'bg-white/20 text-white font-bold' : 'text-white/80'}`} dir="auto">{s}</button>)}
+          <p className="mt-2 px-1 text-[11px] text-white/70">اختار الكوبليه: الكلمات هتبدأ من أول سطر تدوس عليه وتكمّل لحد آخر المقطع بس</p>
+          <div className="mt-1 max-h-36 overflow-y-auto no-scrollbar overscroll-contain rounded-xl bg-black/30 p-1">
+            {ly.raw.map(([t, s], i) => {
+              const at = t + ly.off; const first = Math.abs(at - start) < 0.3; const inside = at >= start - 0.3 && at <= start + clip;
+              return <button key={i} onClick={() => patch({ off: Math.round((start - t) * 10) / 10 })} className={`flex items-center gap-1.5 w-full text-start px-2 py-1.5 rounded-lg text-[12px] transition-colors ${first ? 'bg-gradient-to-r from-violet-500/50 to-cyan-400/40 text-white font-bold' : inside ? 'text-white' : 'text-white/35'}`} dir="auto">{first && <Play size={11} className="shrink-0" fill="white" />}<span className="min-w-0 truncate">{s}</span></button>;
+            })}
           </div>
         </>}
       </>}
@@ -5365,6 +5483,32 @@ function messageGestures(onReply: () => void, onLongPress: () => void) {
       if (st?.suppress) { e.stopPropagation(); e.preventDefault(); st.suppress = false; }
     },
   };
+}
+
+// Reaction picker: a fixed sheet that rides above the keyboard (so it never hides under it) with the quick emojis and a + that opens every emoji.
+function ReactionSheet({ current, onPick, onClose }: { current?: string; onPick: (emoji: string) => void; onClose: () => void }) {
+  const vp = useVisualViewport();
+  const [more, setMore] = useState(false);
+  const kb = Math.max(0, Math.round(window.innerHeight - vp.height - vp.top));
+  // Portal events still bubble through React to the message bubble (swipe-to-reply, long press...): stop them here.
+  const stop = { onClick: (e: React.SyntheticEvent) => e.stopPropagation(), onPointerUp: (e: React.SyntheticEvent) => e.stopPropagation(), onPointerMove: (e: React.SyntheticEvent) => e.stopPropagation(), onTouchStart: (e: React.SyntheticEvent) => e.stopPropagation(), onTouchMove: (e: React.SyntheticEvent) => e.stopPropagation(), onTouchEnd: (e: React.SyntheticEvent) => e.stopPropagation(), onContextMenu: (e: React.SyntheticEvent) => { e.stopPropagation(); e.preventDefault(); } };
+  return createPortal(
+    <>
+      <div data-msg-ui {...stop} onPointerDown={e => e.stopPropagation()} className="fixed inset-0 z-[158] bg-black/35" onClick={e => { e.stopPropagation(); onClose(); }} />
+      <div data-msg-ui {...stop} onPointerDown={e => e.stopPropagation()} dir={DIR} className="fixed inset-x-0 z-[159] flex justify-center px-3 pointer-events-none transition-[bottom] duration-150" style={{ bottom: `calc(${kb}px + 0.75rem + env(safe-area-inset-bottom))` }}>
+        <div className="pointer-events-auto w-full max-w-md rounded-[28px] bg-gray-900/95 backdrop-blur-2xl ring-1 ring-white/15 shadow-2xl shadow-black/60 overflow-hidden kan-pop" onPointerDown={e => { e.stopPropagation(); e.preventDefault(); }} onMouseDown={e => e.preventDefault()}>
+          <div className="flex items-center gap-1 p-2 overflow-x-auto no-scrollbar">
+            {QUICK_REACTIONS.map(e => (
+              <button key={e} onClick={() => onPick(e)} className={`shrink-0 w-11 h-11 text-[26px] rounded-full flex items-center justify-center active:scale-125 transition-transform ${current === e ? 'bg-violet-500/30 ring-1 ring-violet-300/60' : 'hover:bg-white/10'}`}>{e}</button>
+            ))}
+            <button onClick={() => { setMore(m => !m); (document.activeElement as HTMLElement | null)?.blur?.(); }} aria-label="كل الإيموجي" className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-all ${more ? 'bg-white text-black rotate-45' : 'bg-white/12 text-white'}`}><Plus size={22} /></button>
+          </div>
+          {more && <EmojiPicker docked onPick={onPick} onClose={() => setMore(false)} />}
+        </div>
+      </div>
+    </>,
+    document.body,
+  );
 }
 
 function EmojiPicker({ onPick, onClose, docked = false, onSticker, startOnStickers = false }: { onPick: (emoji: string) => void; onClose: () => void; docked?: boolean; onSticker?: (st: SavedSticker) => void; startOnStickers?: boolean }) {
@@ -6336,29 +6480,28 @@ export default function App() {
   setBackFallback(() => {
     if (currentUserId !== null && activeTab === 'feed' && !viewedUserId && selectedChat === null && window.scrollY > 120) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      if (!feedBusy.current) {
-        setHomeRefreshing(true);
-        void loadFeedFirst().finally(() => window.setTimeout(() => setHomeRefreshing(false), 400));
-      }
       return true;
     }
     return false;
   });
-  // Home button: back to the very top and refresh the feed, stories and reels, every time.
   const refreshHome = () => {
     notifyStoriesChanged();
     if (feedBusy.current) return;
     setHomeRefreshing(true);
     void loadFeedFirst().finally(() => window.setTimeout(() => setHomeRefreshing(false), 400));
   };
+  // One tap: back to the top only. Two quick taps: back to the top, then refresh.
   const onHomeTap = () => {
+    const now = Date.now();
+    const dbl = now - lastHomeTap.current < 450;
+    lastHomeTap.current = dbl ? 0 : now;
     if (activeTab !== 'feed' || viewedUserId) {
       goTab('feed');
-      window.setTimeout(() => { window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); refreshHome(); }, 60);
+      window.setTimeout(() => { window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); if (dbl) refreshHome(); }, 60);
       return;
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    refreshHome();
+    if (dbl) window.setTimeout(refreshHome, 280);
   };
   const openProfile = (id: string) => {
     if (id === currentUserId) {
@@ -6980,23 +7123,35 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
     const TRIGGER = 64;
     const MAX = 120;
     let startY = 0;
+    let startX = 0;
     let pulling = false;
     let dist = 0;
-    document.documentElement.style.overscrollBehaviorY = 'contain';
+    // The page must be resting at the very top (no scrolling or momentum in the last 300 ms) before a pull can start.
+    // Scrolling back up from the middle of the feed never refreshes it.
+    let lastScroll = performance.now();
+    let sawBelowTop = window.scrollY > 0;
+    const onScroll = () => { lastScroll = performance.now(); if (window.scrollY > 0) sawBelowTop = true; };
+    const html = document.documentElement; const body = document.body;
+    html.style.overscrollBehaviorY = 'none'; body.style.overscrollBehaviorY = 'none';
     const onStart = (e: TouchEvent) => {
-      pulling = !busyRef.current && window.scrollY <= 0 && e.touches.length === 1;
+      const restingAtTop = window.scrollY <= 0 && performance.now() - lastScroll > 300;
+      pulling = !busyRef.current && restingAtTop && e.touches.length === 1 && !(e.target as HTMLElement | null)?.closest('[data-no-ptr]');
+      sawBelowTop = false;
       startY = e.touches[0].clientY;
+      startX = e.touches[0].clientX;
       dist = 0;
     };
     const onMove = (e: TouchEvent) => {
       if (!pulling) return;
       const dy = e.touches[0].clientY - startY;
-      if (dy <= 0 || window.scrollY > 0) {
+      const dx = Math.abs(e.touches[0].clientX - startX);
+      if (dy <= 0 || window.scrollY > 0 || sawBelowTop || e.touches.length > 1 || (dx > dy && dist === 0)) {
         if (dist > 0) { dist = 0; setPull(0); setDragging(false); }
-        if (dy <= 0) pulling = false;
+        pulling = false;
         return;
       }
-      dist = Math.min(MAX, dy * 0.5);
+      if (dy < 12 && dist === 0) return; // ignore tiny drags
+      dist = Math.min(MAX, (dy - 12) * 0.5);
       setDragging(true);
       setPull(dist);
     };
@@ -7007,12 +7162,14 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
       if (dist >= TRIGGER) void doRefresh(); else setPull(0);
       dist = 0;
     };
+    window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('touchstart', onStart, { passive: true });
     window.addEventListener('touchmove', onMove, { passive: true });
     window.addEventListener('touchend', onEnd, { passive: true });
     window.addEventListener('touchcancel', onEnd, { passive: true });
     return () => {
-      document.documentElement.style.overscrollBehaviorY = '';
+      html.style.overscrollBehaviorY = ''; body.style.overscrollBehaviorY = '';
+      window.removeEventListener('scroll', onScroll);
       window.removeEventListener('touchstart', onStart);
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
@@ -9352,8 +9509,23 @@ const STUDIO_CF: { n: string; css: string; tint?: [string, number]; sp?: [string
   { n: 'ماتريكس', css: 'grayscale(1) sepia(1) hue-rotate(60deg) saturate(3) contrast(1.2)', tint: ['#22c55e', 0.22] },
   { n: 'سلبي', css: 'invert(1)' },
   { n: 'سايبر', css: 'saturate(2.2) contrast(1.2) hue-rotate(-60deg) brightness(1.05)', tint: ['#00e5ff', 0.14] },
+  // ---- Instagram-style + colour grading (strong) ----
+  { n: 'كلارندون', css: 'contrast(1.3) saturate(1.5) brightness(1.08)', sp: ['#1e4fd8', '#ffb25a'], v: 0.22 },
+  { n: 'جونو', css: 'contrast(1.15) saturate(1.7) brightness(1.05) sepia(.1)', sp: ['#2a7bff', '#ffd36b'], lk: '#ffb347', v: 0.2 },
+  { n: 'فالنسيا', css: 'contrast(1.05) brightness(1.1) saturate(1.2) sepia(.3)', tint: ['#ffd9a0', 0.2], bl: 0.2 },
+  { n: 'إكس برو', css: 'contrast(1.45) saturate(1.4) sepia(.2)', sp: ['#2b1b6b', '#ffd54f'], v: 0.65 },
+  { n: 'ناشفيل', css: 'sepia(.25) contrast(1.15) brightness(1.08) saturate(1.3) hue-rotate(-12deg)', sp: ['#2d3a8c', '#ff8fb1'], v: 0.25 },
+  { n: 'تيل وبرتقال', css: 'contrast(1.25) saturate(1.35)', sp: ['#0e8c9e', '#ff8a3d'], v: 0.3 },
+  { n: 'فابور ويف', css: 'contrast(1.1) saturate(1.7) brightness(1.05)', sp: ['#33d1ff', '#ff4fd8'], bl: 0.35 },
+  { n: 'سايبر بانك', css: 'contrast(1.35) saturate(1.9) brightness(.95)', sp: ['#00f0ff', '#ff2bd6'], bl: 0.3, v: 0.45 },
+  { n: 'دو تون ذهبي', css: 'grayscale(1) contrast(1.2) brightness(1.05) sepia(1) saturate(2.5) hue-rotate(-10deg)', v: 0.3 },
+  { n: 'ساعة ذهبية', css: 'contrast(1.1) saturate(1.5) brightness(1.1) sepia(.2)', sp: ['#ff6a3d', '#ffd27a'], lk: '#ffb347' },
+  { n: 'ليل مطر', css: 'contrast(1.3) brightness(.82) hue-rotate(205deg) saturate(1.1)', sp: ['#06143a', '#1c7bbf'], v: 0.55, bl: 0.15 },
+  { n: 'Y2K', css: 'contrast(1.2) saturate(1.5) brightness(1.15)', tint: ['#ffc2f0', 0.14], bl: 0.45 },
+  { n: 'ديسكو', css: 'contrast(1.25) saturate(2)', sp: ['#7c3aed', '#ff2d95'], bl: 0.4, lk: '#22d3ee' },
+  { n: 'فيلم 35', css: 'sepia(.2) contrast(1.15) saturate(1.3)', gr: 0.2, v: 0.4, lk: '#ff7a30' },
 ];
-const STUDIO_FX = ['بدون', 'نظارة', 'تاج', 'كلب', 'شنب', 'قلوب', 'نيون', 'قطة', 'أرنب', 'نظارة دائرية', 'شيطان', 'هالة', 'تاج ورد', 'قبعة', 'تخرج', 'خدود', 'أحمر شفاه', 'ظل عيون', 'نجوم', 'ثلج', 'نار', 'قناع', 'لحية', 'شبكة', 'عيون كبيرة', 'أنف مهرج', 'نظارة 3D', 'سماعات', 'ألماسة', 'قوس قزح', 'دموع', 'تنين', '✨ تجميل ذكي', '👀 عيون ضخمة', '😁 ابتسامة ضخمة', '🔮 وجه مجسّم', '🪞 مرآة', '📺 غلتش', '🧊 هولوجرام', '🥇 وجه ذهبي', '🎨 كارتون', '🦋 فراشات', '🤪 وجه ضخم', '🎈 رأس كبير', '😵 وجه ممطوط', '🫓 وجه مفلطح', '👄 فم عملاق', '🐽 أنف ضخم'];
+const STUDIO_FX = ['بدون', 'نظارة', 'تاج', 'كلب', 'شنب', 'قلوب', 'نيون', 'قطة', 'أرنب', 'نظارة دائرية', 'شيطان', 'هالة', 'تاج ورد', 'قبعة', 'تخرج', 'خدود', 'أحمر شفاه', 'ظل عيون', 'نجوم', 'ثلج', 'نار', 'قناع', 'لحية', 'شبكة', 'عيون كبيرة', 'أنف مهرج', 'نظارة 3D', 'سماعات', 'ألماسة', 'قوس قزح', 'دموع', 'تنين', '✨ تجميل ذكي', '👀 عيون ضخمة', '😁 ابتسامة ضخمة', '🔮 وجه مجسّم', '🪞 مرآة', '📺 غلتش', '🧊 هولوجرام', '🥇 وجه ذهبي', '🎨 كارتون', '🦋 فراشات', '🤪 وجه ضخم', '🎈 رأس كبير', '😵 وجه ممطوط', '🫓 وجه مفلطح', '👄 فم عملاق', '🐽 أنف ضخم', '👸 ملكة', '🥽 سايبر', '🌈 دموع ملونة', '💫 هالة نيون', '🧛 دراكولا', '🤖 روبوت', '🦄 يونيكورن', '🎉 حفلة', '👁️ عين ثالثة', '🌸 أنمي'];
 const FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
 type StudioTrack = { url: string; name: string; start: number; end: number; file?: File };
 type FaceGeo = { CW: number; vw: number; vh: number; sc: number; ox: number; oy: number; mirror: boolean };
@@ -9565,6 +9737,111 @@ function drawFaceFx(ctx: CanvasRenderingContext2D, fx: number, lm: FaceLm, g: Fa
       break;
     case 30: for (const c of [c1, c2]) { const f = (now / 14) % (fh * 0.6); emo('💧', { x: c.x, y: c.y + sep * 0.35 + f }, eye * 0.18); } break;
     case 41: for (let k = 0; k < 6; k++) { const a = now / 1100 + (k * Math.PI) / 3; emo('🦋', { x: nose.x + Math.cos(a) * fh * 0.72, y: nose.y - fh * 0.2 + Math.sin(a * 1.4) * fh * 0.45 }, eye * (0.3 + 0.06 * Math.sin(now / 180 + k)), Math.sin(a * 2) * 0.5); } break;
+    case 48: // royal tiara + earrings
+      rot(top, () => {
+        const w = eye * 1.1, y0 = fh * 0.04;
+        const gg = ctx.createLinearGradient(-w, 0, w, 0); gg.addColorStop(0, '#b8860b'); gg.addColorStop(0.5, '#ffe58a'); gg.addColorStop(1, '#b8860b');
+        ctx.fillStyle = gg; ctx.shadowColor = 'rgba(255,215,90,.85)'; ctx.shadowBlur = 14;
+        ctx.beginPath(); ctx.moveTo(-w, y0);
+        for (let k = -3; k <= 3; k++) { const x = (k * w) / 3.1; const hh = (k === 0 ? 0.36 : Math.abs(k) === 1 ? 0.27 : Math.abs(k) === 2 ? 0.2 : 0.12) * fh; ctx.lineTo(x - w * 0.1, y0 - hh * 0.45); ctx.lineTo(x, y0 - hh); ctx.lineTo(x + w * 0.1, y0 - hh * 0.45); }
+        ctx.lineTo(w, y0); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
+        rr(-w, y0 - fh * 0.02, w * 2, fh * 0.05, 6);
+        for (const [k, col] of [[-2, '#ff3b6b'], [0, '#4cc9ff'], [2, '#ff3b6b']] as const) { ctx.fillStyle = col; ell((k * w) / 3.1, y0 + fh * 0.005, eye * 0.05, eye * 0.05); }
+      });
+      for (const e of [P(234), P(454)]) { ctx.fillStyle = '#ffe58a'; ell(e.x, e.y + fh * 0.1, eye * 0.045, eye * 0.045); ctx.fillStyle = '#7ee0ff'; ell(e.x, e.y + fh * 0.15, eye * 0.05, eye * 0.08); }
+      break;
+    case 49: // cyber visor
+      rot(em, () => {
+        const w = sep * 1.75, h = sep * 0.62;
+        ctx.save(); ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 24;
+        const gg = ctx.createLinearGradient(-w / 2, 0, w / 2, 0); gg.addColorStop(0, 'rgba(34,211,238,.6)'); gg.addColorStop(1, 'rgba(236,72,153,.6)');
+        ctx.fillStyle = gg; rr(-w / 2, -h / 2, w, h, h * 0.45); ctx.restore();
+        ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillRect(((now / 9) % (w + 40)) - w / 2 - 20, -h / 2, 4, h);
+        ctx.fillStyle = 'rgba(255,255,255,.3)'; rr(-w / 2 + w * 0.06, -h * 0.38, w * 0.4, h * 0.14, 4);
+      });
+      break;
+    case 50: // rainbow tears
+      for (const c of [c1, c2]) {
+        ['#ff3b3b', '#ff9f1c', '#ffe14d', '#3ddc84', '#3aa0ff', '#8b5cf6'].forEach((col, k) => {
+          ctx.save(); ctx.strokeStyle = col; ctx.globalAlpha = 0.85; ctx.lineWidth = eye * 0.04; ctx.lineCap = 'round'; ctx.setLineDash([eye * 0.16, eye * 0.05]); ctx.lineDashOffset = -now / 18;
+          const x0 = c.x + (k - 2.5) * eye * 0.05;
+          ctx.beginPath(); ctx.moveTo(x0, c.y + sep * 0.22); ctx.bezierCurveTo(x0 + eye * 0.05, c.y + fh * 0.15, x0 - eye * 0.05, c.y + fh * 0.3, x0, c.y + fh * 0.46); ctx.stroke(); ctx.restore();
+        });
+      }
+      break;
+    case 51: { // neon aura
+      const hue = (now / 8) % 360;
+      for (const [sc, w, a] of [[1.1, 6, 0.9], [1.2, 3, 0.55]] as const) {
+        ctx.save(); ctx.shadowColor = `hsl(${hue},100%,60%)`; ctx.shadowBlur = 28; ctx.strokeStyle = `hsla(${(hue + (sc > 1.15 ? 60 : 0)) % 360},100%,70%,${a})`; ctx.lineWidth = w; ctx.beginPath();
+        FACE_OVAL.forEach((i, k) => { const p = P(i); const x = nose.x + (p.x - nose.x) * sc, y = nose.y + (p.y - nose.y) * sc; if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+        ctx.closePath(); ctx.stroke(); ctx.restore();
+      }
+      for (let k = 0; k < 8; k++) { const a = now / 700 + (k * Math.PI) / 4; const r = 4 + 2 * Math.sin(now / 120 + k); ctx.fillStyle = `hsl(${(hue + k * 40) % 360},100%,75%)`; ell(nose.x + Math.cos(a) * fh * 0.66, nose.y - fh * 0.05 + Math.sin(a) * fh * 0.62, r, r); }
+      break;
+    }
+    case 52: { // vampire
+      for (const c of [c1, c2]) { const gr = ctx.createRadialGradient(c.x, c.y + sep * 0.05, 0, c.x, c.y + sep * 0.05, sep * 0.62); gr.addColorStop(0, 'rgba(60,0,80,.55)'); gr.addColorStop(1, 'rgba(60,0,80,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(c.x, c.y + sep * 0.05, sep * 0.62, 0, Math.PI * 2); ctx.fill(); }
+      const mw = dist(mL, mR);
+      rot(lipU, () => {
+        for (const sg of [-1, 1]) { const x = sg * mw * 0.2; const len = fh * (open ? 0.1 : 0.07); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x - mw * 0.05, 0); ctx.lineTo(x + mw * 0.05, 0); ctx.lineTo(x, len); ctx.closePath(); ctx.fill(); }
+        ctx.fillStyle = '#c1121f'; ell(mw * 0.2, fh * 0.07 + ((now / 14) % (fh * 0.2)), mw * 0.022, mw * 0.034);
+      });
+      break;
+    }
+    case 53: { // robot
+      const cw = ctx.canvas.width, ch = ctx.canvas.height;
+      ctx.save(); ctx.beginPath(); FACE_OVAL.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.closePath(); ctx.clip();
+      const gg = ctx.createLinearGradient(nose.x - fh * 0.5, top.y, nose.x + fh * 0.5, chin.y); gg.addColorStop(0, 'rgba(230,236,248,.66)'); gg.addColorStop(0.5, 'rgba(120,132,160,.58)'); gg.addColorStop(1, 'rgba(220,226,240,.66)');
+      ctx.fillStyle = gg; ctx.fillRect(0, 0, cw, ch);
+      ctx.strokeStyle = 'rgba(25,35,55,.75)'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.lineTo(chin.x, chin.y); ctx.moveTo(P(234).x, mid(top, em).y); ctx.lineTo(P(454).x, mid(top, em).y); ctx.moveTo(P(172).x, mid(nose, chin).y); ctx.lineTo(P(397).x, mid(nose, chin).y); ctx.stroke();
+      ctx.restore();
+      for (const p of [P(205), P(425), P(234), P(454), P(150), P(379)]) { const gr = ctx.createRadialGradient(p.x - 1, p.y - 1, 0, p.x, p.y, eye * 0.05); gr.addColorStop(0, '#fff'); gr.addColorStop(1, '#6b7280'); ctx.fillStyle = gr; ell(p.x, p.y, eye * 0.05, eye * 0.05); }
+      for (const c of [c1, c2]) { const gr = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, sep * (0.34 + 0.04 * Math.sin(now / 150))); gr.addColorStop(0, 'rgba(255,60,60,.95)'); gr.addColorStop(1, 'rgba(255,60,60,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(c.x, c.y, sep * 0.4, 0, Math.PI * 2); ctx.fill(); }
+      rot(top, () => { ctx.strokeStyle = '#9aa3b5'; ctx.lineWidth = eye * 0.04; ctx.beginPath(); ctx.moveTo(0, fh * 0.02); ctx.lineTo(0, -fh * 0.25); ctx.stroke(); ctx.fillStyle = `rgba(255,60,60,${0.6 + 0.4 * Math.sin(now / 160)})`; ell(0, -fh * 0.27, eye * 0.07, eye * 0.07); });
+      break;
+    }
+    case 54: // unicorn
+      rot(top, () => {
+        const hh = fh * 0.62, bw = eye * 0.2;
+        const gg = ctx.createLinearGradient(0, 0, 0, -hh); gg.addColorStop(0, '#ffd1f2'); gg.addColorStop(1, '#fff3a8');
+        for (const sg of [-1, 1]) { ctx.fillStyle = '#ffb3d9'; ctx.beginPath(); ctx.moveTo(sg * eye * 0.42, fh * 0.04); ctx.lineTo(sg * eye * 0.7, fh * 0.02); ctx.lineTo(sg * eye * 0.62, -fh * 0.2); ctx.closePath(); ctx.fill(); }
+        ['#ff7ab8', '#b388ff', '#6ec6ff'].forEach((col, k) => { ctx.strokeStyle = col; ctx.lineWidth = eye * 0.06; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-eye * 0.75 + k * eye * 0.07, fh * 0.1); ctx.quadraticCurveTo(-eye * 1.0 + k * eye * 0.09, fh * 0.5, -eye * 0.8 + k * eye * 0.12, fh * 0.9); ctx.stroke(); });
+        ctx.save(); ctx.fillStyle = gg; ctx.shadowColor = '#ffe9a8'; ctx.shadowBlur = 16; ctx.beginPath(); ctx.moveTo(-bw, fh * 0.04); ctx.lineTo(0, -hh); ctx.lineTo(bw, fh * 0.04); ctx.closePath(); ctx.fill(); ctx.restore();
+        ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = eye * 0.03;
+        for (let k = 1; k <= 4; k++) { const y = (-hh * k) / 5; const w = bw * (1 - k / 5); ctx.beginPath(); ctx.moveTo(-w, y + fh * 0.03); ctx.lineTo(w, y - fh * 0.03); ctx.stroke(); }
+      });
+      for (let k = 0; k < 4; k++) emo('✨', { x: nose.x + Math.cos(now / 900 + k * 1.6) * fh * 0.7, y: nose.y - fh * 0.1 + Math.sin(now / 900 + k * 1.6) * fh * 0.5 }, eye * 0.24);
+      break;
+    case 55: { // party
+      rot(top, () => {
+        const hh = fh * 0.62, bw = eye * 0.42;
+        ctx.fillStyle = '#7c3aed'; ctx.beginPath(); ctx.moveTo(-bw, fh * 0.02); ctx.lineTo(0, -hh); ctx.lineTo(bw, fh * 0.02); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = eye * 0.05;
+        for (let k = 1; k <= 3; k++) { const y = (-hh * k) / 4 + fh * 0.02; const w = bw * (1 - k / 4); ctx.beginPath(); ctx.moveTo(-w, y); ctx.lineTo(w, y); ctx.stroke(); }
+        ctx.fillStyle = '#ff5d8f'; ell(0, -hh, eye * 0.1, eye * 0.1);
+      });
+      const cols = ['#ff3b6b', '#ffd23f', '#4cc9f0', '#80ed99', '#b388ff', '#ff9e00'];
+      for (let k = 0; k < 30; k++) { const x = nose.x + ((((k * 83) % 100) - 50) / 100) * fh * 1.7; const y = top.y - fh * 0.5 + ((now / 9 + k * 57) % (fh * 2.2)); ctx.save(); ctx.translate(x, y); ctx.rotate(now / 200 + k); ctx.fillStyle = cols[k % cols.length]; ctx.fillRect(-4, -2, 8, 4); ctx.restore(); }
+      break;
+    }
+    case 56: { // third eye
+      const p3 = mid(P(168), P(9)); const pul = 1 + 0.06 * Math.sin(now / 200);
+      rot(p3, () => {
+        ctx.save(); ctx.shadowColor = '#a78bfa'; ctx.shadowBlur = 22; ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.moveTo(-eye * 0.2 * pul, 0); ctx.quadraticCurveTo(0, -eye * 0.17 * pul, eye * 0.2 * pul, 0); ctx.quadraticCurveTo(0, eye * 0.17 * pul, -eye * 0.2 * pul, 0); ctx.fill(); ctx.restore();
+        const ix = Math.sin(now / 500) * eye * 0.05;
+        const gr = ctx.createRadialGradient(ix, 0, 0, ix, 0, eye * 0.1); gr.addColorStop(0, '#111'); gr.addColorStop(0.35, '#111'); gr.addColorStop(0.4, '#22d3ee'); gr.addColorStop(1, '#7c3aed');
+        ctx.fillStyle = gr; ell(ix, 0, eye * 0.095, eye * 0.095);
+        ctx.fillStyle = 'rgba(255,255,255,.9)'; ell(ix - eye * 0.03, -eye * 0.03, eye * 0.02, eye * 0.02);
+      });
+      break;
+    }
+    case 57: // anime
+      for (const p of [P(205), P(425)]) { const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, eye * 0.38); gr.addColorStop(0, 'rgba(255,90,140,.7)'); gr.addColorStop(1, 'rgba(255,90,140,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(p.x, p.y, eye * 0.38, 0, Math.PI * 2); ctx.fill(); }
+      for (const c of [c1, c2]) { ctx.fillStyle = 'rgba(255,255,255,.93)'; ell(c.x - sep * 0.08, c.y - sep * 0.1, sep * 0.075, sep * 0.075); ell(c.x + sep * 0.1, c.y + sep * 0.08, sep * 0.04, sep * 0.04); }
+      for (let k = 0; k < 5; k++) { const a = now / 1000 + k * 1.26; emo(k % 2 ? '💗' : '✨', { x: nose.x + Math.cos(a) * fh * 0.7, y: nose.y - fh * 0.2 + Math.sin(a * 1.3) * fh * 0.5 }, eye * 0.24); }
+      break;
     case 31: if (open) { const f = 1 + 0.15 * Math.sin(now / 70); emo('🔥', { x: lipL.x, y: lipL.y + fh * 0.2 }, fh * 0.5 * f, roll); } break;
     default: break;
   }
@@ -9653,7 +9930,7 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
         const lk = lmkRef.current; const now = performance.now();
         if (lk && now - lastDet > 45) { lastDet = now; try { lmRef.current = lk.detectForVideo(v, now).faceLandmarks?.[0] ?? null; } catch { /* skip this frame */ } }
         if (fxR.current >= 36 && fxR.current <= 37) warpFaceFx(ctx, c, fxR.current, null, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
-        else if (lmRef.current && ((fxR.current >= 32 && fxR.current <= 40) || fxR.current >= 42)) warpFaceFx(ctx, c, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
+        else if (lmRef.current && ((fxR.current >= 32 && fxR.current <= 40) || (fxR.current >= 42 && fxR.current <= 47))) warpFaceFx(ctx, c, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
         else if (lmRef.current) drawFaceFx(ctx, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now);
       }
       if (recOn.current && lyModeRef.current === 'video' && lyRef.current.length) {
@@ -13136,17 +13413,11 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                 })()}
                 {burst?.id === msg.id && <div className="relative h-0 w-full flex justify-center z-10 pointer-events-none"><span key={burst.k} className="absolute -top-4 text-4xl" style={{ animation: 'kanReactBurst 1s ease-out forwards' }}>{burst.e}</span></div>}
                 {reactingTo === msg.id && (
-                  <div data-msg-ui className={`kan-pop flex flex-wrap items-center gap-0.5 mt-1 p-1 bg-gray-800 rounded-full shadow-lg ${isMine ? 'flex-row-reverse' : ''}`}>
-                    {QUICK_REACTIONS.map(e => (
-                      <button
-                        key={e}
-                        onClick={() => { void setReaction(msg, e); setBurst({ id: msg.id, e, k: Date.now() }); window.setTimeout(() => setBurst(b => (b && b.id === msg.id ? null : b)), 1000); setReactingTo(null); setActiveMsgId(null); }}
-                        className="w-9 h-9 text-xl rounded-full hover:bg-gray-700 active:scale-125 transition-transform"
-                      >
-                        {e}
-                      </button>
-                    ))}
-                  </div>
+                  <ReactionSheet
+                    current={msg.reactions?.find(r => r.userId === currentUser.id)?.emoji}
+                    onClose={() => { setReactingTo(null); setActiveMsgId(null); }}
+                    onPick={e => { void setReaction(msg, e); setBurst({ id: msg.id, e, k: Date.now() }); window.setTimeout(() => setBurst(b => (b && b.id === msg.id ? null : b)), 1000); setReactingTo(null); setActiveMsgId(null); }}
+                  />
                 )}
                 {activeMsgId === msg.id && (
                   <div data-msg-ui className={`flex items-center gap-1.5 mt-1 ${isMine ? 'flex-row-reverse' : ''}`}>
