@@ -3780,7 +3780,7 @@ const bakeFilter = async (f: File, css: string): Promise<File | null> => {
     return blob ? new File([blob], `${f.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }) : null;
   } catch { return null; }
 };
-type StoryExtra = { d?: number; items?: { k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string }[]; bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'none'; tp?: { x: number; y: number; r?: number } }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean; k?: 'loc' | 'men' | 'lnk'; u?: string; r?: number }[]; stickers?: string[]; poll?: { q: string; a: string; b: string; o?: string[] }; pp?: { x: number; y: number; s?: number; r?: number }; ap?: { x: number; y: number; s?: number; r?: number }; ask?: string };
+type StoryExtra = { d?: number; items?: { k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string }[]; bg?: number; filter?: number; m?: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'none'; tp?: Pct; ly?: StoryLy }; sp?: { x: number; y: number }; texts?: { t: string; y: number; x?: number; c?: string; s?: number; bg?: boolean; k?: 'loc' | 'men' | 'lnk'; u?: string; r?: number }[]; stickers?: string[]; poll?: { q: string; a: string; b: string; o?: string[] }; pp?: { x: number; y: number; s?: number; r?: number }; ap?: { x: number; y: number; s?: number; r?: number }; ask?: string };
 
 type StoryItemEdit = { id: string; k: 'e' | 'i' | 't' | 'c'; v: string; x: number; y: number; s: number; c?: string; b?: boolean; r?: number; f?: number; l?: string; file?: File };
 const STORY_FONTS = ['inherit', 'Georgia, "Times New Roman", serif', '"Courier New", monospace', '"Segoe Script", "Comic Sans MS", cursive'];
@@ -4161,7 +4161,7 @@ function TextStoryComposer({ onClose, onNext }: { onClose: () => void; onNext: (
   );
 }
 
-function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId }: { file: File; currentUser: User; users: User[]; onClose: () => void; onDone: () => void; sharedPostId?: string }) {
+function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId, initialMusic }: { file: File; currentUser: User; users: User[]; onClose: () => void; onDone: () => void; sharedPostId?: string; initialMusic?: { url: string; name: string; start: number; end: number; file?: File } | null }) {
   useBackLayer(true, onClose);
   const [previewUrl] = useState(() => URL.createObjectURL(file));
   useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
@@ -4171,14 +4171,35 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [tool, setTool] = useState<'' | 'text' | 'sticker' | 'poll' | 'ask' | 'aud' | 'sched' | 'filter' | 'music' | 'frame'>(file.name === 'kix-text-story.jpg' ? 'text' : 'filter');
-  const [music, setMusic] = useState<File | null>(null);
-  const [mStart, setMStart] = useState(0);
-  const [mEnd, setMEnd] = useState(0);
+  const [music, setMusic] = useState<File | null>(initialMusic?.file ?? null);
+  const [mStart, setMStart] = useState(initialMusic?.start ?? 0);
+  const [mEnd, setMEnd] = useState(initialMusic?.end ?? 0);
   const musicPick = useRef<HTMLInputElement>(null);
-  const [remoteM, setRemoteM] = useState<{ url: string; name: string; cover?: string } | null>(null);
+  const [remoteM, setRemoteM] = useState<{ url: string; name: string; cover?: string } | null>(initialMusic && !initialMusic.file ? { url: initialMusic.url, name: initialMusic.name } : null);
   useEffect(() => { if (!music && !remoteM) return; const len = mEnd > mStart ? mEnd - mStart : 30; setDur(Math.max(3, Math.min(60, Math.round(len)))); }, [music, remoteM, mStart, mEnd]);
   const [mStyle, setMStyle] = useState<'cover' | 'text' | 'none'>('none');
   const [tp, setTp] = useState<Pct | undefined>(undefined);
+  const [ly, setLy] = useState<LyState>({ on: false, raw: [], off: 0, st: 0, c: '#ffffff', p: { x: 50, y: 42, s: 1 } });
+  const patchLy = (o: Partial<LyState>) => setLy(v => ({ ...v, ...o }));
+  const musicUrl = useMemo(() => (music ? URL.createObjectURL(music) : ''), [music]);
+  useEffect(() => () => { if (musicUrl) URL.revokeObjectURL(musicUrl); }, [musicUrl]);
+  const lySrc = musicUrl || remoteM?.url || '';
+  const [lyPlay, setLyPlay] = useState(false);
+  const [lyT, setLyT] = useState(0);
+  useEffect(() => {
+    if (!lyPlay || !lySrc) return;
+    const a = new Audio(lySrc);
+    const endT = mEnd > mStart ? mEnd : mStart + 30;
+    a.addEventListener('loadedmetadata', () => { a.currentTime = mStart; }, { once: true });
+    void a.play().catch(() => setLyPlay(false));
+    let raf = 0;
+    const loop = () => { raf = requestAnimationFrame(loop); if (a.currentTime >= endT) a.currentTime = mStart; setLyT(a.currentTime); };
+    raf = requestAnimationFrame(loop);
+    return () => { cancelAnimationFrame(raf); a.pause(); };
+  }, [lyPlay, lySrc, mStart, mEnd]);
+  useEffect(() => { if (tool !== 'music') setLyPlay(false); }, [tool]);
+  const lyLines = useMemo(() => ly.raw.map(([t, s]) => [t + ly.off, s] as [number, string]), [ly.raw, ly.off]);
+  const lyIdx = lyActive(lyLines, lyPlay ? lyT : mStart + 0.05);
   const [bgc, setBgc] = useState('#000000');
   const [rot, setRot] = useState(0);
   const [blurBg, setBlurBg] = useState(false);
@@ -4345,14 +4366,22 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           }
         }
       }
+      const lyEnd = mEnd > mStart ? mEnd : mStart + 30;
+      let lyPack: StoryLy | undefined;
+      if (ly.on && lyLines.length > 0 && (music || remoteM)) {
+        const within = lyLines.filter(([t]) => t <= lyEnd);
+        let first = 0; within.forEach(([t], k) => { if (t <= mStart) first = k; });
+        const l = within.slice(first, first + 80).map(([t, tx]) => [Math.round(t * 100) / 100, tx.slice(0, 140)] as [number, string]);
+        if (l.length) lyPack = { l, st: ly.st, c: ly.c, p: ly.p };
+      }
       let mObj: StoryExtra['m'];
       if (music) {
         const mp = musicPath(`${currentUser.id}/${crypto.randomUUID()}-music.${safeExt(music.name)}`, music.size);
         const { error: mErr } = await uploadWithProgress(POST_MEDIA_BUCKET, mp, music, music.type || 'audio/mpeg', '31536000');
         if (mErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); setErr(`تعذّر رفع الموسيقى: ${(mErr as { message?: string }).message ?? ''}`); setBusy(false); return; }
-        mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, style: 'none' };
+        mObj = { url: kanPublicUrl(POST_MEDIA_BUCKET, mp), name: music.name.replace(/\.[^.]+$/, '').slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, style: 'none', ...(lyPack ? { ly: lyPack } : {}) };
       } else if (remoteM) {
-        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, cover: remoteM.cover, style: mStyle === 'cover' && remoteM.cover ? 'cover' : 'none', ...(tp && mStyle === 'cover' ? { tp } : {}) };
+        mObj = { url: stableUrl(remoteM.url), name: remoteM.name.slice(0, 60), start: mStart, end: mEnd > mStart ? mEnd : mStart + 30, cover: remoteM.cover, style: mStyle === 'cover' && remoteM.cover ? 'cover' : 'none', ...(tp && mStyle === 'cover' ? { tp } : {}), ...(lyPack ? { ly: lyPack } : {}) };
       }
       const { error: insErr } = await supabase.from('stories').insert({ user_id: currentUser.id, shared_post_id: sharedPostId ?? null, media_url: url, media_type: isVideo ? 'video' : 'image', caption: caption.trim().slice(0, 300), extra: (() => { const eo: StoryExtra = { ...(baked ? { ...extra, filter: undefined } : extra), m: mObj, items: uploadedItems }; return Object.values(eo).some(Boolean) ? eo : null; })(), audience: aud, publish_at: at ? at.toISOString() : null, ...(at ? { expires_at: new Date(at.getTime() + 86400000).toISOString() } : {}) });
       if (insErr) { void kanRemove(POST_MEDIA_BUCKET, [path]); throw insErr; }
@@ -4436,7 +4465,8 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 to-transparent pointer-events-none z-[5]" />
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent pointer-events-none z-[5]" />
           <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600/50 to-cyan-500/50 backdrop-blur-xl ring-1 ring-white/25 text-white text-[11px] font-semibold pointer-events-none z-10 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />معاينة · 9:16</span>
-          {remoteM && !music && mStyle === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={q => setTp(o => ({ ...q, r: o?.r }))} />}
+          {remoteM && !music && mStyle === 'cover' && <StoryMusicTag m={{ name: remoteM.name, cover: remoteM.cover, style: 'cover' }} pos={tp} onMove={q => setTp(o => ({ ...q, r: o?.r, s: o?.s }))} />}
+          {(music || remoteM) && ly.on && lyLines.length > 0 && <StoryLyrics ly={{ l: lyLines, st: ly.st, c: ly.c, p: ly.p }} idx={lyIdx} onMove={tool === 'music' ? (q => patchLy({ p: { ...ly.p, x: q.x, y: q.y } })) : undefined} />}
           {fltName && <div className="absolute inset-x-0 top-1/3 text-center text-white text-3xl font-extrabold drop-shadow-lg pointer-events-none z-10">{fltName}</div>}
           <div className="absolute top-12 end-2 min-[400px]:end-3 z-20 flex flex-col gap-1.5 min-[400px]:gap-2 max-h-[calc(100%-4rem)] overflow-y-auto no-scrollbar">
             {([['text', TypeIcon, 'نص', items.some(i => i.k === 't')], ['sticker', Smile, 'ملصق', items.length > 0], ['music', Music, 'موسيقى', !!music || !!remoteM], ['filter', Wand2, 'فلتر', flt > 0], ...(isVideo ? [] : [['frame', ImageIcon, 'الخلفية والتدوير', bgc !== '#000000' || rot !== 0] as const]), ['draw', Pencil, 'رسم', strokes.current.length > 0], ['poll', BarChart3, 'استطلاع', !!extra.poll], ['ask', HelpCircle, 'سؤال', !!extra.ask], ['count', Clock, 'عدّاد', items.some(i => i.k === 'c')], ['dur', Play, 'مدة العرض', dur !== 5], ['aud', Users, 'مقربين', aud === 'close'], ['sched', Calendar, 'جدولة', !!sched]] as const).map(([k, Ic, label, on]) => (
@@ -4506,14 +4536,16 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
               {remoteM && <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-2">
                 <div className="flex items-center gap-2 px-2 pt-1 text-xs text-white"><Music size={14} className="text-fuchsia-300" /><span className="flex-1 truncate" dir="auto">{remoteM.name}</span><button onClick={() => { setRemoteM(null); setMStart(0); setMEnd(0); }} className="p-1 text-white/60" aria-label="إزالة"><X size={14} /></button></div>
                 <div className="flex gap-2 px-2 mt-2">{([['cover', '🖼 غلاف'], ['none', '🚫 بدون غلاف']] as const).filter(([k]) => k !== 'cover' || !!remoteM.cover).map(([k, l]) => <button key={k} onClick={() => setMStyle(k)} className={`flex-1 py-1.5 rounded-full text-xs font-semibold ${mStyle === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}</div>
-                {mStyle === 'cover' && <div className="mt-1.5 flex items-center gap-2 px-2"><span className="text-[11px] text-gray-300 shrink-0">اسحب الغلاف لتحريكه · تدوير</span><input type="range" min={-180} max={180} value={Math.round(tp?.r ?? 0)} onChange={e => setTp(o => ({ x: o?.x ?? 50, y: o?.y ?? 62, r: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round(tp?.r ?? 0)}°</span></div>}
+                {mStyle === 'cover' && <div className="mt-1.5 flex items-center gap-2 px-2"><span className="text-[11px] text-gray-300 shrink-0">اسحب الغلاف لتحريكه · تدوير</span><input type="range" min={-180} max={180} value={Math.round(tp?.r ?? 0)} onChange={e => setTp(o => ({ x: o?.x ?? 50, y: o?.y ?? 62, s: o?.s, r: Number(e.target.value) }))} className="flex-1 min-w-0 accent-violet-400" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round(tp?.r ?? 0)}°</span></div>}
+                {mStyle === 'cover' && <div className="mt-1.5 flex items-center gap-2 px-2"><span className="text-[11px] text-gray-300 shrink-0">حجم الغلاف</span><input type="range" min={0.4} max={1.6} step={0.05} value={tp?.s ?? 1} onChange={e => setTp(o => ({ x: o?.x ?? 50, y: o?.y ?? 62, r: o?.r, s: Number(e.target.value) }))} className="flex-1 min-w-0 accent-white" /><span className="w-10 text-center text-white text-[11px] tabular-nums" dir="ltr">{Math.round((tp?.s ?? 1) * 100)}%</span></div>}
                 <div className="mt-2"><MusicTrimmer key={remoteM.url} src={remoteM.url} name={remoteM.name} start={mStart} end={mEnd} onStart={setMStart} onEnd={setMEnd} /></div>
               </div>}
               {remoteM && !libOpen
                 ? <button onClick={() => setLibOpen(true)} className="w-full py-2.5 rounded-2xl bg-white/10 text-white text-xs font-semibold">تغيير الأغنية</button>
                 : <MusicLibrary onDevice={() => musicPick.current?.click()} onClose={remoteM ? () => setLibOpen(false) : undefined} onPick={t => { setMusic(null); setRemoteM(t); setMStart(t.start ?? 0); setMEnd(t.end ?? 0); setMStyle(t.cover ? 'cover' : 'none'); setLibOpen(false); }} />}
             </div>}
-          <input ref={musicPick} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setMusic(f); setRemoteM(null); setMStart(0); setMEnd(0); } }} /></div>}
+          <input ref={musicPick} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setMusic(f); setRemoteM(null); setMStart(0); setMEnd(0); } }} />
+          {(music || remoteM) && <StoryLyricsEditor ly={ly} patch={patchLy} name={music ? music.name : remoteM?.name ?? ''} isFile={!!music} start={mStart} end={mEnd} playing={lyPlay} setPlaying={setLyPlay} />}</div>}
         {tool === 'tags' && <div className="space-y-2 mb-2">{([[MapPin, loc, setLoc, 'أضف موقعاً'], [AtSign, men, setMen, 'منشن لصديق (اسم المستخدم)'], [LinkIcon, lnk, setLnk, 'رابط أو هاشتاج']] as const).map(([Ic, v, set, ph]) => <div key={ph} className="flex items-center gap-2 bg-white/10 rounded-full ps-3"><Ic size={18} color="#fff" strokeWidth={2.2} /><input value={v} onChange={e => set(e.target.value)} placeholder={ph} className="flex-1 min-w-0 px-2 py-2 bg-transparent text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>)}
           {menHints.length > 0 && <div className="flex gap-2 overflow-x-auto no-scrollbar">{menHints.map(u => <button key={u.id} onClick={() => setMen(u.username)} className="shrink-0 flex items-center gap-2 pe-3 ps-1 py-1 rounded-full bg-white/10 text-white text-xs active:scale-95"><Avatar userId={u.id} src={u.avatar} name={u.displayName} size="sm" />@{u.username}</button>)}</div>}
           {menName && !menUser && menHints.length === 0 && <p className="text-[11px] text-amber-300 px-2">مفيش مستخدم بالاسم ده، اختار حد من المقترحات</p>}
@@ -4578,7 +4610,7 @@ async function shrinkImageFile(f: File): Promise<File> {
   } catch { return f; }
 }
 
-type Pct = { x: number; y: number; r?: number };
+type Pct = { x: number; y: number; r?: number; s?: number };
 // Drag an absolutely-positioned child around its parent; reports the position in % of the parent.
 function pctDrag(onMove?: (p: Pct) => void) {
   return (e: React.PointerEvent<HTMLDivElement>) => {
@@ -4594,12 +4626,155 @@ function pctDrag(onMove?: (p: Pct) => void) {
   };
 }
 
+type StoryLy = { l: [number, string][]; st: number; c: string; p?: Pct };
+type LyState = { on: boolean; raw: [number, string][]; off: number; st: number; c: string; p: Pct };
+const LY_STYLES = ['كلاسيك', 'كاريوكي', 'صندوق', 'نيون', 'كلمة كلمة', 'ملصق'];
+const LY_COLORS = ['#ffffff', '#ffd23f', '#ff5d8f', '#4cc9f0', '#80ed99', '#b388ff', '#ff9e00', '#111111'];
+function lyInk(hex: string): string {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map(x => x + x).join('') : h, 16);
+  if (Number.isNaN(n)) return '#111';
+  return (((n >> 16) & 255) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 > 150 ? '#111' : '#fff';
+}
+function parseLrc(txt: string): [number, string][] {
+  const out: [number, string][] = [];
+  for (const line of txt.split('\n')) {
+    const tags = Array.from(line.matchAll(/\[(\d{1,3}):(\d{1,2}(?:[.:]\d{1,3})?)\]/g));
+    if (!tags.length) continue;
+    const text = line.replace(/\[[^\]]*\]/g, '').trim();
+    if (!text) continue;
+    for (const m of tags) out.push([Number(m[1]) * 60 + Number(m[2].replace(':', '.')), text.slice(0, 140)]);
+  }
+  return out.sort((a, b) => a[0] - b[0]);
+}
+function lyActive(l: [number, string][], t: number): number {
+  let i = -1;
+  for (let k = 0; k < l.length; k++) { if (l[k][0] <= t) i = k; else break; }
+  return i >= 0 && t - l[i][0] > 9 ? -1 : i;
+}
+
+// Song lyrics shown over a story, in step with the music (Instagram style), with 6 looks and any colour.
+function StoryLyrics({ ly, idx, onMove }: { ly: StoryLy; idx: number; onMove?: (p: Pct) => void }) {
+  const p = ly.p ?? { x: 50, y: 42, s: 1 };
+  const c = ly.c || '#ffffff';
+  const ink = lyInk(c);
+  const cur = idx >= 0 ? ly.l[idx]?.[1] ?? '' : '';
+  const prev = idx > 0 ? ly.l[idx - 1]?.[1] ?? '' : '';
+  const next = idx >= 0 ? ly.l[idx + 1]?.[1] ?? '' : ly.l[0]?.[1] ?? '';
+  const dur = idx >= 0 && ly.l[idx + 1] ? Math.min(5, Math.max(0.8, ly.l[idx + 1][0] - ly.l[idx][0])) : 3;
+  const sh = '0 2px 14px rgba(0,0,0,.55)';
+  const anim: React.CSSProperties = { animation: 'kyIn .35s cubic-bezier(.2,.8,.2,1) both' };
+  const big = 'text-[26px] font-extrabold leading-tight';
+  let body: React.ReactNode = null;
+  if (ly.st === 0) body = cur && <div key={idx} className={big} style={{ color: c, textShadow: sh, ...anim }}>{cur}</div>;
+  else if (ly.st === 1) body = (
+    <div className="space-y-1.5">
+      {prev && <div className="text-base font-bold opacity-45" style={{ color: '#fff', textShadow: sh }}>{prev}</div>}
+      {cur && <div key={idx} className={big} style={{ color: c, textShadow: sh, ...anim }}>{cur}</div>}
+      {next && <div className="text-base font-bold opacity-45" style={{ color: '#fff', textShadow: sh }}>{next}</div>}
+    </div>
+  );
+  else if (ly.st === 2) body = cur && <div key={idx} style={anim}><span className="text-[22px] font-extrabold leading-[1.75] px-2.5 py-0.5 rounded-lg" style={{ background: c, color: ink, boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone' }}>{cur}</span></div>;
+  else if (ly.st === 3) body = cur && <div key={idx} className={big} style={{ color: '#fff', textShadow: `0 0 6px ${c}, 0 0 16px ${c}, 0 0 34px ${c}`, ...anim }}>{cur}</div>;
+  else if (ly.st === 4) body = cur && <div key={idx} className={big} style={{ color: c, textShadow: sh }}>{cur.split(/\s+/).map((w, k, a) => <span key={k} className="inline-block" style={{ animation: 'kyWord .3s both', animationDelay: `${(k * dur * 0.7) / a.length}s`, marginInlineEnd: '0.28em' }}>{w}</span>)}</div>;
+  else body = cur && <div key={idx} style={anim}><span className="inline-block text-[22px] font-extrabold leading-tight px-4 py-2 rounded-2xl shadow-xl" style={{ background: c, color: ink, transform: `rotate(${idx % 2 ? -3 : 3}deg)` }}>{cur}</span></div>;
+  return (
+    <div onPointerDown={pctDrag(onMove)} style={{ left: `${p.x}%`, top: `${p.y}%`, transform: `translate(-50%,-50%) scale(${p.s ?? 1})`, touchAction: onMove ? 'none' : undefined, color: '#fff' }}
+      className={`absolute z-10 w-[88%] text-center kan-always-white break-words ${onMove ? 'min-h-[3rem] cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-2xl p-1' : 'pointer-events-none'}`}>
+      <style>{'@keyframes kyIn{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}@keyframes kyWord{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}'}</style>
+      {body || (onMove ? <div className="text-sm opacity-60">كلمات الأغنية</div> : null)}
+    </div>
+  );
+}
+
+function StoryLyricsEditor({ ly, patch, name, isFile, start, end, playing, setPlaying }: {
+  ly: LyState; patch: (o: Partial<LyState>) => void; name: string; isFile: boolean; start: number; end: number; playing: boolean; setPlaying: (b: boolean) => void;
+}) {
+  const [msg, setMsg] = useState('');
+  const [txt, setTxt] = useState('');
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const clip = end > start ? end - start : 30;
+  const applyText = (text: string): number => {
+    const lrc = parseLrc(text);
+    if (lrc.length) { patch({ raw: lrc, on: true, off: isFile ? 0 : Math.round((start - lrc[0][0]) * 10) / 10 }); return lrc.length; }
+    const lines = text.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 60);
+    if (!lines.length) return 0;
+    const step = Math.max(1.8, clip / lines.length);
+    patch({ raw: lines.map((s, i) => [start + i * step, s.slice(0, 140)] as [number, string]), on: true, off: 0 });
+    return lines.length;
+  };
+  const find = async () => {
+    setBusy(true); setMsg('بدوّر على الكلمات...');
+    const q = name.replace(/\.[^.]+$/, '').replace(/\s[-–]\s/g, ' ').replace(/_+/g, ' ').slice(0, 100);
+    try {
+      const r = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`);
+      const j = await r.json() as { syncedLyrics?: string | null; plainLyrics?: string | null }[];
+      const hit = j.find(x => x.syncedLyrics);
+      const lrc = hit?.syncedLyrics ? parseLrc(hit.syncedLyrics) : [];
+      if (lrc.length) {
+        patch({ raw: lrc, on: true, off: isFile ? 0 : Math.round((start - lrc[0][0]) * 10) / 10 });
+        setMsg(isFile ? 'لقيت الكلمات متزامنة' : 'لقيت الكلمات. اضغط على السطر اللي بيبدأ عنده المقطع عشان تظبط التزامن');
+      } else {
+        const plain = j.find(x => x.plainLyrics)?.plainLyrics;
+        if (plain) { applyText(plain); setMsg('لقيت الكلمات من غير توقيت، وزّعتها على المقطع. عدّل التوقيت يدوي لو محتاج'); }
+        else setMsg('مالقيتش كلمات للأغنية دي، اكتبها أو الصقها بنفسك');
+      }
+    } catch { setMsg('تعذّر البحث، اتأكد من الإنترنت'); }
+    finally { setBusy(false); }
+  };
+  const chip = (on: boolean) => `shrink-0 px-3 h-8 rounded-full text-xs font-semibold ${on ? 'bg-white text-black' : 'bg-white/10 text-white'}`;
+  return (
+    <div className="mt-2 rounded-2xl bg-white/5 ring-1 ring-white/10 p-2 max-h-[46svh] overflow-y-auto overscroll-contain">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <span className="text-xs font-bold text-white flex items-center gap-1.5"><TypeIcon size={14} />كلمات الأغنية</span>
+        <button onClick={() => patch({ on: !ly.on })} role="switch" aria-checked={ly.on} aria-label="كلمات الأغنية" className={`w-11 h-6 rounded-full p-0.5 transition-colors ${ly.on ? 'bg-white' : 'bg-white/20'}`}>
+          <span className={`block w-5 h-5 rounded-full transition-transform ${ly.on ? 'bg-black rtl:-translate-x-5 ltr:translate-x-5' : 'bg-white'}`} />
+        </button>
+      </div>
+      {ly.on && <>
+        <div className="flex gap-2 mt-2">
+          <button onClick={() => void find()} disabled={busy} className="flex-1 min-w-0 py-2 rounded-full bg-white text-black text-xs font-bold disabled:opacity-60 truncate">{busy ? 'بدوّر...' : 'بحث تلقائي عن الكلمات'}</button>
+          <button onClick={() => setOpen(o => !o)} className="flex-1 min-w-0 py-2 rounded-full bg-white/10 text-white text-xs font-semibold truncate">اكتب أو الصق الكلمات</button>
+        </div>
+        {msg && <p className="mt-1.5 px-1 text-[11px] text-white/80">{msg}</p>}
+        {open && (
+          <div className="mt-2">
+            <textarea value={txt} onChange={e => setTxt(e.target.value)} rows={5} placeholder="اكتب سطور الكوبليه، كل سطر لوحده. أو الصق كلمات بصيغة LRC فيها التوقيت" className="w-full rounded-xl bg-white/10 p-2 text-base text-white placeholder-white/40 outline-none resize-none" />
+            <button onClick={() => { const n = applyText(txt); setMsg(n ? `تم تطبيق ${n} سطر` : 'اكتب الكلمات الأول'); if (n) setOpen(false); }} className="mt-1.5 w-full py-2 rounded-full bg-white/10 text-white text-xs font-semibold">تطبيق</button>
+          </div>
+        )}
+        {ly.raw.length > 0 && <>
+          <div className="mt-2 flex gap-2 overflow-x-auto no-scrollbar">{LY_STYLES.map((n, i) => <button key={n} onClick={() => patch({ st: i })} className={chip(ly.st === i)}>{n}</button>)}</div>
+          <div className="mt-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {LY_COLORS.map(col => <button key={col} onClick={() => patch({ c: col })} aria-label="لون الكلمات" className={`shrink-0 w-7 h-7 rounded-full border-2 ${ly.c === col ? 'border-white scale-110' : 'border-white/30'}`} style={{ background: col }} />)}
+            <input type="color" value={/^#[0-9a-f]{6}$/i.test(ly.c) ? ly.c : '#ffffff'} onChange={e => patch({ c: e.target.value })} aria-label="لون مخصص" className="shrink-0 w-7 h-7 rounded-full bg-transparent border-2 border-white/30 p-0" />
+          </div>
+          <div className="mt-2 flex items-center gap-2 px-1"><span className="text-[11px] text-gray-300 shrink-0">الحجم · اسحب الكلمات لتحريكها</span><input type="range" min={0.6} max={1.6} step={0.05} value={ly.p.s ?? 1} onChange={e => patch({ p: { ...ly.p, s: Number(e.target.value) } })} className="flex-1 min-w-0 accent-white" /></div>
+          <div className="mt-2 flex items-center gap-2">
+            <button onClick={() => setPlaying(!playing)} className="shrink-0 px-3 h-8 rounded-full bg-white text-black text-xs font-bold flex items-center gap-1.5">{playing ? <Pause size={13} /> : <Play size={13} />}{playing ? 'إيقاف' : 'جرّب مع الصوت'}</button>
+            <div className="flex-1 min-w-0 flex items-center justify-end gap-1.5">
+              <button onClick={() => patch({ off: Math.round((ly.off - 0.5) * 10) / 10 })} className="px-2.5 h-8 rounded-full bg-white/10 text-white text-[11px]">أبكر</button>
+              <span className="text-[11px] text-white tabular-nums w-12 text-center" dir="ltr">{ly.off.toFixed(1)}s</span>
+              <button onClick={() => patch({ off: Math.round((ly.off + 0.5) * 10) / 10 })} className="px-2.5 h-8 rounded-full bg-white/10 text-white text-[11px]">أبطأ</button>
+            </div>
+          </div>
+          <p className="mt-2 px-1 text-[11px] text-white/70">اضغط على السطر اللي بيبدأ عنده الصوت المختار عشان تظبط التزامن</p>
+          <div className="mt-1 max-h-28 overflow-y-auto overscroll-contain rounded-xl bg-black/30 p-1">
+            {ly.raw.map(([t, s], i) => <button key={i} onClick={() => patch({ off: Math.round((start - t) * 10) / 10 })} className={`block w-full text-start px-2 py-1 rounded-lg text-[12px] ${Math.abs(t + ly.off - start) < 0.3 ? 'bg-white/20 text-white font-bold' : 'text-white/80'}`} dir="auto">{s}</button>)}
+          </div>
+        </>}
+      </>}
+    </div>
+  );
+}
+
 function StoryMusicTag({ m, pos, onMove }: { m: { name: string; cover?: string; style?: 'cover' | 'text' | 'none' }; pos?: Pct; onMove?: (p: Pct) => void }) {
   if (m.style === 'none') return null;
   const cover = m.style === 'cover' && !!m.cover;
   const p = pos ?? (cover ? { x: 50, y: 62 } : { x: 50, y: 13 });
   return (
-    <div onPointerDown={pctDrag(onMove)} style={{ left: `${p.x}%`, top: `${p.y}%`, transform: `translate(-50%,-50%) rotate(${p.r ?? 0}deg)`, touchAction: onMove ? 'none' : undefined, color: '#fff' }}
+    <div onPointerDown={pctDrag(onMove)} style={{ left: `${p.x}%`, top: `${p.y}%`, transform: `translate(-50%,-50%) rotate(${p.r ?? 0}deg) scale(${p.s ?? 1})`, touchAction: onMove ? 'none' : undefined, color: '#fff' }}
       className={`absolute z-10 w-fit max-w-[80%] kan-always-white ${onMove ? 'cursor-grab active:cursor-grabbing ring-1 ring-dashed ring-white/50 rounded-2xl' : 'pointer-events-none'}`}>
       {cover ? (
         <div className="flex items-center gap-3 p-2 pe-4 rounded-2xl bg-white/20 backdrop-blur-xl ring-1 ring-white/30 shadow-xl">
@@ -4613,9 +4788,17 @@ function StoryMusicTag({ m, pos, onMove }: { m: { name: string; cover?: string; 
   );
 }
 
-function StoryMusic({ m, paused = false }: { paused?: boolean; m: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'none'; tp?: Pct } }) {
+function StoryMusic({ m, paused = false }: { paused?: boolean; m: { url: string; name: string; start: number; end: number; cover?: string; style?: 'cover' | 'text' | 'none'; tp?: Pct; ly?: StoryLy } }) {
   const ref = useRef<HTMLAudioElement>(null);
   const [mute, setMute] = useState(false);
+  const [lyIdx, setLyIdx] = useState(-1);
+  useEffect(() => {
+    const l = m.ly?.l; if (!l || l.length === 0) return;
+    let raf = 0;
+    const loop = () => { raf = requestAnimationFrame(loop); const a = ref.current; if (a) setLyIdx(lyActive(l, a.currentTime)); };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [m.ly]);
   const end = m.end > m.start ? m.end : m.start + 30;
   // Stay inside the chosen clip: start exactly at its beginning (even before metadata has loaded) and loop at its end.
   useEffect(() => {
@@ -4634,6 +4817,7 @@ function StoryMusic({ m, paused = false }: { paused?: boolean; m: { url: string;
         onTimeUpdate={e => { const a = e.currentTarget; if (a.currentTime >= end || a.currentTime < m.start - 0.3) { a.currentTime = m.start; if (a.paused) void a.play().catch(() => undefined); } }}
         onEnded={e => { const a = e.currentTarget; a.currentTime = m.start; void a.play().catch(() => undefined); }} />
       <StoryMusicTag m={m} pos={m.tp} />
+      {m.ly && <StoryLyrics ly={m.ly} idx={lyIdx} />}
       <button onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setMute(v => !v); }} aria-label={mute ? 'تشغيل الصوت' : 'كتم الصوت'} className="absolute top-16 end-3 z-20 w-8 h-8 rounded-full bg-black/45 backdrop-blur ring-1 ring-white/30 flex items-center justify-center">{mute ? <VolumeX size={16} color="#fff" /> : <Volume2 size={16} color="#fff" />}</button>
     </>
   );
@@ -5446,7 +5630,7 @@ function translateAuthError(message: string): string {
 
 function StatusScreen({ text, actions }: { text: string; actions?: { label: string; onClick: () => void }[] }) {
   return (
-    <div dir={DIR} className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4 p-4 text-center text-gray-300">
+    <div dir={DIR} className="min-h-[100dvh] bg-gray-950 flex flex-col items-center justify-center gap-4 p-4 text-center text-gray-300">
       <img src={LOGO_URL} alt="" className="w-16 h-16 rounded-2xl" />
       <h1 className="text-4xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">KIX</h1>
       <p>{text}</p>
@@ -6029,6 +6213,10 @@ export default function App() {
   openReelHandler = id => { setReelStart(id); goTab('reels'); };
   createFromAudio = () => goTab('create');
   const [introDone, setIntroDone] = useState(false);
+  useEffect(() => { // keep fixed screens steady when the keyboard / browser bars move
+    const m = document.querySelector('meta[name="viewport"]'); const c = m?.getAttribute('content') ?? '';
+    if (m && !/interactive-widget/.test(c)) m.setAttribute('content', `${c || 'width=device-width, initial-scale=1'}, viewport-fit=cover, interactive-widget=resizes-visual`);
+  }, []);
   useEffect(() => {
     const t = window.setTimeout(() => setIntroDone(true), 1500);
     return () => window.clearTimeout(t);
@@ -6157,7 +6345,8 @@ export default function App() {
   }
 
   return (
-    <div dir={LANG === 'en' ? 'ltr' : 'rtl'} className="min-h-screen bg-gray-950 text-white font-sans">
+    <div dir={LANG === 'en' ? 'ltr' : 'rtl'} className="min-h-[100dvh] bg-gray-950 text-white font-sans overflow-x-clip">
+      <style>{'html,body{-webkit-text-size-adjust:100%;overflow-x:hidden}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
       <KanDialogHost />
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={popScreen} />}
@@ -6231,7 +6420,7 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <main onTouchStart={swipeStart} onTouchEnd={swipeEnd} className="kan-enter pt-16 pb-20 w-full min-h-screen md:px-4 lg:px-8">
+      <main onTouchStart={swipeStart} onTouchEnd={swipeEnd} className="kan-enter pt-16 pb-20 w-full min-h-[100dvh] md:px-4 lg:px-8">
         <InstallBanner />
         <>
           {viewedUserId && (
@@ -6491,7 +6680,7 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
   };
 
   return (
-    <div dir={DIR} className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+    <div dir={DIR} className="min-h-[100dvh] bg-gray-950 flex items-center justify-center p-4">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         <div className="text-center mb-8">
           <img src={LOGO_URL} alt="" className="w-20 h-20 mx-auto mb-3 rounded-2xl shadow-lg shadow-violet-500/20" />
@@ -8455,7 +8644,7 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
               {job.status === 'run' ? t('جارٍ النشر...') : job.status === 'done' ? t('تم النشر') : t('تعذّر النشر، حاول مرة أخرى')}{job.label ? ` · ${job.label}` : ''}
             </span>
             {job.status === 'run'
-              ? <span className="flex items-center gap-2"><span className="tabular-nums font-bold text-cyan-300">{job.pct}%</span><button onClick={() => cancelJob(job.id)} aria-label="إلغاء الرفع" className="p-1 text-red-400 hover:text-red-300"><X size={14} /></button></span>
+              ? <span className="flex items-center gap-2"><span className="tabular-nums font-bold text-white">{job.pct}%</span><button onClick={() => cancelJob(job.id)} aria-label="إلغاء الرفع" className="p-1 text-red-400 hover:text-white"><X size={14} /></button></span>
               : <button onClick={() => dropJob(job.id)} aria-label="إغلاق" className="p-1 text-gray-400 hover:text-white"><X size={14} /></button>}
           </div>
           {job.status === 'run' && (
@@ -8465,14 +8654,14 @@ function PublishQueue({ setPosts, userId }: { setPosts: React.Dispatch<React.Set
           )}
           {job.status === 'done' && job.postId && (
             <div className={`mt-2 flex flex-wrap items-center gap-2 ${busy === job.id ? 'opacity-50 pointer-events-none' : ''}`}>
-              <button onClick={() => { setTarget(job.id); musicRef.current?.click(); }} className="px-3 py-1.5 rounded-full bg-gray-900 text-xs text-fuchsia-300 flex items-center gap-1.5">
+              <button onClick={() => { setTarget(job.id); musicRef.current?.click(); }} className="px-3 py-1.5 rounded-full bg-gray-900 text-xs text-white flex items-center gap-1.5">
                 <Music size={13} /> {job.music ? 'تغيير الموسيقى' : 'إضافة موسيقى'}
               </button>
-              {job.music && <button onClick={() => void rmMusic(job)} className="px-3 py-1.5 rounded-full bg-gray-900 text-xs text-gray-300 hover:text-red-400">حذف الموسيقى</button>}
+              {job.music && <button onClick={() => void rmMusic(job)} className="px-3 py-1.5 rounded-full bg-gray-900 text-xs text-gray-300 hover:text-white">حذف الموسيقى</button>}
               {job.extra.map((x, i) => (
                 <span key={`${x.url}-${i}`} className="flex items-center gap-1 ps-3 pe-1.5 py-1 rounded-full bg-gray-900 text-xs text-gray-300 max-w-[10rem]">
                   <span className="truncate" dir="auto">{x.name}</span>
-                  <button onClick={() => void rmExtra(job, i)} aria-label="إزالة" className="text-gray-400 hover:text-red-400"><X size={12} /></button>
+                  <button onClick={() => void rmExtra(job, i)} aria-label="إزالة" className="text-gray-400 hover:text-white"><X size={12} /></button>
                 </span>
               ))}
             </div>
@@ -8579,15 +8768,15 @@ function MusicLibrary({ onPick, onDevice, onClose }: { onPick: (t: { url: string
     <div className="rounded-2xl bg-gray-900/90 ring-1 ring-white/10 overflow-hidden">
       <div className="flex items-center gap-2 p-2">
         <div className={`flex-1 grid ${onDevice ? 'grid-cols-3' : 'grid-cols-2'} gap-1 p-1 bg-white/10 rounded-full`}>
-          <button onClick={() => setView('kix')} className={`py-1.5 rounded-full text-xs font-bold text-center active:scale-95 ${view === 'kix' ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-200'}`}>🎵 KIX</button>
-          {onDevice && <button onClick={() => { au.current?.pause(); onDevice(); onClose?.(); }} className="py-1.5 rounded-full text-xs font-bold text-center text-gray-200 active:scale-95">📱 من الجهاز</button>}
-          <button onClick={() => setView('saved')} className={`py-1.5 rounded-full text-xs font-bold text-center active:scale-95 ${view === 'saved' ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-200'}`}>🔖 المحفوظة{saved.length > 0 ? ` ${saved.length}` : ''}</button>
+          <button onClick={() => setView('kix')} className={`py-1.5 rounded-full text-xs font-bold text-center active:scale-95 ${view === 'kix' ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-200'}`}>KIX</button>
+          {onDevice && <button onClick={() => { au.current?.pause(); onDevice(); onClose?.(); }} className="py-1.5 rounded-full text-xs font-bold text-center text-gray-200 active:scale-95">من الجهاز</button>}
+          <button onClick={() => setView('saved')} className={`py-1.5 rounded-full text-xs font-bold text-center active:scale-95 ${view === 'saved' ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-200'}`}>المحفوظة{saved.length > 0 ? ` ${saved.length}` : ''}</button>
         </div>
         {onClose && <button onClick={onClose} className="p-2 rounded-full bg-white/10 text-white shrink-0" aria-label="إغلاق"><X size={15} /></button>}
       </div>
       {view === 'saved' ? (
         <div className="max-h-56 overflow-y-auto px-2 pb-2">
-          {saved.length === 0 && <p className="text-center text-gray-500 text-xs py-6 px-4">لسه ما حفظتش أي صوت. دوس على علامة الحفظ 🔖 جنب الصوت في أي منشور أو ريل.</p>}
+          {saved.length === 0 && <p className="text-center text-gray-500 text-xs py-6 px-4">لسه ما حفظتش أي صوت. دوس على علامة الحفظ جنب الصوت في أي منشور أو ريل.</p>}
           {saved.map(c => (
             <div key={c.url} className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-white/5">
               <button onClick={() => toggle({ id: c.url, url: playUrl(c) })} className="relative w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-gray-800 active:scale-95" aria-label="تشغيل">
@@ -8724,9 +8913,9 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
   const lens = [15, 30, 60].filter(o => o < total);
   const nudge = 'w-8 h-8 shrink-0 rounded-full bg-white/10 text-white text-base leading-none disabled:opacity-40';
   if (locked) return (
-    <div className="mb-4 -mt-2 flex items-center gap-3 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-400/30">
-      <span className="w-8 h-8 shrink-0 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm">✓</span>
-      <div className="min-w-0 flex-1 text-sm text-white" dir="ltr"><span className="font-bold">{fmt(start)} – {fmt(eff)}</span> <span className="text-emerald-300 text-xs">({Math.round(winLen)} ث) تم تأكيد المقطع</span></div>
+    <div className="mb-4 -mt-2 flex items-center gap-3 p-3 rounded-2xl bg-white/10 border border-white/20">
+      <span className="w-8 h-8 shrink-0 rounded-full bg-white/20 text-white flex items-center justify-center text-sm">✓</span>
+      <div className="min-w-0 flex-1 text-sm text-white" dir="ltr"><span className="font-bold">{fmt(start)} – {fmt(eff)}</span> <span className="text-white text-xs">({Math.round(winLen)} ث) تم تأكيد المقطع</span></div>
       <button onClick={() => setLocked(false)} className="shrink-0 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold">تعديل</button>
     </div>
   );
@@ -8739,7 +8928,7 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
           {on ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" className="translate-x-px" />}
         </button>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 text-sm font-bold text-white truncate"><Music size={14} className="shrink-0 text-violet-300" /><span className="truncate">{(file?.name ?? name ?? 'موسيقى').replace(/\.[^.]+$/, '')}</span></div>
+          <div className="flex items-center gap-1.5 text-sm font-bold text-white truncate"><Music size={14} className="shrink-0 text-white" /><span className="truncate">{(file?.name ?? name ?? 'موسيقى').replace(/\.[^.]+$/, '')}</span></div>
           <div className="text-[11px] text-gray-400">اسحب المقبض الأيسر للبداية والأيمن للنهاية، أو الإطار كله لنقله</div>
         </div>
         <div className="px-2.5 py-1 rounded-full bg-white/10 text-white text-xs tabular-nums shrink-0">{Math.round(winLen)} ث</div>
@@ -8757,12 +8946,12 @@ function MusicTrimmer({ file, src, name, start, end, onStart, onEnd }: { file?: 
           <span className="absolute inset-y-0 -left-0 w-3 rounded-s-lg bg-white flex items-center justify-center"><span className="w-0.5 h-5 rounded bg-gray-500" /></span>
           <span className="absolute inset-y-0 -right-0 w-3 rounded-e-lg bg-white flex items-center justify-center"><span className="w-0.5 h-5 rounded bg-gray-500" /></span>
         </div>
-        {on && <div className="absolute inset-y-0 w-0.5 bg-violet-400 pointer-events-none" style={{ left: `${(cur / total) * 100}%` }} />}
+        {on && <div className="absolute inset-y-0 w-0.5 bg-white pointer-events-none" style={{ left: `${(cur / total) * 100}%` }} />}
       </div>
       <div dir="ltr" className="flex items-center justify-between gap-2 text-[11px] tabular-nums">
-        <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">▶ بداية {fmt(start)}</span>
+        <span className="px-2.5 py-1 rounded-full bg-white/10 text-white font-semibold">▶ بداية {fmt(start)}</span>
         <span className="text-gray-500">{Math.round(winLen)} ث من {dur ? fmt(total) : '--:--'}</span>
-        <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 font-semibold">■ نهاية {fmt(eff)}</span>
+        <span className="px-2.5 py-1 rounded-full bg-white/10 text-white font-semibold">■ نهاية {fmt(eff)}</span>
       </div>
       <div dir="ltr" className="flex items-center gap-2">
         <button onClick={() => place(start - 1, winLen)} disabled={!dur} className={nudge} aria-label="ثانية للخلف">‹</button>
@@ -8923,48 +9112,501 @@ function LocationMapModal({ loc, onClose }: { loc: GeoLoc; onClose: () => void }
   );
 }
 function LocationPicker({ onPick, onClose }: { onPick: (l: GeoLoc) => void; onClose: () => void }) {
+  useBackLayer(true, onClose);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<LeafletLib>(null);
+  const markRef = useRef<LeafletLib>(null);
+  const seq = useRef(0);
   const [q, setQ] = useState('');
   const [res, setRes] = useState<GeoLoc[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [sel, setSel] = useState<GeoLoc | null>(null);
+  const [failed, setFailed] = useState(false);
+  const rev = async (lat: number, lng: number): Promise<string> => {
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=${LANG === 'en' ? 'en' : 'ar'}&lat=${lat}&lon=${lng}`);
+      const j = await r.json() as { display_name?: string };
+      return j.display_name ? j.display_name.split(',').slice(0, 3).join('،').trim() : '';
+    } catch { return ''; }
+  };
+  const choose = async (lat: number, lng: number, name?: string, fallback = 'موقع محدد') => {
+    const L = await loadLeaflet().catch(() => null); const map = mapRef.current;
+    if (L && map) {
+      if (markRef.current) markRef.current.setLatLng([lat, lng]);
+      else markRef.current = L.marker([lat, lng], { icon: L.divIcon({ className: '', html: '<div style="width:22px;height:22px;border-radius:50%;background:#fff;border:5px solid #7c3aed;box-shadow:0 2px 10px rgba(0,0,0,.6);transform:translate(-50%,-50%)"></div>', iconSize: [0, 0] }) }).addTo(map);
+    }
+    const my = ++seq.current;
+    setSel({ lat, lng, name: name ?? fallback });
+    if (!name) { const n = await rev(lat, lng); if (my === seq.current && n) setSel({ lat, lng, name: n }); }
+  };
+  useEffect(() => {
+    let dead = false;
+    loadLeaflet().then(L => {
+      if (dead || !boxRef.current) return;
+      const map = L.map(boxRef.current, { zoomControl: false }).setView([30.04, 31.24], 5);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+      map.on('click', (e: { latlng: { lat: number; lng: number } }) => { setRes([]); setMsg(''); void choose(e.latlng.lat, e.latlng.lng); });
+      mapRef.current = map;
+      setTimeout(() => map.invalidateSize(), 120);
+    }).catch(() => setFailed(true));
+    return () => { dead = true; mapRef.current?.remove(); mapRef.current = null; markRef.current = null; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const search = async () => {
     const v = q.trim(); if (v.length < 2) return;
-    const c = /(-?\d{1,3}\.\d{3,})\s*[,،\s]\s*(-?\d{1,3}\.\d{3,})/.exec(v); // pasted coordinates or a maps link
-    if (c && Math.abs(Number(c[1])) <= 90 && Math.abs(Number(c[2])) <= 180) { setRes([{ lat: Number(c[1]), lng: Number(c[2]), name: 'موقع محدد على الخريطة' }]); setMsg(''); return; }
+    const c = /(-?\d{1,3}\.\d{3,})\s*[,،\s]\s*(-?\d{1,3}\.\d{3,})/.exec(v);
+    if (c && Math.abs(Number(c[1])) <= 90 && Math.abs(Number(c[2])) <= 180) { mapRef.current?.setView([Number(c[1]), Number(c[2])], 16); setRes([]); void choose(Number(c[1]), Number(c[2])); return; }
     setBusy(true); setMsg('');
     try {
       const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=${LANG === 'en' ? 'en' : 'ar'}&q=${encodeURIComponent(v)}`);
       const j = await r.json() as { lat: string; lon: string; display_name: string }[];
       setRes(j.map(x => ({ lat: Number(x.lat), lng: Number(x.lon), name: x.display_name.split(',').slice(0, 3).join('،').trim() })));
-      if (j.length === 0) setMsg('مفيش نتايج');
+      if (j.length === 0) setMsg('مفيش نتايج، اضغط على الخريطة لتحديد المكان');
     } catch { setMsg('تعذّر البحث، حاول مرة أخرى'); }
     finally { setBusy(false); }
   };
   const here = () => {
     if (!navigator.geolocation) { setMsg('المتصفح لا يدعم تحديد الموقع'); return; }
     setBusy(true); setMsg('');
-    navigator.geolocation.getCurrentPosition(async pos => {
-      const lat = pos.coords.latitude, lng = pos.coords.longitude;
-      let name = 'موقعي';
-      try { const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=${LANG === 'en' ? 'en' : 'ar'}&lat=${lat}&lon=${lng}`); const j = await r.json() as { display_name?: string }; if (j.display_name) name = j.display_name.split(',').slice(0, 3).join('،').trim(); } catch { /* keep default name */ }
-      setBusy(false); onPick({ lat, lng, name });
+    navigator.geolocation.getCurrentPosition(pos => {
+      setBusy(false); setRes([]);
+      mapRef.current?.setView([pos.coords.latitude, pos.coords.longitude], 16);
+      void choose(pos.coords.latitude, pos.coords.longitude, undefined, 'موقعي');
     }, () => { setBusy(false); setMsg('لم يتم السماح بتحديد موقعك'); }, { enableHighAccuracy: true, timeout: 15000 });
   };
   return createPortal(
-    <div dir={DIR} className="fixed inset-0 z-[140] flex items-end sm:items-center justify-center bg-black/65" onClick={onClose}>
-      <div className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-gray-900 border border-white/10 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3"><h3 className="text-white font-bold flex items-center gap-2"><MapPin size={18} className="text-rose-400" /> إضافة موقع</h3><button onClick={onClose} className="p-1.5 text-gray-400"><X size={18} /></button></div>
-        <button onClick={here} disabled={busy} className="w-full py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold active:scale-95 disabled:opacity-60">📍 استخدم موقعي الحالي</button>
-        <div className="flex gap-2 mt-3">
-          <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void search(); }} placeholder="مكان، أو إحداثيات، أو اكتب أي اسم..." className="flex-1 min-w-0 h-10 rounded-full bg-gray-800 border border-gray-700 px-4 text-sm text-white placeholder-gray-500 outline-none focus:border-violet-500" />
-          <button onClick={() => void search()} disabled={busy} className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center"><Search size={16} /></button>
-        </div>
-        {msg && <p className="text-xs text-amber-300 mt-2">{msg}</p>}
-        <div className="mt-2 space-y-1.5">
-          {q.trim().length >= 2 && <button onClick={() => onPick({ lat: 0, lng: 0, name: q.trim().slice(0, 80) })} className="w-full text-right px-3 py-2.5 rounded-xl bg-violet-600/20 text-sm text-violet-100" dir="auto">📌 استخدم «{q.trim().slice(0, 40)}» كاسم للموقع</button>}
-          {res.map((r, i) => <button key={i} onClick={() => onPick(r)} className="w-full text-right px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm text-white" dir="auto"><MapPin size={13} className="inline -mt-0.5 me-1 text-rose-400" />{r.name}</button>)}
-        </div>
+    <div dir={DIR} className="kan-always-white fixed inset-0 z-[140] bg-gray-950 flex flex-col text-white">
+      <div className="flex items-center gap-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
+        <button onClick={onClose} className="w-10 h-10 shrink-0 rounded-full bg-white/10 flex items-center justify-center" aria-label="إغلاق"><X size={18} /></button>
+        <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void search(); }} placeholder="ابحث عن أي مكان..." className="flex-1 min-w-0 h-10 rounded-full bg-white/10 px-4 text-base text-white placeholder-gray-400 outline-none" />
+        <button onClick={() => void search()} disabled={busy} className="w-10 h-10 shrink-0 rounded-full bg-white/10 flex items-center justify-center disabled:opacity-50" aria-label="بحث"><Search size={16} /></button>
       </div>
+      <div className="relative flex-1 min-h-0">
+        <div ref={boxRef} className="absolute inset-0 isolate bg-gray-800" />
+        {failed && <p className="absolute inset-x-6 top-10 text-center text-sm">تعذّر تحميل الخريطة</p>}
+        {(res.length > 0 || msg) && (
+          <div className="absolute inset-x-3 top-2 z-10 max-h-56 overflow-y-auto rounded-2xl bg-gray-900/95 border border-white/10 p-1">
+            {msg && <p className="px-3 py-2 text-xs text-white/80">{msg}</p>}
+            {res.map((r, i) => <button key={i} onClick={() => { setRes([]); mapRef.current?.setView([r.lat, r.lng], 15); void choose(r.lat, r.lng, r.name); }} className="w-full text-start px-3 py-2.5 rounded-xl hover:bg-white/10 text-sm flex items-start gap-2" dir="auto"><MapPin size={14} className="shrink-0 mt-0.5" /><span className="min-w-0">{r.name}</span></button>)}
+          </div>
+        )}
+        <button onClick={here} disabled={busy} className="absolute bottom-3 end-3 z-10 h-11 px-4 rounded-full bg-gray-900/90 border border-white/25 flex items-center gap-2 text-sm font-semibold disabled:opacity-60"><MapPin size={16} />موقعي</button>
+      </div>
+      <div className="px-3 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gray-950 border-t border-white/10 space-y-2">
+        <p className="text-sm text-white/90 truncate min-h-[1.25rem]" dir="auto">{sel ? sel.name : 'اضغط على الخريطة لتحديد أي مكان، أو ابحث، أو استخدم موقعك'}</p>
+        <button disabled={!sel} onClick={() => sel && onPick(sel)} className="w-full py-3 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white font-bold text-base disabled:opacity-40 active:scale-[0.98]">تأكيد الموقع</button>
+        {q.trim().length >= 2 && <button onClick={() => onPick({ lat: 0, lng: 0, name: q.trim().slice(0, 80) })} className="w-full py-2 rounded-full bg-white/10 text-white text-xs font-semibold truncate">استخدم «{q.trim().slice(0, 30)}» كاسم فقط من غير خريطة</button>}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ============ KIX Studio: camera with colour filters, face filters and a music clip to lip-sync to ============
+type FaceLm = { x: number; y: number }[];
+const STUDIO_CF: { n: string; css: string; tint?: [string, number] }[] = [
+  { n: 'عادي', css: '' },
+  { n: 'دافئ', css: 'sepia(.35) saturate(1.3) hue-rotate(-10deg) brightness(1.05)', tint: ['#ff9a3c', 0.12] },
+  { n: 'بارد', css: 'saturate(1.2) hue-rotate(15deg) brightness(1.03)', tint: ['#3c8cff', 0.12] },
+  { n: 'أبيض وأسود', css: 'grayscale(1) contrast(1.1)' },
+  { n: 'قديم', css: 'sepia(.8) contrast(.95) brightness(1.05)', tint: ['#a0703c', 0.18] },
+  { n: 'مشرق', css: 'brightness(1.15) contrast(1.08) saturate(1.25)' },
+  { n: 'درامي', css: 'contrast(1.35) saturate(.85) brightness(.92)' },
+  { n: 'نيون', css: 'saturate(1.8) contrast(1.15) hue-rotate(-20deg)', tint: ['#b026ff', 0.14] },
+  { n: 'وردي', css: 'saturate(1.3) hue-rotate(-30deg) brightness(1.08)', tint: ['#ff6bb5', 0.16] },
+  { n: 'غروب', css: 'sepia(.4) saturate(1.6) hue-rotate(-20deg) brightness(1.05)', tint: ['#ff7a30', 0.16] },
+  { n: 'فجر', css: 'hue-rotate(-40deg) saturate(1.3) brightness(1.08) sepia(.2)', tint: ['#ff9ec0', 0.14] },
+  { n: 'ذهبي', css: 'sepia(.6) saturate(1.8) brightness(1.1) hue-rotate(-15deg)', tint: ['#e8b64a', 0.18] },
+  { n: 'شتاء', css: 'saturate(.8) hue-rotate(190deg) brightness(1.1) contrast(.95)', tint: ['#8fd3ff', 0.14] },
+  { n: 'ثلجي', css: 'brightness(1.2) saturate(.6) hue-rotate(160deg)', tint: ['#d8f1ff', 0.16] },
+  { n: 'محيط', css: 'hue-rotate(170deg) saturate(1.4)', tint: ['#14b8d4', 0.16] },
+  { n: 'غابة', css: 'hue-rotate(70deg) saturate(1.3) brightness(.95)', tint: ['#2f9e44', 0.14] },
+  { n: 'لافندر', css: 'hue-rotate(250deg) saturate(1.2) brightness(1.05)', tint: ['#a78bfa', 0.16] },
+  { n: 'كاندي', css: 'saturate(1.6) brightness(1.12) hue-rotate(-12deg) contrast(.95)', tint: ['#ff7ac8', 0.12] },
+  { n: 'سينمائي', css: 'contrast(1.25) saturate(.9) hue-rotate(-8deg) brightness(.95)', tint: ['#0e7490', 0.12] },
+  { n: 'أفلام', css: 'contrast(1.2) sepia(.2) saturate(1.1) brightness(.95)', tint: ['#a0703c', 0.1] },
+  { n: 'فينتج', css: 'sepia(.5) contrast(1.1) brightness(.9) saturate(.9)', tint: ['#8a6a3c', 0.16] },
+  { n: 'باهت', css: 'contrast(.85) brightness(1.15) saturate(.7)' },
+  { n: 'حيوي', css: 'saturate(2) contrast(1.1)' },
+  { n: 'تباين عالي', css: 'contrast(1.6) saturate(1.2)' },
+  { n: 'تفتيح', css: 'brightness(1.25) contrast(.95)' },
+  { n: 'بشرة ناعمة', css: 'blur(.8px) brightness(1.08) contrast(.96) saturate(1.1)' },
+  { n: 'سلفر', css: 'grayscale(1) brightness(1.15) contrast(.9)' },
+  { n: 'أسود قوي', css: 'grayscale(1) contrast(1.6) brightness(.95)' },
+  { n: 'أحمر', css: 'sepia(1) saturate(4) hue-rotate(-50deg)', tint: ['#ff2a2a', 0.2] },
+  { n: 'ليل أزرق', css: 'brightness(.8) hue-rotate(200deg) saturate(1.5) contrast(1.2)', tint: ['#1d4ed8', 0.2] },
+  { n: 'ماتريكس', css: 'grayscale(1) sepia(1) hue-rotate(60deg) saturate(3) contrast(1.2)', tint: ['#22c55e', 0.22] },
+  { n: 'سلبي', css: 'invert(1)' },
+  { n: 'سايبر', css: 'saturate(2.2) contrast(1.2) hue-rotate(-60deg) brightness(1.05)', tint: ['#00e5ff', 0.14] },
+];
+const STUDIO_FX = ['بدون', 'نظارة', 'تاج', 'كلب', 'شنب', 'قلوب', 'نيون', 'قطة', 'أرنب', 'نظارة دائرية', 'شيطان', 'هالة', 'تاج ورد', 'قبعة', 'تخرج', 'خدود', 'أحمر شفاه', 'ظل عيون', 'نجوم', 'ثلج', 'نار', 'قناع', 'لحية', 'شبكة', 'عيون كبيرة', 'أنف مهرج', 'نظارة 3D', 'سماعات', 'ألماسة', 'قوس قزح', 'دموع', 'تنين'];
+const FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+type StudioTrack = { url: string; name: string; start: number; end: number; file?: File };
+type FaceGeo = { CW: number; vw: number; vh: number; sc: number; ox: number; oy: number; mirror: boolean };
+
+function drawFaceFx(ctx: CanvasRenderingContext2D, fx: number, lm: FaceLm, g: FaceGeo, now: number) {
+  type Pt = { x: number; y: number };
+  const P = (i: number): Pt => { const l = lm[i]; let x = g.ox + l.x * g.vw * g.sc; if (g.mirror) x = g.CW - x; return { x, y: g.oy + l.y * g.vh * g.sc }; };
+  const mid = (a: Pt, b: Pt): Pt => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
+  let eA = P(33), eB = P(263);
+  if (eA.x > eB.x) { const t = eA; eA = eB; eB = t; }
+  const roll = Math.atan2(eB.y - eA.y, eB.x - eA.x);
+  const eye = dist(eA, eB);
+  const top = P(10), chin = P(152), nose = P(1);
+  const fh = dist(top, chin);
+  const c1 = mid(P(33), P(133)), c2 = mid(P(362), P(263));
+  const sep = dist(c1, c2), em = mid(c1, c2);
+  const lipU = P(13), lipL = P(14), mL = P(61), mR = P(291);
+  const open = dist(lipU, lipL) > fh * 0.06;
+  const rot = (p: Pt, fn: () => void) => { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(roll); fn(); ctx.restore(); };
+  const rr = (x: number, y: number, w: number, h: number, r: number) => { ctx.beginPath(); const c = ctx as unknown as { roundRect?: (...a: number[]) => void }; if (c.roundRect) c.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); ctx.fill(); };
+  const ell = (x: number, y: number, rx: number, ry: number, a = 0) => { ctx.beginPath(); ctx.ellipse(x, y, Math.max(1, rx), Math.max(1, ry), a, 0, Math.PI * 2); ctx.fill(); };
+  const emo = (txt: string, p: Pt, size: number, a = 0) => { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(a); ctx.font = `${size}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, 0, 0); ctx.restore(); };
+  const poly = (ids: number[], fill: string) => { ctx.beginPath(); ids.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); };
+  const mustache = () => {
+    const m = { x: nose.x + (lipU.x - nose.x) * 0.6, y: nose.y + (lipU.y - nose.y) * 0.6 };
+    const w = dist(mL, mR) * 1.25;
+    rot(m, () => {
+      ctx.fillStyle = '#2b1b12'; ctx.beginPath(); ctx.moveTo(0, -w * 0.05);
+      ctx.bezierCurveTo(w * 0.15, -w * 0.2, w * 0.45, -w * 0.12, w * 0.5, w * 0.05);
+      ctx.bezierCurveTo(w * 0.3, 0, w * 0.15, w * 0.08, 0, w * 0.06);
+      ctx.bezierCurveTo(-w * 0.15, w * 0.08, -w * 0.3, 0, -w * 0.5, w * 0.05);
+      ctx.bezierCurveTo(-w * 0.45, -w * 0.12, -w * 0.15, -w * 0.2, 0, -w * 0.05); ctx.fill();
+    });
+  };
+  const LIPS = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185];
+  const JAW = [234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152, 377, 400, 378, 379, 365, 397, 288, 361, 323, 454];
+  switch (fx) {
+    case 1: // sunglasses
+      rot(em, () => {
+        const w = sep * 0.98, h = sep * 0.72;
+        ctx.fillStyle = 'rgba(12,12,24,.92)';
+        for (const s of [-1, 1]) rr(s * sep / 2 - w / 2, -h / 2, w, h, h * 0.35);
+        ctx.fillRect(-sep / 2 + w / 2 - 2, -h * 0.35, sep - w + 4, h * 0.14);
+        ctx.fillStyle = 'rgba(255,255,255,.22)';
+        for (const s of [-1, 1]) rr(s * sep / 2 - w * 0.36, -h * 0.34, w * 0.3, h * 0.14, 4);
+      });
+      break;
+    case 2: rot(top, () => { ctx.font = `${fh * 0.8}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText('👑', 0, -fh * 0.02); }); break;
+    case 3:
+      rot(top, () => { ctx.fillStyle = '#6b4423'; for (const s of [-1, 1]) ell(s * eye * 0.62, fh * 0.02, eye * 0.26, eye * 0.42, s * -0.35); });
+      rot(nose, () => { ctx.fillStyle = '#1b1210'; ell(0, 0, eye * 0.17, eye * 0.12); ctx.fillStyle = 'rgba(255,255,255,.4)'; ell(-eye * 0.05, -eye * 0.04, eye * 0.04, eye * 0.025); });
+      if (open) rot(lipL, () => { ctx.fillStyle = '#ff6b8b'; ell(0, eye * 0.14, eye * 0.14, eye * 0.2); });
+      break;
+    case 4: mustache(); break;
+    case 5: { const s = sep * 0.95 * (1 + 0.08 * Math.sin(now / 120)); for (const c of [c1, c2]) emo('❤️', c, s, roll); break; }
+    case 6:
+      ctx.save(); ctx.shadowColor = `hsl(${(now / 10) % 360},100%,60%)`; ctx.shadowBlur = 26; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.beginPath();
+      FACE_OVAL.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); });
+      ctx.closePath(); ctx.stroke(); ctx.restore();
+      break;
+    case 7:
+      rot(top, () => {
+        for (const s of [-1, 1]) {
+          ctx.fillStyle = '#9aa0b4'; ctx.beginPath(); ctx.moveTo(s * eye * 0.22, fh * 0.03); ctx.lineTo(s * eye * 0.78, fh * 0.03); ctx.lineTo(s * eye * 0.64, -fh * 0.4); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#ffb3c8'; ctx.beginPath(); ctx.moveTo(s * eye * 0.32, 0); ctx.lineTo(s * eye * 0.66, 0); ctx.lineTo(s * eye * 0.6, -fh * 0.26); ctx.closePath(); ctx.fill();
+        }
+      });
+      rot(nose, () => {
+        ctx.fillStyle = '#ff8fb0'; ctx.beginPath(); ctx.moveTo(-eye * 0.09, -eye * 0.03); ctx.lineTo(eye * 0.09, -eye * 0.03); ctx.lineTo(0, eye * 0.07); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+        for (const s of [-1, 1]) for (const k of [-1, 0, 1]) { ctx.beginPath(); ctx.moveTo(s * eye * 0.3, k * eye * 0.07); ctx.lineTo(s * eye * 0.95, k * eye * 0.16 - eye * 0.02); ctx.stroke(); }
+      });
+      break;
+    case 8: // bunny
+      rot(top, () => { for (const s of [-1, 1]) { ctx.fillStyle = '#fff'; ell(s * eye * 0.3, -fh * 0.42, eye * 0.17, fh * 0.42, s * 0.12); ctx.fillStyle = '#ffb3c8'; ell(s * eye * 0.3, -fh * 0.42, eye * 0.08, fh * 0.32, s * 0.12); } });
+      rot(nose, () => { ctx.fillStyle = '#ff8fb0'; ell(0, 0, eye * 0.1, eye * 0.07); });
+      if (!open) rot(mid(nose, lipU), () => { ctx.fillStyle = '#fff'; ctx.strokeStyle = '#cfcfd8'; ctx.lineWidth = 2; for (const s of [-1, 1]) { rr(s * eye * 0.045 - eye * 0.035, eye * 0.1, eye * 0.07, eye * 0.12, 3); } });
+      break;
+    case 9: // round gold glasses
+      rot(em, () => {
+        ctx.strokeStyle = '#e8b64a'; ctx.lineWidth = sep * 0.06; ctx.fillStyle = 'rgba(255,255,255,.12)';
+        for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * sep / 2, 0, sep * 0.42, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+        ctx.beginPath(); ctx.arc(0, -sep * 0.1, sep * 0.1, Math.PI, 0); ctx.stroke();
+      });
+      break;
+    case 10: // devil horns
+      rot(top, () => { ctx.fillStyle = '#d8232a'; for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * eye * 0.25, fh * 0.02); ctx.quadraticCurveTo(s * eye * 0.6, -fh * 0.08, s * eye * 0.5, -fh * 0.34); ctx.quadraticCurveTo(s * eye * 0.3, -fh * 0.1, s * eye * 0.08, fh * 0.02); ctx.fill(); } });
+      break;
+    case 11: // halo
+      rot(top, () => { ctx.save(); ctx.strokeStyle = '#ffe066'; ctx.shadowColor = '#ffe066'; ctx.shadowBlur = 18; ctx.lineWidth = eye * 0.07; ctx.beginPath(); ctx.ellipse(0, -fh * 0.2 + Math.sin(now / 400) * fh * 0.012, eye * 0.55, eye * 0.13, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); });
+      break;
+    case 12: // flower crown
+      rot(top, () => { for (let k = -3; k <= 3; k++) { const y = -fh * 0.02 - (1 - (k / 3) ** 2) * fh * 0.07; emo(k % 2 ? '🌼' : '🌸', { x: k * eye * 0.21, y }, eye * 0.3); } });
+      break;
+    case 13: rot(top, () => emo('🎩', { x: 0, y: -fh * 0.22 }, fh * 0.8)); break;
+    case 14: rot(top, () => emo('🎓', { x: 0, y: -fh * 0.16 }, fh * 0.75)); break;
+    case 15: // blush + freckles
+      for (const p of [P(205), P(425)]) { const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, eye * 0.32); gr.addColorStop(0, 'rgba(255,80,125,.6)'); gr.addColorStop(1, 'rgba(255,80,125,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(p.x, p.y, eye * 0.32, 0, Math.PI * 2); ctx.fill(); }
+      rot(nose, () => { ctx.fillStyle = 'rgba(120,70,40,.7)'; for (const s of [-1, 1]) for (let k = 0; k < 4; k++) ell(s * (eye * 0.12 + (k % 2) * eye * 0.07), -eye * 0.07 + k * eye * 0.035, eye * 0.012, eye * 0.012); });
+      break;
+    case 16: poly(LIPS, 'rgba(215,20,70,.72)'); break;
+    case 17: // glitter eyeshadow
+      for (const c of [c1, c2]) { rot(c, () => { const gr = ctx.createLinearGradient(0, -sep * 0.4, 0, sep * 0.05); gr.addColorStop(0, 'rgba(150,80,255,.0)'); gr.addColorStop(1, 'rgba(190,90,255,.6)'); ctx.fillStyle = gr; ell(0, -sep * 0.12, sep * 0.55, sep * 0.24); }); }
+      ctx.fillStyle = '#fff'; for (let k = 0; k < 10; k++) { const c = k % 2 ? c1 : c2; if (Math.sin(now / 160 + k * 1.7) > 0.5) { ell(c.x + Math.cos(k * 2.3) * sep * 0.4, c.y - sep * 0.22 + Math.sin(k * 3.1) * sep * 0.1, 3, 3); } }
+      break;
+    case 18: for (let k = 0; k < 6; k++) { const a = now / 900 + (k * Math.PI) / 3; emo('✨', { x: nose.x + Math.cos(a) * fh * 0.68, y: nose.y - fh * 0.08 + Math.sin(a) * fh * 0.42 }, eye * (0.26 + 0.06 * Math.sin(now / 150 + k))); } break;
+    case 19: for (let k = 0; k < 10; k++) { const y = top.y - fh * 0.3 + ((now / 18 + k * 97) % (fh * 1.7)); emo('❄️', { x: nose.x + (((k * 53) % 100) - 50) / 100 * fh * 1.1, y }, eye * 0.22); } break;
+    case 20: rot(top, () => { for (let k = -2; k <= 2; k++) emo('🔥', { x: k * eye * 0.26, y: -fh * 0.1 - Math.abs(Math.sin(now / 130 + k)) * fh * 0.06 }, eye * 0.5); }); break;
+    case 21: // mask
+      rot(em, () => { ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(0, 0, sep * 1.2, sep * 0.52, 0, 0, Math.PI * 2); for (const s of [-1, 1]) { ctx.moveTo(s * sep / 2 + sep * 0.3, 0); ctx.ellipse(s * sep / 2, 0, sep * 0.3, sep * 0.2, 0, 0, Math.PI * 2, true); } ctx.fill('evenodd'); });
+      break;
+    case 22: // beard
+      ctx.beginPath(); JAW.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.lineTo(mR.x, mR.y); ctx.lineTo(lipL.x, lipL.y + fh * 0.01); ctx.lineTo(mL.x, mL.y); ctx.closePath(); ctx.fillStyle = 'rgba(55,38,26,.93)'; ctx.fill();
+      mustache();
+      break;
+    case 23: { // mesh
+      ctx.fillStyle = 'rgba(255,255,255,.85)';
+      for (let i = 0; i < 468; i += 5) { const p = P(i); ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3); }
+      ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2; ctx.beginPath(); FACE_OVAL.forEach((i, k) => { const p = P(i); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }); ctx.closePath(); ctx.stroke(); ctx.restore();
+      break;
+    }
+    case 24: // googly eyes
+      for (const c of [c1, c2]) { ctx.fillStyle = '#fff'; ell(c.x, c.y, sep * 0.5, sep * 0.5); ctx.strokeStyle = '#111'; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = '#111'; ell(c.x + Math.sin(now / 300) * sep * 0.12, c.y + Math.cos(now / 260) * sep * 0.1, sep * 0.2, sep * 0.2); }
+      break;
+    case 25: rot(nose, () => { ctx.fillStyle = '#ee2a2a'; ell(0, 0, eye * 0.17, eye * 0.17); ctx.fillStyle = 'rgba(255,255,255,.55)'; ell(-eye * 0.05, -eye * 0.05, eye * 0.045, eye * 0.035); }); break;
+    case 26: // 3D glasses
+      rot(em, () => {
+        const w = sep * 0.95, h = sep * 0.7;
+        ctx.fillStyle = 'rgba(255,40,40,.5)'; rr(-sep / 2 - w / 2, -h / 2, w, h, 8);
+        ctx.fillStyle = 'rgba(40,220,255,.5)'; rr(sep / 2 - w / 2, -h / 2, w, h, 8);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = sep * 0.07; ctx.strokeRect(-sep / 2 - w / 2, -h / 2, w, h); ctx.strokeRect(sep / 2 - w / 2, -h / 2, w, h);
+      });
+      break;
+    case 27: { // headphones
+      const half = dist(P(234), P(454)) / 2, mc = mid(top, chin);
+      rot(mc, () => {
+        ctx.strokeStyle = '#1b1b24'; ctx.lineWidth = eye * 0.1; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, -fh * 0.02, half * 1.12, Math.PI * 1.02, Math.PI * 1.98); ctx.stroke();
+        for (const s of [-1, 1]) { ctx.fillStyle = '#1b1b24'; ell(s * half * 1.12, -fh * 0.02, eye * 0.17, eye * 0.27); ctx.fillStyle = '#7c5cff'; ell(s * half * 1.12, -fh * 0.02, eye * 0.09, eye * 0.17); }
+      });
+      break;
+    }
+    case 28: emo('💎', P(168), eye * 0.3 * (1 + 0.06 * Math.sin(now / 200)), roll); break;
+    case 29: // rainbow
+      rot(top, () => { ['#ff3b3b', '#ff9f1c', '#ffe14d', '#3ddc84', '#3aa0ff', '#8b5cf6'].forEach((col, k) => { ctx.strokeStyle = col; ctx.lineWidth = eye * 0.07; ctx.beginPath(); ctx.arc(0, fh * 0.12, eye * (0.95 - k * 0.075), Math.PI * 1.05, Math.PI * 1.95); ctx.stroke(); }); });
+      break;
+    case 30: for (const c of [c1, c2]) { const f = (now / 14) % (fh * 0.6); emo('💧', { x: c.x, y: c.y + sep * 0.35 + f }, eye * 0.18); } break;
+    case 31: if (open) { const f = 1 + 0.15 * Math.sin(now / 70); emo('🔥', { x: lipL.x, y: lipL.y + fh * 0.2 }, fh * 0.5 * f, roll); } break;
+    default: break;
+  }
+}
+
+function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File, dest: 'story' | 'post' | 'reel' | 'video', track: StudioTrack | null) => void }) {
+  useBackLayer(true, onClose);
+  const vref = useRef<HTMLVideoElement>(null);
+  const cref = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const micRef = useRef<MediaStream | null>(null);
+  const [facing, setFacing] = useState<'user' | 'environment'>('user');
+  const [mode, setMode] = useState<'photo' | 'video'>('photo');
+  const [ftab, setFtab] = useState<'color' | 'face'>('color');
+  const [cf, setCf] = useState(0);
+  const [fx, setFx] = useState(0);
+  const cfR = useRef(0), fxR = useRef(0), facR = useRef<'user' | 'environment'>('user');
+  cfR.current = cf; fxR.current = fx; facR.current = facing;
+  const [err, setErr] = useState('');
+  const [ready, setReady] = useState(false);
+  const [faceMsg, setFaceMsg] = useState('');
+  const lmkRef = useRef<{ detectForVideo: (v: HTMLVideoElement, t: number) => { faceLandmarks?: FaceLm[] }; close?: () => void } | null>(null);
+  const loadingFace = useRef(false);
+  const lmRef = useRef<FaceLm | null>(null);
+  const [rec, setRec] = useState(false);
+  const [secs, setSecs] = useState(0);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<Blob[]>([]);
+  const [shot, setShot] = useState<{ file: File; url: string } | null>(null);
+  const [track, setTrack] = useState<StudioTrack | null>(null);
+  const [sheet, setSheet] = useState<'' | 'lib' | 'trim'>('');
+  const audRef = useRef<HTMLAudioElement | null>(null);
+  const devPick = useRef<HTMLInputElement>(null);
+  const supportsFilter = useMemo(() => { try { return 'filter' in CanvasRenderingContext2D.prototype; } catch { return false; } }, []);
+  useEffect(() => { const b = document.body; const prev = b.style.overflow; b.style.overflow = 'hidden'; return () => { b.style.overflow = prev; }; }, []);
+
+  useEffect(() => {
+    let dead = false; setReady(false); setErr('');
+    void (async () => {
+      try {
+        streamRef.current?.getTracks().forEach(t => t.stop());
+        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+        if (dead) { s.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = s;
+        const v = vref.current; if (!v) return;
+        v.srcObject = s; await v.play().catch(() => undefined); setReady(true);
+      } catch { if (!dead) setErr('تعذّر فتح الكاميرا، اسمح للمتصفح باستخدامها'); }
+    })();
+    return () => { dead = true; };
+  }, [facing]);
+  useEffect(() => () => { streamRef.current?.getTracks().forEach(t => t.stop()); micRef.current?.getTracks().forEach(t => t.stop()); audRef.current?.pause(); lmkRef.current?.close?.(); }, []);
+
+  useEffect(() => {
+    let raf = 0; let lastDet = 0;
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const v = vref.current, c = cref.current;
+      if (!v || !c || v.readyState < 2 || !v.videoWidth) return;
+      const ctx = c.getContext('2d'); if (!ctx) return;
+      const CW = c.width, CH = c.height, vw = v.videoWidth, vh = v.videoHeight;
+      const sc = Math.max(CW / vw, CH / vh), ox = (CW - vw * sc) / 2, oy = (CH - vh * sc) / 2;
+      const mirror = facR.current === 'user';
+      const f = STUDIO_CF[cfR.current];
+      ctx.save();
+      if (supportsFilter && f.css) (ctx as unknown as { filter: string }).filter = f.css;
+      if (mirror) { ctx.translate(CW, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(v, ox, oy, vw * sc, vh * sc);
+      ctx.restore();
+      if (!supportsFilter && f.tint) { ctx.save(); ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = Math.min(0.6, f.tint[1] * 3); ctx.fillStyle = f.tint[0]; ctx.fillRect(0, 0, CW, CH); ctx.restore(); }
+      if (fxR.current > 0) {
+        const lk = lmkRef.current; const now = performance.now();
+        if (lk && now - lastDet > 45) { lastDet = now; try { lmRef.current = lk.detectForVideo(v, now).faceLandmarks?.[0] ?? null; } catch { /* skip this frame */ } }
+        if (lmRef.current) drawFaceFx(ctx, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now);
+      }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [supportsFilter]);
+
+  const pickFx = async (i: number) => {
+    setFx(i);
+    if (i === 0) { lmRef.current = null; return; }
+    if (lmkRef.current || loadingFace.current) return;
+    loadingFace.current = true; setFaceMsg('بحمّل فلاتر الوجه...');
+    try {
+      const base = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+      const url = `${base}/vision_bundle.mjs`;
+      const mod = await import(/* @vite-ignore */ url);
+      const fileset = await mod.FilesetResolver.forVisionTasks(`${base}/wasm`);
+      const mk = (delegate: string) => mod.FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate }, runningMode: 'VIDEO', numFaces: 1 });
+      lmkRef.current = await mk('GPU').catch(() => mk('CPU'));
+      setFaceMsg('');
+    } catch { setFaceMsg('فلاتر الوجه محتاجة إنترنت، حاول تاني'); setFx(0); }
+    finally { loadingFace.current = false; }
+  };
+
+  const startMusic = () => {
+    if (!track) return;
+    const a = audRef.current ?? new Audio();
+    audRef.current = a;
+    const end = track.end > track.start ? track.end : track.start + 30;
+    a.src = track.url; a.loop = false;
+    a.addEventListener('loadedmetadata', () => { a.currentTime = track.start; }, { once: true });
+    a.ontimeupdate = () => { if (a.currentTime >= end) a.currentTime = track.start; };
+    void a.play().catch(() => undefined);
+  };
+  const snap = () => {
+    const c = cref.current; if (!c) return;
+    c.toBlob(b => { if (!b) return; const f = new File([b], `kix-studio-${Date.now()}.jpg`, { type: 'image/jpeg' }); setShot({ file: f, url: URL.createObjectURL(f) }); }, 'image/jpeg', 0.92);
+  };
+  const startRec = async () => {
+    const c = cref.current; if (!c || rec || typeof MediaRecorder === 'undefined') return;
+    const out = (c as unknown as { captureStream: (fps: number) => MediaStream }).captureStream(30);
+    if (!track) { try { const a = await navigator.mediaDevices.getUserMedia({ audio: true }); a.getAudioTracks().forEach(t => out.addTrack(t)); micRef.current = a; } catch { /* record without sound */ } }
+    const mime = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) ?? '';
+    const mr = new MediaRecorder(out, mime ? { mimeType: mime, videoBitsPerSecond: 4_000_000 } : undefined);
+    chunks.current = [];
+    mr.ondataavailable = e => { if (e.data.size) chunks.current.push(e.data); };
+    mr.onstop = () => {
+      micRef.current?.getTracks().forEach(t => t.stop()); micRef.current = null;
+      audRef.current?.pause();
+      const type = (mr.mimeType || mime || 'video/webm').split(';')[0];
+      const f = new File([new Blob(chunks.current, { type })], `kix-studio-${Date.now()}.${type.includes('mp4') ? 'mp4' : 'webm'}`, { type });
+      setShot({ file: f, url: URL.createObjectURL(f) });
+    };
+    recRef.current = mr; mr.start(250); setRec(true); setSecs(0); startMusic();
+  };
+  const stopRec = () => { if (recRef.current?.state === 'recording') recRef.current.stop(); setRec(false); };
+  useEffect(() => {
+    if (!rec) return;
+    const h = window.setInterval(() => setSecs(s => s + 1), 1000);
+    return () => window.clearInterval(h);
+  }, [rec]);
+  useEffect(() => { if (rec && secs >= 60) stopRec(); }, [secs, rec]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isVid = !!shot && shot.file.type.startsWith('video/');
+  const chip = (on: boolean) => `shrink-0 px-3.5 h-9 rounded-full text-xs font-semibold active:scale-95 transition-transform ${on ? 'bg-white text-black' : 'bg-white/15 text-white'}`;
+  const dests: { k: 'story' | 'post' | 'reel' | 'video'; label: string; Icon: typeof Film; vid?: boolean }[] = [
+    { k: 'story', label: 'قصة', Icon: PlayCircle },
+    { k: 'post', label: 'منشور', Icon: FileText },
+    { k: 'reel', label: 'ريل', Icon: Film, vid: true },
+    { k: 'video', label: 'فيديو', Icon: Video, vid: true },
+  ];
+
+  return createPortal(
+    <div dir={DIR} className="kan-always-white fixed inset-0 z-[120] bg-black flex flex-col text-white overscroll-none select-none">
+      <video ref={vref} playsInline muted className="hidden" />
+      <div className="flex items-center justify-between gap-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
+        <button onClick={onClose} className="w-10 h-10 shrink-0 rounded-full bg-white/10 flex items-center justify-center" aria-label="إغلاق"><X size={20} /></button>
+        <div className="min-w-0 flex-1 flex justify-center">
+          {rec ? <span className="px-3 py-1 rounded-full bg-white/15 text-sm font-bold tabular-nums">{String(Math.floor(secs / 60)).padStart(2, '0')}:{String(secs % 60).padStart(2, '0')}</span>
+            : track ? <span className="max-w-full inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-xs"><Music size={13} className="shrink-0" /><span className="truncate" dir="auto">{track.name}</span><button onClick={() => { setTrack(null); audRef.current?.pause(); }} aria-label="إزالة" className="shrink-0"><X size={13} /></button></span> : null}
+        </div>
+        <button onClick={() => setFacing(f => (f === 'user' ? 'environment' : 'user'))} disabled={rec} className="w-10 h-10 shrink-0 rounded-full bg-white/10 flex items-center justify-center disabled:opacity-40" aria-label="قلب الكاميرا"><RefreshCw size={18} /></button>
+      </div>
+      <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+        <canvas ref={cref} width={720} height={1280} className="h-full max-w-full aspect-[9/16] bg-black object-cover rounded-2xl" />
+        {!ready && !err && <p className="absolute text-sm text-white/80">بفتح الكاميرا...</p>}
+        {err && <p className="absolute inset-x-6 text-center text-sm text-white">{err}</p>}
+        {faceMsg && <p className="absolute top-3 inset-x-0 text-center text-xs"><span className="px-3 py-1 rounded-full bg-black/60">{faceMsg}</span></p>}
+      </div>
+      <div className="bg-black pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="flex justify-center gap-2 pb-2">
+          {([['color', 'فلاتر ألوان'], ['face', 'فلاتر وجه']] as const).map(([k, l]) => <button key={k} onClick={() => setFtab(k)} className={`px-4 h-8 rounded-full text-xs font-bold ${ftab === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}
+        </div>
+        <div className="flex gap-2 overflow-x-auto no-scrollbar px-3 pb-3">
+          {ftab === 'color'
+            ? STUDIO_CF.map((f, i) => <button key={f.n} onClick={() => setCf(i)} className={chip(cf === i)}>{f.n}</button>)
+            : STUDIO_FX.map((f, i) => <button key={f} onClick={() => void pickFx(i)} className={chip(fx === i)}>{f}</button>)}
+        </div>
+        <div className="grid grid-cols-3 items-center px-5">
+          <div className="flex justify-start"><button onClick={() => { if (rec) return; setSheet(track ? 'trim' : 'lib'); }} className={`w-12 h-12 rounded-full flex items-center justify-center ${track ? 'bg-white text-black' : 'bg-white/15 text-white'}`} aria-label="موسيقى"><Music size={20} /></button></div>
+          <div className="flex justify-center">
+            <button onClick={() => { if (mode === 'photo') snap(); else if (rec) stopRec(); else void startRec(); }} disabled={!ready} aria-label={mode === 'photo' ? 'التقاط صورة' : rec ? 'إيقاف التسجيل' : 'بدء التسجيل'} className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40">
+              <span className={`bg-white transition-all ${rec ? 'w-6 h-6 rounded-md' : 'w-14 h-14 rounded-full'}`} />
+            </button>
+          </div>
+          <div className="flex justify-end">
+            <div className="flex rounded-full bg-white/10 p-1">
+              {([['photo', Camera], ['video', Video]] as const).map(([k, Ic]) => <button key={k} onClick={() => { if (!rec) setMode(k); }} className={`w-10 h-9 rounded-full flex items-center justify-center ${mode === k ? 'bg-white text-black' : 'text-white'}`} aria-label={k === 'photo' ? 'صورة' : 'فيديو'}><Ic size={18} /></button>)}
+            </div>
+          </div>
+        </div>
+        {mode === 'video' && track && <p className="text-center text-[11px] text-white/70 mt-2">الموسيقى هتشتغل وانت بتصوّر، اتكلم معاها زي تيك توك</p>}
+      </div>
+      <input ref={devPick} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (f.size > 20 * 1024 * 1024) { setErr('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setTrack({ url: URL.createObjectURL(f), name: f.name.replace(/\.[^.]+$/, ''), start: 0, end: 0, file: f }); setSheet('trim'); }} />
+      {sheet && (
+        <div className="absolute inset-0 z-30 flex items-end bg-black/60" onClick={() => setSheet('')}>
+          <div className="w-full max-h-[80%] overflow-y-auto overscroll-contain rounded-t-3xl bg-gray-900 p-3 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={e => e.stopPropagation()}>
+            {sheet === 'lib' || !track
+              ? <MusicLibrary onClose={() => setSheet('')} onDevice={() => devPick.current?.click()} onPick={t => { setTrack({ url: t.url, name: t.name, start: t.start ?? 0, end: t.end ?? 0 }); setSheet('trim'); }} />
+              : <>
+                <MusicTrimmer key={track.url} file={track.file} src={track.file ? undefined : track.url} name={track.name} start={track.start} end={track.end} onStart={n => setTrack(t => (t ? { ...t, start: n } : t))} onEnd={n => setTrack(t => (t ? { ...t, end: n } : t))} />
+                <div className="flex gap-2">
+                  <button onClick={() => setSheet('lib')} className="flex-1 py-2.5 rounded-full bg-white/10 text-white text-sm font-semibold">تغيير الأغنية</button>
+                  <button onClick={() => setSheet('')} className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold">تم</button>
+                </div>
+              </>}
+          </div>
+        </div>
+      )}
+      {shot && (
+        <div className="absolute inset-0 z-40 bg-black flex flex-col">
+          <div className="flex-1 min-h-0 flex items-center justify-center p-2">
+            {isVid
+              ? <video src={shot.url} autoPlay loop playsInline controls className="max-h-full max-w-full rounded-2xl bg-black"
+                onPlay={e => { if (track) { const a = audRef.current ?? new Audio(); audRef.current = a; a.src = track.url; a.currentTime = track.start; void a.play().catch(() => undefined); } e.currentTarget.muted = !!track; }}
+                onPause={() => audRef.current?.pause()} onEnded={() => audRef.current?.pause()} />
+              : <img src={shot.url} alt="" className="max-h-full max-w-full rounded-2xl object-contain" />}
+          </div>
+          <div className="p-3 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              {dests.filter(d => !d.vid || isVid).map(d => (
+                <button key={d.k} onClick={() => { audRef.current?.pause(); onUse(shot.file, d.k, track); }} className="min-w-0 flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-bold active:scale-95 transition-transform"><d.Icon size={18} className="shrink-0" />{d.label}</button>
+              ))}
+            </div>
+            <button onClick={() => { audRef.current?.pause(); URL.revokeObjectURL(shot.url); setShot(null); }} className="w-full py-2.5 rounded-full bg-white/10 text-white text-sm font-semibold">إعادة التصوير</button>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   );
@@ -9179,19 +9821,34 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
   const heading = kind === 'reel' ? t('ريل جديد') : kind === 'video' ? t('فيديو جديد') : t('منشور جديد');
   const [tab, setTab] = useState<'studio' | 'publish'>('publish');
   const [kindMenu, setKindMenu] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(false);
+  const [storyJob, setStoryJob] = useState<{ file: File; track: StudioTrack | null } | null>(null);
+  const applyStudio = (file: File, dest: 'story' | 'post' | 'reel' | 'video', track: StudioTrack | null) => {
+    setStudioOpen(false);
+    if (dest === 'story') { setStoryJob({ file, track }); return; }
+    const type = file.type.startsWith('video/') ? 'video' : 'image';
+    switchKind(dest);
+    setTab('publish');
+    if (media && media.url) URL.revokeObjectURL(media.url);
+    setMedia({ type, url: URL.createObjectURL(file), file });
+    setExtra([]);
+    if (dest === 'video') { setCoverBusy(true); void captureVideoFrame(file).then(blob => { setCoverBusy(false); if (blob) setCover(prev => (prev?.custom ? prev : { blob, url: URL.createObjectURL(blob), custom: false })); }); }
+    const musicOk = dest === 'reel' || (dest === 'post' && type === 'image');
+    if (track && musicOk) { if (track.file) setMusic(track.file); else setRemoteMusic({ url: track.url, name: track.name }); setMusicStart(track.start); setMusicEnd(track.end); }
+  };
   const extraUrls = useMemo(() => extra.map(f => URL.createObjectURL(f)), [extra]);
   useEffect(() => () => { extraUrls.forEach(u => URL.revokeObjectURL(u)); }, [extraUrls]);
   const KINDS = [
-    { key: 'post' as const, icon: '📝', label: 'منشور', hint: 'نص وصور وملفات' },
-    { key: 'video' as const, icon: '▶️', label: 'فيديو', hint: 'فيديو بعنوان وغلاف 16:9' },
-    { key: 'reel' as const, icon: '🎬', label: 'ريل', hint: 'فيديو قصير 9:16 مع موسيقى' },
+    { key: 'post' as const, Icon: FileText, label: 'منشور', hint: 'نص وصور وملفات' },
+    { key: 'video' as const, Icon: Video, label: 'فيديو', hint: 'فيديو بعنوان وغلاف 16:9' },
+    { key: 'reel' as const, Icon: Film, label: 'ريل', hint: 'فيديو قصير 9:16 مع موسيقى' },
   ];
   const curKind = KINDS.find(k => k.key === kind) ?? KINDS[0];
   const locChip = loc ? (
     <div className="mb-3 flex max-w-full">
-      <div className="inline-flex max-w-full items-center gap-1.5 ps-3 pe-1.5 py-1.5 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-sm">
+      <div className="inline-flex max-w-full items-center gap-1.5 ps-3 pe-1.5 py-1.5 rounded-full bg-white/10 border border-white/20 text-white text-sm">
         <MapPin size={14} className="shrink-0" /><span className="truncate min-w-0" dir="auto">{loc.name}</span>
-        <button onClick={() => setLoc(null)} aria-label="إزالة الموقع" className="p-1 text-rose-200/80 shrink-0"><X size={13} /></button>
+        <button onClick={() => setLoc(null)} aria-label="إزالة الموقع" className="p-1 text-white/80 shrink-0"><X size={13} /></button>
       </div>
     </div>
   ) : null;
@@ -9202,22 +9859,22 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
     <div className="w-full max-w-xl mx-auto px-3 min-[400px]:px-4 py-4 overflow-x-hidden">
       <h2 className="sr-only">{heading}</h2>
       <div className="grid grid-cols-2 gap-1 bg-gray-900 rounded-2xl p-1 border border-gray-800 mb-4">
-        {([{ k: 'studio' as const, label: '🎨 ستوديو KIX' }, { k: 'publish' as const, label: '🚀 نشر' }]).map(x => (
-          <button key={x.k} onClick={() => setTab(x.k)} className={`min-w-0 truncate py-2.5 rounded-xl text-sm font-bold transition-all ${tab === x.k ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-400 hover:text-white'}`}>{x.label}</button>
+        {([{ k: 'studio' as const, label: 'ستوديو KIX', Icon: Camera }, { k: 'publish' as const, label: 'نشر', Icon: Send }]).map(x => (
+          <button key={x.k} onClick={() => setTab(x.k)} className={`min-w-0 truncate py-2.5 rounded-xl text-sm font-bold transition-all ${tab === x.k ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white' : 'text-gray-400 hover:text-white'}`}><span className="inline-flex items-center justify-center gap-1.5"><x.Icon size={16} />{x.label}</span></button>
         ))}
       </div>
       {tab === 'studio' ? (
-        <div className="rounded-3xl bg-gray-900 border border-gray-800 px-5 py-14 text-center">
-          <div className="text-5xl mb-3">🎨</div>
-          <h3 className="text-white font-extrabold text-xl">ستوديو KIX</h3>
-          <span className="inline-block mt-3 px-4 py-1 rounded-full bg-gradient-to-r from-violet-600/30 to-cyan-500/30 ring-1 ring-white/15 text-cyan-200 text-sm font-bold">قريباً</span>
-          <p className="mt-3 text-sm text-gray-400 leading-6">أدوات التصميم والمونتاج هتوصلك هنا في تحديث جاي.</p>
+        <div className="rounded-3xl bg-gray-900 border border-gray-800 px-5 py-12 text-center">
+          <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center"><Camera size={36} className="text-white" /></div>
+          <h3 className="mt-4 text-white font-extrabold text-xl">ستوديو KIX</h3>
+          <p className="mt-2 text-sm text-gray-300 leading-6">صوّر صورة أو فيديو بفلاتر ألوان، وفلاتر وجه زي سناب شات، واختار مقطع موسيقى واتكلم معاه زي تيك توك.</p>
+          <button onClick={() => setStudioOpen(true)} className="mt-5 w-full py-3.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white font-bold text-base active:scale-[0.98] transition-transform flex items-center justify-center gap-2"><Camera size={20} />افتح الكاميرا</button>
         </div>
       ) : (
       <>
       <div className="mb-4">
         <button onClick={() => setKindMenu(o => !o)} aria-expanded={kindMenu} className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-lg active:scale-[0.99] transition-transform">
-          <span className="text-2xl shrink-0">{curKind.icon}</span>
+          <curKind.Icon size={24} className="shrink-0 text-white" />
           <span className="min-w-0 flex-1 text-start"><span className="block font-extrabold text-base">{curKind.label}</span><span className="block text-xs text-white/85 truncate">{curKind.hint}</span></span>
           <ChevronDown size={22} className={`shrink-0 transition-transform ${kindMenu ? 'rotate-180' : ''}`} />
         </button>
@@ -9225,9 +9882,9 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
           <div className="mt-2 rounded-2xl bg-gray-900 border border-white/10 overflow-hidden">
             {KINDS.map(k => (
               <button key={k.key} onClick={() => { switchKind(k.key); setKindMenu(false); }} className={`w-full flex items-center gap-3 px-4 py-3 text-start border-b border-white/5 last:border-0 ${kind === k.key ? 'bg-white/10' : 'hover:bg-white/5'}`}>
-                <span className="text-xl shrink-0">{k.icon}</span>
+                <k.Icon size={20} className="shrink-0 text-white" />
                 <span className="min-w-0 flex-1"><span className="block text-white font-bold text-sm">{k.label}</span><span className="block text-[11px] text-gray-400 truncate">{k.hint}</span></span>
-                {kind === k.key && <CheckCheck size={16} className="shrink-0 text-cyan-300" />}
+                {kind === k.key && <CheckCheck size={16} className="shrink-0 text-white" />}
               </button>
             ))}
           </div>
@@ -9276,7 +9933,7 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
               <video ref={el => { if (el) el.volume = music || remoteMusic ? videoVol : 1; }} src={media.url} controls playsInline className={`w-full rounded-xl bg-black ${kind === 'reel' ? 'aspect-[9/16] max-h-[min(26rem,62svh)] mx-auto w-auto max-w-full' : kind === 'video' ? 'aspect-video' : 'max-h-[min(18rem,50svh)]'}`} />
             ) : (
               <div className="flex items-center gap-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl">
-                <FileText size={32} className="shrink-0 text-cyan-400" />
+                <FileText size={32} className="shrink-0 text-white" />
                 <div className="min-w-0">
                   <div className="text-white font-medium truncate" dir="auto">{media.file.name}</div>
                   <div className="text-xs text-gray-500">{formatBytes(media.file.size)}</div>
@@ -9292,36 +9949,36 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
         {canMusic && music && (
           <div className="mb-4">
             <div className="flex items-center gap-2 text-sm text-white mb-2 px-1">
-              <Music size={16} className="text-fuchsia-300 shrink-0" />
+              <Music size={16} className="text-white shrink-0" />
               <span className="flex-1 truncate" dir="auto">{music.name}</span>
-              <button onClick={() => { setMusic(null); setMusicStart(0); setMusicEnd(0); }} className="p-1 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
+              <button onClick={() => { setMusic(null); setMusicStart(0); setMusicEnd(0); }} className="p-1 text-gray-400 hover:text-white" aria-label="إزالة الموسيقى"><X size={16} /></button>
             </div>
             <MusicTrimmer file={music} start={musicStart} end={musicEnd} onStart={setMusicStart} onEnd={setMusicEnd} />
           </div>
         )}
         {canMusic && remoteMusic && !music && (
           <div className="mb-4 flex items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600/20 to-cyan-500/15 border border-violet-400/25 p-3 text-sm text-white">
-            <Music size={16} className="text-fuchsia-300 shrink-0" />
+            <Music size={16} className="text-white shrink-0" />
             <span className="flex-1 truncate" dir="auto">{remoteMusic.name}</span>
-            <button onClick={() => setLibOpen(true)} className="text-xs text-cyan-300 shrink-0">تغيير</button>
-            <button onClick={() => setRemoteMusic(null)} className="p-1 text-gray-400 hover:text-red-400" aria-label="إزالة الموسيقى"><X size={16} /></button>
+            <button onClick={() => setLibOpen(true)} className="text-xs text-white shrink-0">تغيير</button>
+            <button onClick={() => setRemoteMusic(null)} className="p-1 text-gray-400 hover:text-white" aria-label="إزالة الموسيقى"><X size={16} /></button>
           </div>
         )}
         {canMusic && remoteMusic && !music && <MusicTrimmer key={remoteMusic.url} src={remoteMusic.url} name={remoteMusic.name} start={musicStart} end={musicEnd} onStart={setMusicStart} onEnd={setMusicEnd} />}
         {media?.type === 'video' && kind === 'reel' && (music || remoteMusic) && (
           <div className="mb-4 rounded-2xl bg-gray-800/60 border border-gray-700 p-3 space-y-2.5">
             <p className="text-xs text-gray-300 font-semibold">مستوى الصوت</p>
-            {([['🎬 صوت الفيديو الأصلي', videoVol, setVideoVol], ['🎵 صوت الموسيقى', musicVol, setMusicVol]] as const).map(([label, v, set]) => (
+            {([['صوت الفيديو الأصلي', videoVol, setVideoVol], ['صوت الموسيقى', musicVol, setMusicVol]] as const).map(([label, v, set]) => (
               <div key={label} className="flex items-center gap-2" dir="ltr">
                 <button onClick={() => set(v > 0 ? 0 : 1)} className="shrink-0 w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center" aria-label="كتم">{v > 0 ? <Volume2 size={15} /> : <VolumeX size={15} />}</button>
-                <input type="range" min={0} max={1} step={0.05} value={v} onChange={e => set(Number(e.target.value))} className="flex-1 min-w-0 accent-violet-500" />
+                <input type="range" min={0} max={1} step={0.05} value={v} onChange={e => set(Number(e.target.value))} className="flex-1 min-w-0 accent-white" />
                 <span className="w-10 text-xs text-gray-300 tabular-nums text-center">{Math.round(v * 100)}%</span>
                 <span className="text-[11px] text-gray-400 w-20 min-[400px]:w-28 shrink-0 text-right" dir="rtl">{label}</span>
               </div>
             ))}
             <div className="flex gap-2 pt-1">
-              <button onClick={() => { setVideoVol(0); setMusicVol(1); }} className="flex-1 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold">🔇 اعزل الصوت الأصلي</button>
-              <button onClick={() => { setVideoVol(1); setMusicVol(0.5); }} className="flex-1 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold">🎚 الاتنين مع بعض</button>
+              <button onClick={() => { setVideoVol(0); setMusicVol(1); }} className="flex-1 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold">اعزل الصوت الأصلي</button>
+              <button onClick={() => { setVideoVol(1); setMusicVol(0.5); }} className="flex-1 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold">الاتنين مع بعض</button>
             </div>
           </div>
         )}
@@ -9330,12 +9987,12 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
           <div className="mb-4 rounded-xl bg-gray-800/60 border border-gray-700 p-3">
             <div className="flex items-center justify-between mb-2 text-xs text-gray-300">
               <span>+{extra.length} ملفات ستُنشر في نفس المنشور</span>
-              <button onClick={() => setExtra([])} className="text-gray-400 hover:text-red-400">إزالة الكل</button>
+              <button onClick={() => setExtra([])} className="text-gray-400 hover:text-white">إزالة الكل</button>
             </div>
             <div className="flex gap-2 overflow-x-auto no-scrollbar">
               {extra.map((f, i) => (
                 <div key={`${f.name}-${i}`} className="relative shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-900 flex items-center justify-center">
-                  {detectMediaKind(f) === 'image' ? <img src={extraUrls[i]} alt="" className="w-full h-full object-cover" /> : detectMediaKind(f) === 'video' ? <Play size={20} className="text-white" fill="white" /> : <FileText size={22} className="text-cyan-400" />}
+                  {detectMediaKind(f) === 'image' ? <img src={extraUrls[i]} alt="" className="w-full h-full object-cover" /> : detectMediaKind(f) === 'video' ? <Play size={20} className="text-white" fill="white" /> : <FileText size={22} className="text-white" />}
                   <button onClick={() => setExtra(prev => prev.filter((_, j) => j !== i))} className="absolute top-0.5 left-0.5 p-0.5 rounded-full bg-black/70 text-white" aria-label="إزالة"><X size={11} /></button>
                 </div>
               ))}
@@ -9361,16 +10018,16 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
         {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
         <div className="grid grid-cols-3 min-[480px]:grid-cols-4 gap-2 mt-1">
           <input ref={fileRef} type="file" multiple={!videoOnly} accept={videoOnly ? 'video/*' : undefined} onChange={handleFile} className="hidden" />
-          {!videoOnly && <button onClick={() => openPicker('image/*')} className={`${toolBtn} text-cyan-300`}><ImageIcon size={20} />صورة</button>}
-          <button onClick={() => openPicker('video/*')} className={`${toolBtn} text-green-300`}><Video size={20} />فيديو</button>
+          {!videoOnly && <button onClick={() => openPicker('image/*')} className={`${toolBtn} text-white`}><ImageIcon size={20} />صورة</button>}
+          <button onClick={() => openPicker('video/*')} className={`${toolBtn} text-white`}><Video size={20} />فيديو</button>
           {kind !== 'video' && (
-            <button onClick={() => { if (!media) { setError(kind === 'reel' ? 'اختر الفيديو الأول وبعدين ضيف الموسيقى' : 'اختر صورة الأول وبعدين ضيف الموسيقى'); return; } setError(''); setLibOpen(true); }} className={`${toolBtn} ${music || remoteMusic ? 'text-fuchsia-200 !bg-fuchsia-500/20' : 'text-fuchsia-300'}`}><Music size={20} />موسيقى</button>
+            <button onClick={() => { if (!media) { setError(kind === 'reel' ? 'اختر الفيديو الأول وبعدين ضيف الموسيقى' : 'اختر صورة الأول وبعدين ضيف الموسيقى'); return; } setError(''); setLibOpen(true); }} className={`${toolBtn} ${music || remoteMusic ? 'text-white !bg-white/20' : 'text-white'}`}><Music size={20} />موسيقى</button>
           )}
           <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (f.size > 20 * 1024 * 1024) { setError('حجم الموسيقى يجب أن لا يتجاوز 20 ميجابايت'); return; } setError(''); setMusic(f); setMusicStart(0); setMusicEnd(0); }} />
-          <button onClick={() => setEmojiOpen(o => !o)} className={`${toolBtn} ${emojiOpen ? 'text-yellow-200 !bg-yellow-500/20' : 'text-yellow-300'}`}><Smile size={20} />إيموجي</button>
-          <button onClick={addMention} className={`${toolBtn} text-sky-300`}><AtSign size={20} />منشن</button>
-          <button onClick={() => setLocOpen(true)} className={`${toolBtn} ${loc ? 'text-rose-200 !bg-rose-500/20' : 'text-rose-300'}`}><MapPin size={20} />موقع</button>
-          {!videoOnly && <button onClick={() => openPicker('*/*')} className={`${toolBtn} text-amber-300`}><Paperclip size={20} />ملف</button>}
+          <button onClick={() => setEmojiOpen(o => !o)} className={`${toolBtn} ${emojiOpen ? 'text-white !bg-white/20' : 'text-white'}`}><Smile size={20} />إيموجي</button>
+          <button onClick={addMention} className={`${toolBtn} text-white`}><AtSign size={20} />منشن</button>
+          <button onClick={() => setLocOpen(true)} className={`${toolBtn} ${loc ? 'text-white !bg-white/20' : 'text-white'}`}><MapPin size={20} />موقع</button>
+          {!videoOnly && <button onClick={() => openPicker('*/*')} className={`${toolBtn} text-white`}><Paperclip size={20} />ملف</button>}
         </div>
         {emojiOpen && <EmojiPicker docked onPick={e => setText(t => t + e)} onClose={() => setEmojiOpen(false)} />}
         <motion.button whileTap={{ scale: 0.97 }} onClick={handlePost} className="mt-4 w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-bold text-base disabled:opacity-60">
@@ -9379,6 +10036,8 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
       </div>
       </>
       )}
+      {studioOpen && <KixStudio onClose={() => setStudioOpen(false)} onUse={applyStudio} />}
+      {storyJob && <StoryComposer file={storyJob.file} currentUser={currentUser} users={users} initialMusic={storyJob.track} onClose={() => setStoryJob(null)} onDone={() => setStoryJob(null)} />}
     </div>
   );
 }
@@ -11216,22 +11875,22 @@ function GamePicker({ onClose, onInvite }: { onClose: () => void; onInvite: (at:
 let chessAudio: AudioContext | null = null;
 function ChessPiece({ t, w, className = '', style }: { t: string; w: boolean; className?: string; style?: React.CSSProperties }) {
   const fill = w ? 'url(#kp-w)' : 'url(#kp-b)';
-  const line = w ? '#7b4aa8' : '#f0b6e8';
-  const accent = w ? '#7b4aa8' : '#f0b6e8';
+  const line = w ? '#2a2150' : '#0d0b1c';
+  const hi = w ? '#8a7cc0' : '#cfc9ff';
   const body: Record<string, React.ReactNode> = {
-    P: <><circle cx="22.5" cy="13" r="5.5" /><path d="M15.5 36c0-7.5 2-11 7-13 5 2 7 5.5 7 13z" /></>,
-    R: <path d="M13 11h4v3h3.5v-3h4v3H28v-3h4v9l-3 3v9l3.5 4h-20L16 32v-9l-3-3z" />,
-    N: <><path d="M12 37c0-9 2-15.5 8.5-19L17 14l3.5-3.5 3 1.2C26 8 28.5 6.5 31 6.5c6 4 8 12.5 6.5 30.5z" /><circle cx="25" cy="15" r="1.3" fill={accent} stroke="none" /></>,
-    B: <><circle cx="22.5" cy="8.5" r="3" /><path d="M22.5 12c6.5 4 9.5 8.5 8.5 13.5-.8 3-3 4-3 6.5H17c0-2.5-2.200-3.500-3-6.500-1-5 2-9.500 8.500-13.500z" /><path d="M22.5 16v6M19.5 19h6" stroke={accent} fill="none" /></>,
-    Q: <><path d="M9 13l5 15 4-14 4.500 14 4.500-14 4 14 5-15-3 24H12z" /><circle cx="9" cy="12" r="2" /><circle cx="18" cy="9.500" r="2" /><circle cx="27" cy="9.500" r="2" /><circle cx="36" cy="12" r="2" /></>,
-    K: <><path d="M22.500 4.500v8M18.500 8.500h8" fill="none" /><path d="M16 22c0-5 2.800-8.500 6.500-8.500S29 17 29 22z" /><path d="M12.500 36c-1.500-8 2-14 10-14s11.500 6 10 14z" /></>,
+    P: <><circle cx="22.5" cy="12.5" r="5.2" /><path d="M16.8 22.2h11.4a1.6 1.6 0 0 1 0 3.2H16.8a1.6 1.6 0 0 1 0-3.2z" /><path d="M18.4 25.4h8.2c.3 4.2 2.3 6.4 4.9 8.4h-18c2.6-2 4.6-4.2 4.9-8.4z" /></>,
+    R: <><path d="M12.5 8.5h4.6v3.6h3.2V8.5h4.4v3.6h3.2V8.5h4.6v9.2H12.5z" /><path d="M14.8 17.7h15.4l1.1 14.1H13.7z" /><path d="M12 31.8h21v2.5H12z" /></>,
+    N: <><path d="M12.8 34c0-9.600 1.600-15.800 8.200-19.800-2.600-.6-4.200-2.300-4.700-4.400l3.700-3 1.400 1.800c2.200-2.200 5.300-2.800 8-1.500C35.600 10.300 37.600 19 36 34z" /><path d="M28.300 12.200c3.200 3.200 4.600 8.400 4.500 15.300" fill="none" stroke={hi} /><circle cx="25.800" cy="14.500" r="1.400" fill={line} stroke="none" /><circle cx="17.300" cy="20" r="1.100" fill={line} stroke="none" /></>,
+    B: <><circle cx="22.500" cy="7.800" r="2.800" /><path d="M22.500 11.200c6.200 3.900 9 8.700 8.100 13.400-.5 2.800-2.700 4-2.700 6.400h-10.800c0-2.400-2.200-3.600-2.700-6.400-.9-4.700 1.900-9.500 8.100-13.400z" /><path d="M19.800 19.500l6.400 6.400" fill="none" stroke={hi} /><path d="M15.500 31h14v2.800h-14z" /></>,
+    Q: <><path d="M10 14l5 15.500h15L35 14l-5.600 6.200-.9-10.700-6 9.500-6-9.500-.9 10.700z" /><circle cx="10" cy="12.800" r="2.200" /><circle cx="16.600" cy="9" r="2.200" /><circle cx="28.400" cy="9" r="2.200" /><circle cx="35" cy="12.800" r="2.200" /><path d="M14.500 31h16v2.800h-16z" /></>,
+    K: <><path d="M22.500 3v8.500M18.800 6.800h7.400" fill="none" strokeWidth="2.200" /><path d="M15.500 21.800c0-5.200 3-8.800 7-8.800s7 3.600 7 8.800z" /><path d="M12.500 33.800c-1.900-8.800 2-14.500 10-14.500s11.900 5.700 10 14.500z" /></>,
   };
   return (
     <svg viewBox="0 0 45 45" className={className} style={style} aria-hidden="true">
-      <defs><linearGradient id="kp-w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ffe0e2" /><stop offset="1" stopColor="#e59ac8" /></linearGradient><linearGradient id="kp-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4a58a8" /><stop offset="1" stopColor="#222a62" /></linearGradient></defs>
-      <g fill={fill} stroke={line} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
+      <defs><linearGradient id="kp-w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ffffff" /><stop offset="1" stopColor="#cdd3ea" /></linearGradient><linearGradient id="kp-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4a4f7a" /><stop offset="1" stopColor="#14162b" /></linearGradient></defs>
+      <g fill={fill} stroke={line} strokeWidth="1.7" strokeLinejoin="round" strokeLinecap="round">
         {body[t]}
-        <rect x="9" y="36" width="27" height="4" rx="2" />
+        <path d="M10 39.500h25v-3.200c0-1.500-1-2.500-2.500-2.500h-20c-1.500 0-2.500 1-2.500 2.500z" />
       </g>
     </svg>
   );
@@ -11343,7 +12002,7 @@ function ChessGame({ game, games, meId, me, other, onMove, onResign, onDraw, onT
     if (reviewing || !game.last || game.last[1] !== i || skipAnim.current === game.moves.length - 1) return undefined;
     const col = (sq: number) => (myColor === 'w' ? sq % 8 : 7 - (sq % 8));
     const row = (sq: number) => (myColor === 'w' ? Math.floor(sq / 8) : 7 - Math.floor(sq / 8));
-    return { ['--dx' as string]: String((col(game.last[0]) - col(i)) * 113.6), ['--dy' as string]: String((row(game.last[0]) - row(i)) * 113.6), animation: 'kpSlide .22s cubic-bezier(.22,.8,.3,1) both', zIndex: 5 };
+    return { ['--dx' as string]: String((col(game.last[0]) - col(i)) * 113.6), ['--dy' as string]: String((row(game.last[0]) - row(i)) * 113.6), animation: 'kpSlide .16s cubic-bezier(.2,.8,.2,1) both', zIndex: 5, willChange: 'transform' };
   };
   const tap = (i: number) => {
     if (reviewing || promo) return;
@@ -11539,7 +12198,11 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [openGid, setOpenGid] = useState<string | null>(null);
   const games = useMemo(() => collectGames(messages, currentUser.id, chatUser.id), [messages, currentUser.id, chatUser.id]);
   const openGame = games.find(x => x.g === openGid) ?? null;
-  const sendGame = (d: GameMsg) => { void send({ text: gameText(d) }); };
+  const sendGame = (d: GameMsg) => {
+    const text = gameText(d); const id = crypto.randomUUID();
+    void typingChannel.current?.send({ type: 'broadcast', event: 'game', payload: { id, text, from: currentUser.id } }); // reaches the opponent at once; the database copy follows
+    void send({ text, id });
+  };
   // Open the match by itself when the invite gets accepted (or its scheduled time arrives) while this chat is open.
   const [gTick, setGTick] = useState(0);
   useEffect(() => {
@@ -11580,6 +12243,12 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       setPeerTyping(true);
       window.clearTimeout(typingTimer.current);
       typingTimer.current = window.setTimeout(() => setPeerTyping(false), 3500);
+    });
+    channel.on('broadcast', { event: 'game' }, payload => {
+      const m = payload.payload as { id?: string; text?: string; from?: string } | undefined;
+      if (!m || !m.id || !m.text || m.from !== chatUser.id || !parseGame(m.text)) return;
+      const mid = m.id, mtext = m.text, now = Date.now();
+      setConversations(prev => prev.map(c => (c.id !== convId || c.messages.some(x => x.id === mid) ? c : { ...c, messages: [...c.messages, { id: mid, senderId: chatUser.id, text: mtext, timestamp: now, read: false }], lastActivity: now })));
     });
     channel.subscribe();
     typingChannel.current = channel;
@@ -11652,7 +12321,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   };
 
   // Instant sending: the message appears at once; upload and save happen in the background (removed again only if they fail).
-  const send = async (opts: { text?: string; file?: Blob; mediaType?: 'image' | 'video' | 'voice' | 'file'; duration?: number; fileName?: string; replyToId?: string }): Promise<boolean> => {
+  const send = async (opts: { text?: string; file?: Blob; mediaType?: 'image' | 'video' | 'voice' | 'file'; duration?: number; fileName?: string; replyToId?: string; id?: string }): Promise<boolean> => {
     const body = (opts.text ?? '').trim();
     if (!body && !opts.file) return false;
     setError('');
@@ -11664,7 +12333,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
       return false;
     }
-    const id = crypto.randomUUID();
+    const id = opts.id ?? crypto.randomUUID();
     const path = opts.file ? kanPath(`${convId}/${crypto.randomUUID()}.${CHAT_EXT[opts.file.type] ?? safeExt(opts.fileName)}`, opts.file.size) : null;
     const msg: Message = {
       id, senderId: currentUser.id, text: body, timestamp: Date.now(), read: false,
