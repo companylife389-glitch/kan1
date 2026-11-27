@@ -16086,9 +16086,10 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
         </button>
         {showGames && <GamePicker onClose={() => setShowGames(false)} onInvite={(at, tc) => { sendGame({ k: 'inv', g: crypto.randomUUID(), at, tc }); setShowGames(false); }} />}
         {openGame && <ChessGame game={openGame} games={games} meId={currentUser.id} me={currentUser} other={chatUser} onMove={mv => sendGame({ k: 'mv', g: openGame.g, n: openGame.moves.length, m: mv })} onResign={() => sendGame({ k: 'res', g: openGame.g })} onDraw={k => sendGame({ k, g: openGame.g })} onTimeout={() => sendGame({ k: 'to', g: openGame.g })} onJoin={() => sendGame({ k: 'jn', g: openGame.g })} onNew={() => { sendGame({ k: 'inv', g: crypto.randomUUID(), at: Date.now(), tc: openGame.tc }); setOpenGid(null); }} onClose={() => setOpenGid(null)} chat={messages.filter(m => m.text && !parseGame(m.text) && !parseVote(m.text) && !parsePoll(m.text) && m.timestamp >= openGame.ts).slice(-4)} onChat={t => void send({ text: t })} />}
-        <button onClick={() => startCall(chatUser.id, false)} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-white" aria-label="مكالمة صوتية" title="مكالمة صوتية"><CallIcon size={20} color="#fff" /></button>
-        <button onClick={() => startCall(chatUser.id, true)} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-white" aria-label="مكالمة فيديو" title="مكالمة فيديو"><Video size={20} color="#fff" /></button>
-        <div className="relative">
+        <div className="relative flex items-center shrink-0">
+          <button onClick={() => startCall(chatUser.id, false)} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-white shrink-0" aria-label="مكالمة صوتية" title="مكالمة صوتية"><CallIcon size={20} color="#fff" /></button>
+          <button onClick={() => startCall(chatUser.id, true)} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-white shrink-0" aria-label="مكالمة فيديو" title="مكالمة فيديو"><Video size={20} color="#fff" /></button>
+          <div className="relative">
           <button
             onClick={() => setShowBgPicker(!showBgPicker)}
             className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400"
@@ -16105,6 +16106,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               />
             )}
           </AnimatePresence>
+          </div>
         </div>
       </div>
 
