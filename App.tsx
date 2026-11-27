@@ -978,6 +978,40 @@ async function disablePush(): Promise<void> {
   }
 }
 
+// ============ Saved accounts: switch between several accounts on this device without typing the password ============
+type SavedAcc = { id: string; name: string; avatar: string; at: string; rt: string };
+const ACC_KEY = 'kan_accounts';
+function readAccounts(): SavedAcc[] {
+  try { const r = JSON.parse(localStorage.getItem(ACC_KEY) ?? '[]'); return Array.isArray(r) ? r.filter((a: SavedAcc) => a && a.id && a.rt) : []; } catch { return []; }
+}
+function writeAccounts(list: SavedAcc[]) { try { localStorage.setItem(ACC_KEY, JSON.stringify(list.slice(0, 8))); } catch { /* ignore */ } }
+// Keeps the tokens of the signed-in account fresh in the list (called on every auth event).
+function rememberSession(session: { user: { id: string }; access_token: string; refresh_token: string }, info?: { name?: string; avatar?: string }) {
+  const list = readAccounts();
+  const i = list.findIndex(a => a.id === session.user.id);
+  const prev = i >= 0 ? list[i] : undefined;
+  const next: SavedAcc = { id: session.user.id, name: info?.name || prev?.name || '', avatar: info?.avatar ?? prev?.avatar ?? '', at: session.access_token, rt: session.refresh_token };
+  if (i >= 0) list[i] = next; else list.unshift(next);
+  writeAccounts(list);
+}
+function forgetAccount(id: string) { writeAccounts(readAccounts().filter(a => a.id !== id)); }
+async function switchToAccount(id: string): Promise<boolean> {
+  const acc = readAccounts().find(a => a.id === id);
+  if (!acc) return false;
+  try {
+    await detachPush(); // this browser stops getting the old account's notifications; the new one re-attaches itself
+    const { error } = await supabase.auth.setSession({ access_token: acc.at, refresh_token: acc.rt });
+    if (error) { forgetAccount(id); return false; }
+    window.location.reload(); // clean start for the new account (no stale feed/chats)
+    return true;
+  } catch { return false; }
+}
+// Leaves the current account signed-in on the list (tokens kept, NOT revoked) and opens the sign-in / sign-up screen.
+async function addAnotherAccount() {
+  await detachPush();
+  await supabase.auth.signOut({ scope: 'local' });
+}
+
 // On sign-out: stop sending this person's notifications to this browser (it re-attaches on next sign-in).
 async function detachPush(): Promise<void> {
   try {
@@ -6643,6 +6677,11 @@ export default function App() {
 
   const currentUser = users.find(u => u.id === currentUserId) || null;
   useEffect(() => {
+    if (!currentUser) return;
+    const list = readAccounts(); const a = list.find(x => x.id === currentUser.id);
+    if (a && (a.name !== currentUser.displayName || a.avatar !== (currentUser.avatar ?? ''))) { a.name = currentUser.displayName; a.avatar = currentUser.avatar ?? ''; writeAccounts(list); }
+  }, [currentUser?.id, currentUser?.displayName, currentUser?.avatar]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (!currentUserId) { setStoryRings(new Map()); return; }
     let off = false;
     const load = async () => {
@@ -6684,10 +6723,12 @@ export default function App() {
   useEffect(() => {
     if (!isConfigured) { setAuthReady(true); return; }
     supabase.auth.getSession().then(({ data }) => {
+      if (data.session) rememberSession(data.session);
       setCurrentUserId(data.session?.user.id ?? null);
       setAuthReady(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) rememberSession(session);
       setCurrentUserId(session?.user.id ?? null);
     });
     return () => sub.subscription.unsubscribe();
@@ -8037,6 +8078,18 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
             </div>
           )}
 
+          {readAccounts().length > 0 && (
+            <div className="mb-4 space-y-2">
+              <div className="text-xs text-gray-400">حسابات محفوظة على الجهاز</div>
+              {readAccounts().map(a => (
+                <button key={a.id} onClick={() => void switchToAccount(a.id)} className="w-full flex items-center gap-3 p-2 rounded-xl bg-gray-800/70 border border-gray-700 text-start active:scale-[0.98]">
+                  <Avatar userId={a.id} src={a.avatar} name={a.name || '?'} size="sm" />
+                  <span className="flex-1 min-w-0 text-sm text-white truncate">{a.name || 'حساب'}</span>
+                  <span className="text-[11px] text-violet-300">دخول</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="space-y-4">
             <div>
               <label className="text-sm text-gray-400 mb-1 block">{t('اسم المستخدم')}</label>
@@ -10045,6 +10098,25 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
   const [quality, setQuality] = useState<'excellent' | 'good' | 'poor' | 'lost' | 'unknown'>('unknown');
   const [reconnecting, setReconnecting] = useState(false);
   const [remoteCamOff, setRemoteCamOff] = useState(false);
+  const [speaker, setSpeaker] = useState(false); // false = ear (voice calls start here), true = loudspeaker
+  const speakerRef = useRef(false);
+  // Routes the call audio: loudspeaker or the phone's earpiece (where the browser exposes it through setSinkId).
+  const applySpeaker = async (on: boolean, only?: HTMLElement) => {
+    try {
+      const els = (only ? [only] : audioEls.current) as (HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> })[];
+      if (!els.length || !els[0].setSinkId) return;
+      let id = 'default';
+      if (!on) {
+        const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audiooutput');
+        const ear = devs.find(d => /earpiece|receiver|handset|phone|سماعة الأذن/i.test(d.label));
+        if (ear) id = ear.deviceId; else return; // no earpiece exposed on this browser: keep the system route
+      }
+      await Promise.all(els.map(e => e.setSinkId?.(id).catch(() => undefined)));
+    } catch { /* ignore */ }
+  };
+  useEffect(() => { speakerRef.current = speaker; void applySpeaker(speaker); }, [speaker]); // eslint-disable-line react-hooks/exhaustive-deps
+  const callVideo = !!call?.video, callPeerId = call?.peer.id;
+  useEffect(() => { if (callPeerId) setSpeaker(callVideo); }, [callPeerId, callVideo]);
   const lkRef = useRef<{ Track: any; RoomEvent: any } | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   useEffect(() => { const h = window.setTimeout(() => void loadLivekit().catch(() => undefined), 2500); return () => window.clearTimeout(h); }, []);
   useRing(call && call.phase === 'ringing' ? (call.dir === 'in' ? 'in' : 'out') : null);
@@ -10056,7 +10128,7 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
     audioEls.current.forEach(e => e.remove());
     audioEls.current = [];
     if (remoteEl.current) remoteEl.current.replaceChildren();
-    setCall(null); setMuted(false); setCamOff(false); setSecs(0); setMini(false); setFacing('user'); setSharing(false); setQuality('unknown'); setReconnecting(false); setRemoteCamOff(false);
+    setCall(null); setMuted(false); setCamOff(false); setSecs(0); setMini(false); setFacing('user'); setSharing(false); setQuality('unknown'); setReconnecting(false); setRemoteCamOff(false); setSpeaker(false);
   };
   endRef.current = (notify: boolean) => {
     const c = callRef.current;
@@ -10096,7 +10168,7 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
       if (track.kind === Track.Kind.Video) {
         el.className = `w-full h-full ${track.source === Track.Source.ScreenShare ? 'object-contain' : 'object-cover'}`;
         remoteEl.current?.appendChild(el); showLastRemote(); setRemoteCamOff(false);
-      } else { el.style.display = 'none'; document.body.appendChild(el); audioEls.current.push(el); void (el as HTMLMediaElement).play?.().catch(() => undefined); }
+      } else { el.style.display = 'none'; document.body.appendChild(el); audioEls.current.push(el); void (el as HTMLMediaElement).play?.().catch(() => undefined); void applySpeaker(speakerRef.current, el); }
     });
     r.on(RoomEvent.TrackUnsubscribed, (track: LkTrack) => { track.detach().forEach(e => e.remove()); showLastRemote(); });
     r.on(RoomEvent.TrackMuted, (pub: { kind: string }) => { if (pub.kind === Track.Kind.Video) setRemoteCamOff(true); });
@@ -10292,6 +10364,7 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
             ) : (
               <>
                 <button onClick={() => { const r = roomRef.current; if (!r) return; void r.localParticipant.setMicrophoneEnabled(muted); setMuted(!muted); }} className={`${btn} ${muted ? 'bg-white' : 'bg-white/15'}`} aria-label="كتم">{muted ? <MicOff size={24} color="#111" /> : <Mic size={24} color="#fff" />}</button>
+                <button onClick={() => setSpeaker(v => !v)} className={`${btn} ${speaker ? 'bg-white' : 'bg-white/15'}`} aria-label={speaker ? 'سماعة الأذن' : 'سبيكر'}>{speaker ? <Volume2 size={24} color="#111" /> : <CallIcon size={24} color="#fff" />}</button>
                 {call.video && <button onClick={() => { const r = roomRef.current; if (!r) return; void r.localParticipant.setCameraEnabled(camOff); setCamOff(!camOff); }} className={`${btn} ${camOff ? 'bg-white' : 'bg-white/15'}`} aria-label="الكاميرا"><VideoOff size={24} color={camOff ? '#111' : '#fff'} /></button>}
                 {call.video && !camOff && <button onClick={() => void flipCamera()} className={`${btn} bg-white/15`} aria-label="قلب الكاميرا"><SwitchCamera size={24} color="#fff" /></button>}
                 {canShare && live && <button onClick={() => void toggleShare()} className={`${btn} ${sharing ? 'bg-white' : 'bg-white/15'}`} aria-label="مشاركة الشاشة"><ScreenShare size={24} color={sharing ? '#111' : '#fff'} /></button>}
@@ -13930,6 +14003,33 @@ function RingStylePicker() {
   );
 }
 
+function AccountsCard({ currentUser }: { currentUser: User }) {
+  const [list, setList] = useState<SavedAcc[]>(() => readAccounts());
+  const [busy, setBusy] = useState('');
+  const others = list.filter(a => a.id !== currentUser.id);
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
+      <div className="font-bold text-white text-sm">حساباتي</div>
+      <div className="flex items-center gap-3 p-2 rounded-xl bg-violet-500/10 border border-violet-500/30">
+        <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="sm" />
+        <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-white truncate">{currentUser.displayName}</div><div className="text-[11px] text-violet-300">الحساب الحالي</div></div>
+        <Check size={16} className="text-violet-300" />
+      </div>
+      {others.map(a => (
+        <div key={a.id} className="flex items-center gap-3 p-2 rounded-xl bg-gray-800/60">
+          <button disabled={!!busy} onClick={() => { setBusy(a.id); void switchToAccount(a.id).then(ok => { if (!ok) { setBusy(''); setList(readAccounts()); } }); }} className="flex items-center gap-3 min-w-0 flex-1 text-start active:scale-[0.98]">
+            <Avatar userId={a.id} src={a.avatar} name={a.name || '?'} size="sm" />
+            <span className="min-w-0 flex-1 text-sm text-white truncate">{a.name || 'حساب'}</span>
+            <span className="text-[11px] text-gray-400">{busy === a.id ? '...' : 'تبديل'}</span>
+          </button>
+          <button onClick={() => { forgetAccount(a.id); setList(readAccounts()); }} className="w-7 h-7 rounded-full text-gray-500 hover:text-red-400 flex items-center justify-center" aria-label="إزالة"><X size={14} /></button>
+        </div>
+      ))}
+      <button onClick={() => void addAnotherAccount()} className="w-full py-2.5 rounded-xl border border-dashed border-gray-600 text-gray-200 text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98]"><Plus size={16} /> إضافة حساب</button>
+    </div>
+  );
+}
+
 function SettingsTab({ currentUser, setUsers }: {
   currentUser: User;
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
@@ -14053,7 +14153,8 @@ function SettingsTab({ currentUser, setUsers }: {
       <InstallCard />
       <PlaybackSettings uid={currentUser.id} />
       <NotificationSettings />
-      <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => { void (async () => { await detachPush(); await supabase.auth.signOut(); })(); }} className="w-full py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 font-medium flex items-center justify-center gap-2">
+      <AccountsCard currentUser={currentUser} />
+      <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => { void (async () => { await detachPush(); forgetAccount(currentUser.id); await supabase.auth.signOut(); })(); }} className="w-full py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 font-medium flex items-center justify-center gap-2">
         <LogOut size={18} /> {t('تسجيل الخروج')}
       </motion.button>
     </div>
