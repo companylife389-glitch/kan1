@@ -466,6 +466,21 @@ function shrinkImage(dataUrl: string, max = 256): Promise<string> {
 const kanBlocks = { mine: new Set<string>(), theirs: new Set<string>(), v: 0, subs: new Set<() => void>() };
 const kanBlocksEmit = () => { kanBlocks.v++; kanBlocks.subs.forEach(f => f()); };
 const useBlocks = () => useSyncExternalStore(cb => { kanBlocks.subs.add(cb); return () => { kanBlocks.subs.delete(cb); }; }, () => kanBlocks.v);
+// "Delete chat from my side": everything up to this moment is hidden for me on this device; the other person keeps theirs.
+const clearedKey = (me: string) => `kan_cleared_${me}`;
+function readCleared(me: string): Record<string, number> {
+  try { const r = JSON.parse(localStorage.getItem(clearedKey(me)) ?? '{}'); return r && typeof r === 'object' ? r : {}; } catch { return {}; }
+}
+function clearChatForMe(me: string, otherId: string) {
+  const c = readCleared(me); c[otherId] = Date.now();
+  try { localStorage.setItem(clearedKey(me), JSON.stringify(c)); } catch { /* ignore */ }
+  window.dispatchEvent(new Event('kan-cleared'));
+}
+function applyCleared(list: Conversation[], me: string): Conversation[] {
+  const cl = readCleared(me);
+  if (Object.keys(cl).length === 0) return list;
+  return list.map(c => { const o = c.participants.find(id => id !== me); const cut = o ? cl[o] : 0; return cut ? { ...c, messages: c.messages.filter(m => m.timestamp > cut) } : c; });
+}
 const kanPrivateIds = new Set<string>();
 async function loadBlocks(me: string) {
   const { data, error } = await supabase.from('blocks').select('blocker_id, blocked_id');
@@ -3977,13 +3992,13 @@ function StoriesBar({ users, currentUser }: { users: User[]; currentUser: User }
     setComposer(f);
   };
 
-  // Everyone's active stories show here (not only people you follow); people you follow come first.
+  // Only the stories of people I follow show here.
   const byUser = new Map<string, StoryItem[]>();
   for (const s of stories) byUser.set(s.userId, [...(byUser.get(s.userId) ?? []), s]);
   const hasUnseen = (g: StoryGroup) => g.items.some(i => !seen.has(i.id));
   const followed = (g: StoryGroup) => currentUser.following.includes(g.userId);
   const others: StoryGroup[] = [...byUser.entries()]
-    .filter(([id]) => id !== currentUser.id && users.some(u => u.id === id))
+    .filter(([id]) => id !== currentUser.id && currentUser.following.includes(id) && users.some(u => u.id === id)) // only people I follow
     .map(([userId, items]) => ({ userId, items }))
     .sort((a, b) => Number(hasUnseen(b)) - Number(hasUnseen(a)) || Number(followed(b)) - Number(followed(a)) || b.items[b.items.length - 1].createdAt - a.items[a.items.length - 1].createdAt);
   const mine = byUser.get(currentUser.id);
@@ -4129,6 +4144,19 @@ const STORY_FILTERS: { n: string; f: string; fx?: StoryFx }[] = [
 // Picker order + categories (new filters go at the END of STORY_FILTERS so stored extra.filter indices stay valid).
 const fIdx = (names: string[]) => names.map(n => STORY_FILTERS.findIndex(f => f.n === n)).filter(i => i >= 0);
 const STORY_FILTER_ORDER: number[] = STORY_FILTERS.map((_, i) => i);
+// Colour looks for photos, applied by Cloudinary on the server (Supabase function `cloudinary-filter`; same ids as its whitelist).
+const CLOUD_LOOKS: { id: string; l: string; g: string }[] = [
+  { id: 'vivid', l: 'حيوي', g: 'linear-gradient(135deg,#ff3d81,#ffb02e)' }, { id: 'warm', l: 'دافئ', g: 'linear-gradient(135deg,#ff9966,#ffcc99)' }, { id: 'cool', l: 'بارد', g: 'linear-gradient(135deg,#3399ff,#99ccff)' },
+  { id: 'fade', l: 'باهت', g: 'linear-gradient(135deg,#9aa0a6,#d7d9dc)' }, { id: 'bw', l: 'أبيض وأسود', g: 'linear-gradient(135deg,#111,#ddd)' }, { id: 'sepia', l: 'سيبيا', g: 'linear-gradient(135deg,#704214,#d2b48c)' },
+  { id: 'athena', l: 'Athena', g: 'linear-gradient(135deg,#7f5af0,#2cb67d)' }, { id: 'audrey', l: 'Audrey', g: 'linear-gradient(135deg,#222,#aaa)' }, { id: 'aurora', l: 'Aurora', g: 'linear-gradient(135deg,#00c9a7,#845ec2)' },
+  { id: 'daguerre', l: 'Daguerre', g: 'linear-gradient(135deg,#5c4b37,#c9b79c)' }, { id: 'eucalyptus', l: 'Eucalyptus', g: 'linear-gradient(135deg,#2d6a4f,#95d5b2)' }, { id: 'fes', l: 'Fes', g: 'linear-gradient(135deg,#b5651d,#f4a261)' },
+  { id: 'frost', l: 'Frost', g: 'linear-gradient(135deg,#90e0ef,#e0f7fa)' }, { id: 'hairspray', l: 'Hairspray', g: 'linear-gradient(135deg,#c77dff,#ffc8dd)' }, { id: 'incognito', l: 'Incognito', g: 'linear-gradient(135deg,#0b132b,#5bc0be)' },
+  { id: 'linen', l: 'Linen', g: 'linear-gradient(135deg,#d6ccc2,#f5ebe0)' }, { id: 'peacock', l: 'Peacock', g: 'linear-gradient(135deg,#006d77,#83c5be)' }, { id: 'primavera', l: 'Primavera', g: 'linear-gradient(135deg,#80ed99,#ffd6a5)' },
+  { id: 'quartz', l: 'Quartz', g: 'linear-gradient(135deg,#f4acb7,#ffe5ec)' }, { id: 'red_rock', l: 'Red Rock', g: 'linear-gradient(135deg,#9d0208,#f48c06)' }, { id: 'refresh', l: 'Refresh', g: 'linear-gradient(135deg,#38b000,#9ef01a)' },
+  { id: 'sizzle', l: 'Sizzle', g: 'linear-gradient(135deg,#ff5400,#ffbd00)' }, { id: 'sonnet', l: 'Sonnet', g: 'linear-gradient(135deg,#3a0ca3,#7209b7)' }, { id: 'ukulele', l: 'Ukulele', g: 'linear-gradient(135deg,#ffb703,#fb8500)' },
+  { id: 'zorro', l: 'Zorro', g: 'linear-gradient(135deg,#000,#6c757d)' }, { id: 'cartoon', l: 'كرتون', g: 'linear-gradient(135deg,#ff006e,#3a86ff)' }, { id: 'oil', l: 'رسم زيتي', g: 'linear-gradient(135deg,#8338ec,#ffbe0b)' },
+  { id: 'vignette', l: 'تعتيم الأطراف', g: 'radial-gradient(circle,#ddd 20%,#222)' },
+];
 const STORY_FILTER_CATS: { id: string; l: string; list: number[] }[] = [
   { id: 'all', l: 'الكل', list: STORY_FILTER_ORDER },
   { id: 'top', l: 'الأشهر', list: [0, ...fIdx(['Paris', 'Clarendon', 'Juno', 'Los Angeles', 'Oslo', 'Lark', 'Golden Hour', 'Portra 400', 'Soft Glow', 'Gingham', 'Teal & Orange', 'Moon'])] },
@@ -4696,6 +4724,28 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
   const [flt, setFlt] = useState(0);
   const [fk, setFk] = useState(100); // filter strength (photos)
   const [fltName, setFltName] = useState('');
+  // Photos: colour looks from Cloudinary (server side). `cl` holds the filtered photo that replaces the original when publishing.
+  const [cl, setCl] = useState<{ id: string; file: File; url: string } | null>(null);
+  const [clBusy, setClBusy] = useState('');
+  const [clErr, setClErr] = useState('');
+  useEffect(() => () => { if (cl) URL.revokeObjectURL(cl.url); }, [cl]);
+  const applyCloud = async (id: string) => {
+    if (clBusy) return;
+    setClErr('');
+    if (!id) { setCl(null); return; }
+    setClBusy(id);
+    try {
+      const small = await shrinkImageFile(file);
+      const dataUrl = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('read')); r.readAsDataURL(small); });
+      const { data, error } = await supabase.functions.invoke('cloudinary-filter', { body: { image: dataUrl, filter: id } });
+      const out = (data as { image?: string } | null)?.image;
+      if (error || !out) throw new Error('cloud');
+      const blob = await (await fetch(out)).blob();
+      const f = new File([blob], `story-${id}.jpg`, { type: 'image/jpeg' });
+      setFlt(0); setFk(100);
+      setCl({ id, file: f, url: URL.createObjectURL(f) });
+    } catch (e) { console.error(e); setClErr('تعذّر تطبيق الفلتر، جرّب تاني'); } finally { setClBusy(''); }
+  };
   const swipeX = useRef(0);
   const pickFlt = (i: number) => { const n = (i + STORY_FILTERS.length) % STORY_FILTERS.length; setFlt(n); setFk(100); setFltName(STORY_FILTERS[n].n); window.setTimeout(() => setFltName(''), 900); };
   const [stk, setStk] = useState<string[]>([]);
@@ -4812,8 +4862,8 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
     setBusy(true);
     setErr('');
     // Every preparation step is guarded: a failure falls back to the original file instead of leaving the button stuck.
-    let baseFile: File = file;
-    if (!isVideo) { try { baseFile = await bakeTransform(file); } catch (e) { console.error(e); } }
+    let baseFile: File = cl?.file ?? file;
+    if (!isVideo) { try { baseFile = await bakeTransform(cl?.file ?? file); } catch (e) { console.error(e); } }
     let upFile: File = baseFile;
     let baked = false;
     if (!isVideo && flt > 0) { try { const b = await bakeFilter(baseFile, STORY_FILTERS[flt].f, flt, fk / 100); if (b) { upFile = b; baked = true; } } catch (e) { console.error(e); } }
@@ -4959,7 +5009,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
         <div style={{ background: isVideo ? undefined : bgc }} className="relative h-full w-full sm:w-auto sm:max-w-full sm:aspect-[9/16] bg-black sm:rounded-[32px] overflow-hidden sm:ring-2 ring-violet-400/40 sm:shadow-[0_0_60px_-10px_rgba(139,92,246,0.6)] flex items-center justify-center">
           {isVideo
             ? (previewUrl ? <video key={previewUrl} src={previewUrl} className="w-full h-full object-contain" style={{ filter: STORY_FILTERS[flt].f }} controls playsInline muted loop autoPlay preload="auto" onError={() => setPreviewFailed(true)} /> : null)
-            : <>{blurBg && previewUrl && <img decoding="async" src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}{previewUrl && <img decoding="async" key={previewUrl} src={previewUrl} alt="" draggable={false} style={{ filter: fk >= 100 ? STORY_FILTERS[flt].f : undefined, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} onError={() => { if (fbTried.current >= 2) { setPreviewFailed(true); return; } const step = ++fbTried.current; if (step === 1) { const r = new FileReader(); r.onload = () => { if (typeof r.result === 'string') setPreviewUrl(r.result); else setPreviewFailed(true); }; r.onerror = () => setPreviewFailed(true); r.readAsDataURL(file); } else { void normalizePickedMedia(file).then(nf => setPreviewUrl(URL.createObjectURL(nf))).catch(() => setPreviewFailed(true)); } }} className="relative w-full h-full object-contain select-none pointer-events-none" />}{fk < 100 && flt > 0 && <img decoding="async" src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, opacity: fk / 100, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none" />}</>}
+            : <>{blurBg && previewUrl && <img decoding="async" src={previewUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-90 pointer-events-none" />}{previewUrl && <img decoding="async" key={cl?.url ?? previewUrl} src={cl?.url ?? previewUrl} alt="" draggable={false} style={{ filter: fk >= 100 ? STORY_FILTERS[flt].f : undefined, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} onError={() => { if (fbTried.current >= 2) { setPreviewFailed(true); return; } const step = ++fbTried.current; if (step === 1) { const r = new FileReader(); r.onload = () => { if (typeof r.result === 'string') setPreviewUrl(r.result); else setPreviewFailed(true); }; r.onerror = () => setPreviewFailed(true); r.readAsDataURL(file); } else { void normalizePickedMedia(file).then(nf => setPreviewUrl(URL.createObjectURL(nf))).catch(() => setPreviewFailed(true)); } }} className="relative w-full h-full object-contain select-none pointer-events-none" />}{fk < 100 && flt > 0 && <img decoding="async" src={previewUrl} alt="" draggable={false} style={{ filter: STORY_FILTERS[flt].f, opacity: fk / 100, transform: `translate(${off.x}%, ${off.y}%) rotate(${rot}deg) scale(${zoom})` }} className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none" />}</>}
           {previewFailed && <div className="absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 px-8 text-center text-white"><span className="text-sm font-bold">تعذّر عرض هذا الملف على جهازك</span><span className="text-xs text-white/70">جرّب صورة أخرى أو خد لقطة شاشة للصورة واختارها</span></div>}
           {!isVideo && tool !== 'draw' && <div className="absolute inset-0 z-[4] touch-none cursor-grab"
             onPointerDown={e => { tapStart.current = { x: e.clientX, y: e.clientY }; setMoreOpen(false); e.currentTarget.setPointerCapture(e.pointerId); bp.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); setSel(-1); setXsel(''); if (bp.current.size === 2) { const [p, q] = [...bp.current.values()]; bz.current = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI, r: rot }; } }}
@@ -5005,8 +5055,9 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/25" />
           <div className="sticky top-0 z-10 -mx-1 px-1 pb-2 mb-1 flex items-center gap-2.5 bg-gradient-to-b from-gray-950 via-gray-950/95 to-transparent">
             {(() => { const d = toolDefs.find(x => x[0] === tool); const Ic = d?.[1]; return Ic ? <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-violet-500/30"><Ic size={17} color="#fff" strokeWidth={2.2} /></span> : null; })()}
-            <span className="flex-1 min-w-0 truncate text-white text-[15px] font-bold">{toolLabel}{tool === 'filter' && flt > 0 ? <span className="text-white/55 font-medium text-xs"> · {STORY_FILTERS[flt].n}</span> : null}</span>
-            {tool === 'filter' && flt > 0 && <button onClick={() => pickFlt(0)} className="px-3 h-8 rounded-full bg-white/10 ring-1 ring-white/15 text-white/90 text-xs font-semibold active:scale-95">إزالة</button>}
+            <span className="flex-1 min-w-0 truncate text-white text-[15px] font-bold">{toolLabel}{tool === 'filter' && !isVideo && cl ? <span className="text-white/55 font-medium text-xs"> · {CLOUD_LOOKS.find(x => x.id === cl.id)?.l}</span> : tool === 'filter' && flt > 0 ? <span className="text-white/55 font-medium text-xs"> · {STORY_FILTERS[flt].n}</span> : null}</span>
+            {tool === 'filter' && !isVideo && cl && <button onClick={() => void applyCloud('')} className="px-3 h-8 rounded-full bg-white/10 ring-1 ring-white/15 text-white/90 text-xs font-semibold active:scale-95">إزالة</button>}
+            {tool === 'filter' && isVideo && flt > 0 && <button onClick={() => pickFlt(0)} className="px-3 h-8 rounded-full bg-white/10 ring-1 ring-white/15 text-white/90 text-xs font-semibold active:scale-95">إزالة</button>}
             <button onClick={() => setTool('')} className="px-4 h-8 rounded-full bg-white text-black text-xs font-bold active:scale-95 shadow">تم</button>
           </div>
         </>}
@@ -5049,8 +5100,24 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
           <span className="w-11 text-center text-white text-xs tabular-nums" dir="ltr">{Math.round(items[sel].r ?? 0)}°</span>
           <button onClick={() => patchSel({ r: ((items[sel].r ?? 0) + 90 > 180 ? (items[sel].r ?? 0) - 270 : (items[sel].r ?? 0) + 90) })} className="shrink-0 px-2.5 py-1 rounded-full bg-white/15 text-white text-xs font-semibold">90°</button>
         </div>}
-        {tool === 'filter' && flt > 0 && !isVideo && <div className="flex items-center gap-3 px-1 mb-2"><span className="text-white/80 text-xs shrink-0">الشدة</span><input type="range" min={10} max={100} value={fk} onChange={e => setFk(Number(e.target.value))} className="flex-1 accent-white" aria-label="شدة الفلتر" /><span className="w-10 text-center text-white text-xs tabular-nums" dir="ltr">{fk}%</span></div>}
-        {tool === 'filter' && <div className="mb-1">
+        {false && tool === 'filter' && flt > 0 && !isVideo && <div className="flex items-center gap-3 px-1 mb-2"><span className="text-white/80 text-xs shrink-0">الشدة</span><input type="range" min={10} max={100} value={fk} onChange={e => setFk(Number(e.target.value))} className="flex-1 accent-white" aria-label="شدة الفلتر" /><span className="w-10 text-center text-white text-xs tabular-nums" dir="ltr">{fk}%</span></div>}
+        {tool === 'filter' && !isVideo && <div className="mb-1">
+          {clErr && <div className="text-red-300 text-xs mb-2 px-1">{clErr}</div>}
+          <div className="grid grid-rows-2 grid-flow-col auto-cols-[68px] gap-x-2.5 gap-y-2 overflow-x-auto no-scrollbar pb-1">
+            {[{ id: '', l: 'بدون', g: 'linear-gradient(135deg,#374151,#6b7280)' }, ...CLOUD_LOOKS].map(x => {
+              const on = (cl?.id ?? '') === x.id;
+              return (
+                <button key={x.id || 'none'} onClick={() => void applyCloud(x.id)} disabled={!!clBusy} className="flex flex-col items-center gap-1 active:scale-95 transition-transform disabled:opacity-70">
+                  <span className={`relative flex items-center justify-center w-[68px] h-[68px] rounded-2xl overflow-hidden transition-all ${on ? 'ring-2 ring-white shadow-lg shadow-violet-500/40' : 'ring-1 ring-white/10 opacity-90'}`} style={{ background: x.g }}>
+                    {clBusy === x.id ? <span className="w-6 h-6 rounded-full border-2 border-white/40 border-t-white animate-spin" /> : on ? <span className="w-5 h-5 rounded-full bg-white text-black text-[11px] font-black flex items-center justify-center">✓</span> : null}
+                  </span>
+                  <span className={`w-full truncate text-center text-[10.5px] ${on ? 'text-white font-bold' : 'text-white/65'}`}>{x.l}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>}
+        {tool === 'filter' && isVideo && <div className="mb-1">
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar mb-2.5 -mx-1 px-1">{STORY_FILTER_CATS.map(c => <button key={c.id} onClick={() => setFcat(c.id)} className={`shrink-0 px-3.5 h-8 rounded-full text-xs font-semibold transition-all active:scale-95 ${fcat === c.id ? 'bg-white text-black shadow' : 'bg-white/10 text-white/80 ring-1 ring-white/10'}`}>{c.l}<span className={`ms-1.5 text-[10px] ${fcat === c.id ? 'text-black/50' : 'text-white/40'}`}>{c.list.length - 1}</span></button>)}</div>
           <div key={fcat} className="grid grid-rows-2 grid-flow-col auto-cols-[68px] gap-x-2.5 gap-y-2 overflow-x-auto no-scrollbar pb-1 ky-fade">{(STORY_FILTER_CATS.find(c => c.id === fcat) ?? STORY_FILTER_CATS[0]).list.map(i => ({ f: STORY_FILTERS[i], i })).map(({ f, i }) => <button key={f.n} onClick={() => pickFlt(i)} className="flex flex-col items-center gap-1 active:scale-95 transition-transform"><span className={`relative block w-[68px] h-[68px] rounded-2xl overflow-hidden isolate transition-all ${flt === i ? 'ring-2 ring-white shadow-lg shadow-violet-500/40' : 'ring-1 ring-white/10 opacity-90'}`}>{isVideo ? <video src={`${previewUrl}#t=0.1`} preload="metadata" muted playsInline style={{ filter: f.f }} className="w-full h-full object-cover pointer-events-none" /> : <img decoding="async" src={previewUrl} alt="" loading="lazy" style={{ filter: f.f }} className="w-full h-full object-cover" />}<FilterFx i={i} />{flt === i && <span className="absolute bottom-1 end-1 z-[5] w-4 h-4 rounded-full bg-white text-black text-[10px] font-black flex items-center justify-center">✓</span>}</span><span className={`w-full truncate text-center text-[10.5px] ${flt === i ? 'text-white font-bold' : 'text-white/65'}`}>{f.n}</span></button>)}</div>
         </div>}
@@ -6833,6 +6900,9 @@ export default function App() {
 
   const conversationsRef = useRef<Conversation[]>([]);
   conversationsRef.current = conversations;
+  const [clearTick, setClearTick] = useState(0);
+  useEffect(() => { const h = () => setClearTick(n => n + 1); window.addEventListener('kan-cleared', h); return () => window.removeEventListener('kan-cleared', h); }, []);
+  const visibleConvs = useMemo(() => (currentUserId ? applyCleared(conversations, currentUserId) : conversations), [conversations, currentUserId, clearTick]); // eslint-disable-line react-hooks/exhaustive-deps
   recentChatActivity = () => {
     const m = new Map<string, number>();
     for (const c of conversationsRef.current) for (const id of c.participants) if (id !== currentUserId) m.set(id, Math.max(m.get(id) ?? 0, c.lastActivity));
@@ -7392,7 +7462,7 @@ export default function App() {
   }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const unreadCount = currentUser
-    ? conversations
+    ? visibleConvs
         .filter(c => c.participants.includes(currentUser.id))
         .reduce((sum, c) => sum + c.messages.filter(m => m.senderId !== currentUser.id && !m.read).length, 0)
       + groups.reduce((sum, g) => sum + groupUnread(g, currentUser.id), 0)
@@ -7622,7 +7692,7 @@ export default function App() {
               <MessagesTab
                 currentUser={currentUser}
                 users={users}
-                conversations={conversations}
+                conversations={visibleConvs}
                 setConversations={setConversations}
                 groups={groups}
                 setGroups={setGroups}
@@ -14138,8 +14208,10 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
   selectedChat: string | null;
   setSelectedChat: (id: string | null) => void;
 }) {
+  const clearedMap = readCleared(currentUser.id);
   const myConversations = conversations
     .filter(c => c.participants.includes(currentUser.id))
+    .filter(c => { const o = c.participants.find(id => id !== currentUser.id); return !(o && clearedMap[o] && c.messages.length === 0); })
     .sort((a, b) => b.lastActivity - a.lastActivity);
   const [section, setSection] = useState<'direct' | 'groups'>('direct');
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
@@ -14154,6 +14226,9 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
     }
   }, [openGroupId, groups]); // eslint-disable-line react-hooks/exhaustive-deps
   const [creatingGroup, setCreatingGroup] = useState(false);
+  const [convMenu, setConvMenu] = useState<string | null>(null); // the person whose chat row was long-pressed
+  const lp = useRef<{ t?: number; fired: boolean; x: number; y: number }>({ fired: false, x: 0, y: 0 });
+  useBlocks();
   const myGroups = groups.slice().sort((a, b) => b.lastActivity - a.lastActivity);
   const directUnread = myConversations.reduce((n, c) => n + c.messages.filter(m => m.senderId !== currentUser.id && !m.read).length, 0);
   const groupsUnread = myGroups.reduce((n, g) => n + groupUnread(g, currentUser.id), 0);
@@ -14255,7 +14330,12 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
             const lastMsg = conv.messages[conv.messages.length - 1];
             const unread = conv.messages.filter(m => m.senderId !== currentUser.id && !m.read).length;
             return (
-              <motion.button key={conv.id} style={{ animationDelay: `${Math.min(ci, 8) * 28}ms` }} onClick={() => setSelectedChat(otherUserId)} className="kan-row w-full flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl hover:border-gray-700 transition-[border-color,transform] duration-150 text-right">
+              <motion.button key={conv.id} style={{ animationDelay: `${Math.min(ci, 8) * 28}ms`, WebkitTouchCallout: 'none', userSelect: 'none' }}
+                onPointerDown={e => { lp.current.fired = false; lp.current.x = e.clientX; lp.current.y = e.clientY; window.clearTimeout(lp.current.t); lp.current.t = window.setTimeout(() => { lp.current.fired = true; try { navigator.vibrate?.(15); } catch { /* ignore */ } setConvMenu(otherUserId); }, 450); }}
+                onPointerMove={e => { if (Math.abs(e.clientX - lp.current.x) + Math.abs(e.clientY - lp.current.y) > 10) window.clearTimeout(lp.current.t); }}
+                onPointerUp={() => window.clearTimeout(lp.current.t)} onPointerLeave={() => window.clearTimeout(lp.current.t)} onPointerCancel={() => window.clearTimeout(lp.current.t)}
+                onContextMenu={e => { e.preventDefault(); setConvMenu(otherUserId); }}
+                onClick={() => { if (lp.current.fired) { lp.current.fired = false; return; } setSelectedChat(otherUserId); }} className="kan-row w-full flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl hover:border-gray-700 transition-[border-color,transform] duration-150 text-right">
                 <div className="relative">
                   <Avatar userId={otherUser.id} src={otherUser.avatar} name={otherUser.displayName} size="lg" />
                   {unread > 0 && (
@@ -14281,6 +14361,25 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
           })}
         </div>
       )}
+      {convMenu && (() => {
+        const u = users.find(x => x.id === convMenu);
+        if (!u) return null;
+        const blocked = kanBlocks.mine.has(u.id);
+        return createPortal(
+          <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60" onClick={() => setConvMenu(null)}>
+            <div dir={DIR} onClick={e => e.stopPropagation()} className="w-full max-w-md bg-gray-900 border-t border-gray-800 rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="flex items-center gap-3 mb-3 px-1">
+                <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="md" />
+                <div className="font-bold text-white truncate">{u.displayName}</div>
+              </div>
+              <button onClick={async () => { setConvMenu(null); if (await kanConfirm('مسح المحادثة من عندك بس؟ الطرف التاني هيفضل شايفها.')) clearChatForMe(currentUser.id, u.id); }} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-white text-sm"><Trash2 size={18} className="text-gray-300" /> مسح المحادثة من عندي</button>
+              <button onClick={async () => { setConvMenu(null); if (!blocked && !(await kanConfirm('حظر هذا الحساب؟ لن يتمكن من مراسلتك ورؤية منشوراتك.'))) return; await setBlocked(currentUser.id, u.id, !blocked); }} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-sm" style={{ color: blocked ? '#fff' : '#f87171' }}><BlockIcon size={18} /> {blocked ? 'إلغاء الحظر' : 'حظر'}</button>
+              <button onClick={() => setConvMenu(null)} className="w-full mt-1 py-3 rounded-xl bg-white/5 text-gray-200 text-sm font-semibold">إلغاء</button>
+            </div>
+          </div>,
+          document.body,
+        );
+      })()}
       {creatingGroup && (
         <CreateGroupSheet
           users={users}
@@ -17215,7 +17314,6 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               </>
             )}
           </div>
-          <button onClick={async () => { const on = !kanBlocks.mine.has(chatUser.id); if (on && !(await kanConfirm('حظر هذا الحساب؟ لن يتمكن من مراسلتك ورؤية منشوراتك.'))) return; await setBlocked(currentUser.id, chatUser.id, on); }} className="p-2 hover:bg-gray-800 rounded-full transition-colors shrink-0" aria-label="حظر / إلغاء الحظر" title="حظر / إلغاء الحظر"><BlockIcon size={18} className={kanBlocks.mine.has(chatUser.id) ? 'text-red-400' : 'text-gray-400'} /></button>
           <div className="relative">
           <button
             onClick={() => { setShowBgPicker(!showBgPicker); setShowCallMenu(false); }}
