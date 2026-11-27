@@ -12907,7 +12907,8 @@ function NotificationSettings() {
   const sendTest = async () => {
     try {
       const reg = await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL as string);
-      await reg?.showNotification('KIX', { body: 'الإشعارات تعمل على هذا الجهاز ✅', icon: `${import.meta.env.BASE_URL as string}icon-192.png` });
+            await reg?.showNotification('KIX', { body: 'الإشعارات تعمل على هذا الجهاز ✅', tag: 'kan-test', renotify: true, silent: false, vibrate: [200, 100, 200], requireInteraction: true, badge: `${import.meta.env.BASE_URL as string}badge-96.png`, icon: `${import.meta.env.BASE_URL as string}icon-192.png` } as NotificationOptions);
+      setMessage('لو الإشعار نزل في الشريط فقط: اضغط عليه ضغطة طويلة ← ⚙ (الإعدادات) ← اختر «عاجل / الظهور على الشاشة» وفعّل الصوت، فينزل منسدلاً بعد كده.');
     } catch (e) {
       console.error(e);
       setMessage('تعذّر عرض الإشعار التجريبي.');
