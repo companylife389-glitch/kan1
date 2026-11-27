@@ -13265,11 +13265,14 @@ async function videoToSticker(file: File, start: number, len: number): Promise<B
 
 // ============ متجر KIX: animated stickers with search ============
 // Works out of the box with Google's animated emoji (no key). If VITE_GIPHY_KEY is set, the search also pulls Giphy stickers.
-const GIPHY_KEY = (import.meta.env.VITE_GIPHY_KEY as string | undefined) ?? '';
+const GIPHY_KEY = (import.meta.env.VITE_GIPHY_KEY as string | undefined) || 'yuSKpPAQrokzBGs6ScGbp3hwPxvN2mSd';
 const NOTO_BASE = 'https://fonts.gstatic.com/s/e/notoemoji/latest';
 type StoreSticker = { id: string; gif: string; webp: string; thumb: string; still?: string; kind?: 'sticker' | 'gif' };
 type GiphyRow = { id: string; images?: Record<string, { url?: string } | undefined> };
-const STORE_CATS: [string, string][] = [['all', 'الكل'], ['celeb', 'احتفالات الكورة'], ['faces', 'وجوه'], ['hearts', 'قلوب'], ['party', 'احتفال'], ['hands', 'إيدين'], ['sports', 'كورة ورياضة'], ['medals', 'ميداليات'], ['clothes', 'ملابس'], ['flags', 'أعلام'], ['food', 'أكل'], ['animals', 'حيوانات'], ['travel', 'سفر'], ['objects', 'أدوات'], ['symbols', 'رموز'], ['fun', 'حاجات'], ['nature', 'طبيعة']];
+const STORE_CATS: [string, string][] = [['all', 'الكل'], ['faces', 'وجوه'], ['hearts', 'قلوب'], ['party', 'احتفال'], ['hands', 'إيدين'], ['sports', 'كورة ورياضة'], ['medals', 'ميداليات'], ['clothes', 'ملابس'], ['flags', 'أعلام'], ['food', 'أكل'], ['animals', 'حيوانات'], ['travel', 'سفر'], ['objects', 'أدوات'], ['symbols', 'رموز'], ['fun', 'حاجات'], ['nature', 'طبيعة']];
+// Favourites: long-press any sticker or GIF in the store to add / remove it; the first chip shows them.
+const STORE_FAV_KEY = 'kix-store-favs';
+const readStoreFavs = (): StoreSticker[] => { try { const a = JSON.parse(localStorage.getItem(STORE_FAV_KEY) || '[]'); return Array.isArray(a) ? a.filter((x: StoreSticker) => x && typeof x.id === 'string' && x.thumb) : []; } catch { return []; } };
 const STORE_ITEMS: [string, string, string][] = [
  ['1f600', 'faces', 'ابتسامة سعيد happy grin smile'],
  ['1f603', 'faces', 'سعيد فرحان happy smile'],
@@ -14250,6 +14253,7 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
   const [bad, setBad] = useState<Set<string>>(() => new Set());
   const [net, setNet] = useState<StoreSticker[]>([]);
   const [busy, setBusy] = useState(false);
+  const [netErr, setNetErr] = useState(false);
   const [pickBusy, setPickBusy] = useState('');
   // Smooth grid: static (light) pictures, the animation only plays under your finger / mouse, and the list loads page by page.
   const [hot, setHot] = useState('');
@@ -14257,6 +14261,15 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
   const [noAnim, setNoAnim] = useState<Set<string>>(() => new Set());
   const [animOk, setAnimOk] = useState<Set<string>>(() => new Set());
   const [count, setCount] = useState(40);
+  const [favs, setFavs] = useState<StoreSticker[]>(readStoreFavs);
+  const pressT = useRef(0);
+  const pressed = useRef(false);
+  const favIds = new Set(favs.map(x => x.id));
+  const toggleFav = (st: StoreSticker) => setFavs(prev => {
+    const next = prev.some(x => x.id === st.id) ? prev.filter(x => x.id !== st.id) : [{ ...st, kind: st.kind ?? kind }, ...prev].slice(0, 300);
+    try { localStorage.setItem(STORE_FAV_KEY, JSON.stringify(next)); } catch { /* storage blocked: keep in memory */ }
+    return next;
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -14266,9 +14279,9 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
     const typed = [...q.trim()].map(ch => ch.codePointAt(0)?.toString(16)).join('_');
     return words.every(w => k.includes(w)) || cp.startsWith(typed) || (typed.length > 0 && cp.replace('_fe0f', '') === typed.replace('_fe0f', '').replace(/^fe0f_?/, ''));
   }).map(([cp]) => ({ ...notoSticker(cp), kind })).filter((x, i, a) => a.findIndex(y => y.id === x.id) === i);
-  const ownLocal = kind !== 'sticker' ? [] : OWN_STICKERS.filter(({ kw }) => (cat === 'celeb' && !words.length) || (cat === 'all' && !words.length) || (words.length > 0 && words.every(w => kw.toLowerCase().includes(w)))).map(o => ({ ...o.st, kind }));
+  const ownLocal = kind !== 'sticker' ? [] : OWN_STICKERS.filter(({ kw }) => words.length > 0 && words.every(w => kw.toLowerCase().includes(w))).map(o => ({ ...o.st, kind }));
   useEffect(() => {
-    setNet([]);
+    setNet([]); setNetErr(false);
     if (!GIPHY_KEY) return;
     const ctl = new AbortController();
     const tm = window.setTimeout(async () => {
@@ -14279,14 +14292,15 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
         const r = await fetch(`${base}api_key=${GIPHY_KEY}&limit=30&rating=g`, { signal: ctl.signal });
         const j = await r.json() as { data?: GiphyRow[] };
         setNet((j.data ?? []).map(d => { const u = d.images?.fixed_height?.url ?? ''; return { id: `g-${kind}-${d.id}`, gif: u, webp: u, thumb: d.images?.fixed_height_small?.url ?? u, kind }; }).filter(x => x.gif));
-      } catch { /* the built-in catalogue is still there */ }
+      } catch { if (!ctl.signal.aborted) setNetErr(true); }
       finally { if (!ctl.signal.aborted) setBusy(false); }
     }, q ? 350 : 0);
     return () => { window.clearTimeout(tm); ctl.abort(); };
   }, [q, kind]);
   const gifOnline = kind === 'gif' && !!GIPHY_KEY;
   const okNet = net.filter(x => !bad.has(x.id));
-  const all = gifOnline && okNet.length ? okNet : cat === 'celeb' && !words.length ? ownLocal : [...ownLocal, ...local, ...okNet];
+  const favList = favs.filter(x => (x.kind ?? 'sticker') === kind);
+  const all = cat === 'fav' ? favList : gifOnline ? okNet : [...ownLocal, ...local, ...okNet];
   useEffect(() => { setCount(40); scrollRef.current?.scrollTo({ top: 0 }); }, [q, kind, cat]);
   const visible = all.slice(0, count);
   useEffect(() => {
@@ -14309,15 +14323,16 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
         <div className="shrink-0 flex rounded-full bg-white/10 p-0.5 text-xs font-bold">
           {([['sticker', 'ملصقات'], ['gif', 'GIF']] as const).map(([k, l]) => <button key={k} onClick={() => { setKind(k); setCat('all'); }} className={`px-3.5 h-9 rounded-full transition-colors active:scale-95 ${kind === k ? 'bg-white text-black' : 'text-white/80'}`}>{l}</button>)}
         </div>
-        <div className="flex-1 min-w-0 flex items-center gap-2 bg-white/10 rounded-full ps-3"><Search size={16} color="#fff" /><input value={q} onChange={e => setQ(e.target.value)} placeholder={kind === 'gif' ? 'ابحث عن GIF: funny، love...' : 'ابحث: ضحك، قلب، نار، happy...'} dir="auto" className="flex-1 min-w-0 px-2 h-9 bg-transparent text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>
+        <div className="flex-1 min-w-0 flex items-center gap-2 bg-white/10 rounded-full ps-3"><Search size={16} color="#fff" /><input value={q} onChange={e => { setQ(e.target.value); if (cat === 'fav') setCat('all'); }} placeholder={kind === 'gif' ? 'ابحث عن GIF: funny، love...' : 'ابحث: ضحك، قلب، نار، happy...'} dir="auto" className="flex-1 min-w-0 px-2 h-9 bg-transparent text-[16px] text-white placeholder-gray-400 focus:outline-none" /></div>
       </div>
       <div className="flex gap-2 overflow-x-auto no-scrollbar px-3 pb-2">
+        <button onClick={() => { setCat('fav'); setQ(''); }} className={`shrink-0 px-3.5 h-9 rounded-full text-xs font-bold active:scale-95 ${cat === 'fav' ? 'bg-yellow-300 text-black' : 'bg-white/10 text-yellow-300'}`}>★ المفضلة</button>
         {gifOnline
-          ? GIF_QUICK.map(([e, w]) => <button key={w} onClick={() => setQ(w)} className={`shrink-0 px-3.5 h-9 rounded-full text-sm font-bold active:scale-95 ${q === w ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{e} {w}</button>)
+          ? GIF_QUICK.map(([e, w]) => <button key={w} onClick={() => { setCat('all'); setQ(w); }} className={`shrink-0 px-3.5 h-9 rounded-full text-sm font-bold active:scale-95 ${cat !== 'fav' && q === w ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{e} {w}</button>)
           : STORE_CATS.map(([k, l]) => <button key={k} onClick={() => setCat(k)} className={`shrink-0 px-3.5 h-9 rounded-full text-xs font-bold active:scale-95 ${cat === k ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{l}</button>)}
       </div>
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 [-webkit-overflow-scrolling:touch] [transform:translateZ(0)]">
-        {!all.length && !busy && <p className="text-center text-white/60 text-xs py-10">مفيش نتائج، جرّب كلمة تانية</p>}
+        {!all.length && !busy && <p className="text-center text-white/60 text-xs py-10 px-6 leading-6">{cat === 'fav' ? 'لسه مفيش مفضلة. اضغط ضغطة طويلة على أي ملصق أو GIF عشان تضيفه هنا' : gifOnline && netErr ? 'تعذّر تحميل GIF من Giphy، اتأكد من النت وجرّب تاني' : 'مفيش نتائج، جرّب كلمة تانية'}</p>}
         {kind === 'gif' && !GIPHY_KEY && <p className="text-center text-white/50 text-[11px] pb-2">دي GIF متحركة جاهزة. للبحث في ملايين الـ GIF أضف VITE_GIPHY_KEY.</p>}
         <div className={`grid gap-2 ${gifOnline ? 'grid-cols-3' : 'grid-cols-4 min-[420px]:grid-cols-5'}`}>
           {visible.map(st => {
@@ -14327,10 +14342,11 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
             const showStill = own && !noStill.has(st.id);
             const wantAnim = !own || (hot === st.id && !noAnim.has(st.id));
             const glyph = own && noStill.has(st.id) && (noAnim.has(st.id) || hot !== st.id);
-            return <button key={st.id} onClick={() => void choose(st)} onPointerEnter={e => { if (e.pointerType === 'mouse') { setHot(st.id); void loadStoreBlob(st); } }} onPointerLeave={e => { if (e.pointerType === 'mouse') setHot(h => (h === st.id ? '' : h)); }} onPointerDown={() => { setHot(st.id); void loadStoreBlob(st); }} className={`relative aspect-square rounded-2xl bg-white/5 ${gifOnline ? 'p-0.5 overflow-hidden' : 'p-1.5'} active:scale-90 transition-transform ${pickBusy === st.id ? 'opacity-50' : ''}`}>
+            return <button key={st.id} onClick={() => { if (pressed.current) { pressed.current = false; return; } void choose(st); }} onContextMenu={e => e.preventDefault()} onPointerUp={() => window.clearTimeout(pressT.current)} onPointerCancel={() => window.clearTimeout(pressT.current)} onPointerEnter={e => { if (e.pointerType === 'mouse') { setHot(st.id); void loadStoreBlob(st); } }} onPointerLeave={e => { window.clearTimeout(pressT.current); if (e.pointerType === 'mouse') setHot(h => (h === st.id ? '' : h)); }} onPointerDown={() => { setHot(st.id); void loadStoreBlob(st); pressed.current = false; window.clearTimeout(pressT.current); pressT.current = window.setTimeout(() => { pressed.current = true; toggleFav(st); try { navigator.vibrate?.(25); } catch { /* ignore */ } }, 450); }} className={`relative select-none [-webkit-touch-callout:none] aspect-square rounded-2xl bg-white/5 ${gifOnline ? 'p-0.5 overflow-hidden' : 'p-1.5'} active:scale-90 transition-transform ${pickBusy === st.id ? 'opacity-50' : ''}`}>
               {showStill && <img src={st.still} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setNoStill(x => new Set(x).add(st.id))} className={`w-full h-full object-contain transition-opacity duration-150 ${wantAnim && animOk.has(st.id) ? 'opacity-0' : ''}`} />}
               {glyph && <span className="w-full h-full flex items-center justify-center text-[34px] leading-none select-none">{storeChar(st)}</span>}
               {wantAnim && <img src={st.thumb} alt="" loading="lazy" decoding="async" draggable={false} onLoad={() => setAnimOk(x => (x.has(st.id) ? x : new Set(x).add(st.id)))} onError={() => { if (own) setNoAnim(x => new Set(x).add(st.id)); else setBad(x => new Set(x).add(st.id)); }} className={`${own ? 'absolute inset-1.5 w-[calc(100%-0.75rem)] h-[calc(100%-0.75rem)] object-contain' : `w-full h-full ${gifOnline ? 'object-cover rounded-xl' : 'object-contain'}`} transition-opacity duration-150 ${own && !animOk.has(st.id) ? 'opacity-0' : ''}`} />}
+              {favIds.has(st.id) && <span className="absolute top-0.5 end-1 text-[13px] leading-none text-yellow-300 drop-shadow">★</span>}
             </button>;
           })}
         </div>
