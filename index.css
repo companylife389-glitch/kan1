@@ -107,7 +107,7 @@ textarea:focus {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-.kan-enter { animation: kan-enter 0.45s ease-out backwards; }
+.kan-enter { animation: kan-enter 0.2s ease-out backwards; }
 @media (prefers-reduced-motion: reduce) {
   .kan-enter { animation: none; }
 }
@@ -211,7 +211,6 @@ html[dir='ltr'] .text-right { text-align: left; }
 @media (max-width: 767px) {
   [class*='backdrop-blur'] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 }
-.fixed { backface-visibility: hidden; }
 
 
 /* Weak phones: no endless animations, no background gradients, no shadows that repaint every frame. */

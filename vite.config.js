@@ -26,6 +26,27 @@ export default defineConfig({
   base: process.env.BASE_PATH || "/",
   publicDir: false,
   plugins: [react(), tailwindcss(), copyStaticFiles()],
+  build: {
+    target: "es2020", // modern phones: smaller, faster code (no old-browser fallbacks)
+    sourcemap: false,
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        // Libraries live in their own files: they rarely change, so the phone keeps them cached between updates,
+        // and the browser downloads/parses them in parallel with the app code.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("framer-motion") || id.includes("motion-dom") || id.includes("motion-utils")) return "motion";
+          if (id.includes("@supabase") || id.includes("isows") || id.includes("ws/")) return "supabase";
+          if (id.includes("lucide-react")) return "icons";
+          if (/node_modules[\/\\](react|react-dom|scheduler)[\/\\]/.test(id)) return "react";
+          return undefined;
+        },
+      },
+    },
+  },
+  esbuild: { legalComments: "none" },
   server: {
     host: "0.0.0.0",
     port: 3000,

@@ -612,6 +612,8 @@ async function signPaths(paths: string[]): Promise<Map<string, string>> {
   return out;
 }
 
+// Grey box shown the instant a media message arrives; the real (signed) link replaces it a moment later.
+const PENDING_MEDIA_URL = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='180'><rect width='100%25' height='100%25' fill='%231f2937'/></svg>";
 function rowToMessage(r: MessageRow, urls: Map<string, string>): Message {
   const url = r.media_path ? urls.get(r.media_path) : undefined;
   return {
@@ -1489,6 +1491,20 @@ function musicReport(key: object, ratio: number, apply: (on: boolean) => void) {
 }
 function musicForget(key: object) { musicVis.delete(key); musicArbitrate(); }
 function stopPostMusic() { if (playingAudio) { playingAudio.pause(); playingAudio = null; } }
+// Fast scrolling: sound stops the moment its post leaves the screen (not only when the observer finally reports it).
+if (typeof window !== 'undefined') {
+  let lastY = window.scrollY; let lastT = performance.now(); let idleT = 0;
+  const frac = (el: Element) => { const r = el.getBoundingClientRect(); return Math.max(0, Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0)) / Math.max(1, r.height); };
+  const sweep = () => { document.querySelectorAll('video').forEach(v => { if (!v.paused && document.fullscreenElement !== v && !v.closest('[data-keep-playing]') && frac(v) < 0.35) v.pause(); }); };
+  window.addEventListener('scroll', () => {
+    const now = performance.now(); const y = window.scrollY;
+    const speed = (Math.abs(y - lastY) / Math.max(1, now - lastT)) * 1000;
+    lastY = y; lastT = now;
+    if (speed > 1200) { musicVis.forEach(m => { if (m.on) { m.on = false; m.apply(false); } }); stopPostMusic(); sweep(); }
+    window.clearTimeout(idleT);
+    idleT = window.setTimeout(() => { sweep(); musicArbitrate(); }, 140);
+  }, { passive: true });
+}
 if (typeof document !== 'undefined') document.addEventListener('play', e => { if (e.target instanceof HTMLVideoElement) stopPostMusic(); }, true);
 let openPostHandler: (postId: string, commentId?: string) => void = () => undefined;
 function openPost(postId: string, commentId?: string) { stopPostMusic(); openPostHandler(postId, commentId); }
@@ -1544,7 +1560,7 @@ function useSeenObserver(root: React.RefObject<HTMLElement | null>, enabled: boo
         }
         io.unobserve(target);
       }
-      if (any) { window.clearTimeout(timer); timer = window.setTimeout(flush, 40); }
+      if (any) { window.clearTimeout(timer); flush(); } // seen is reported in the same instant the message is on screen
     }, { root: el, threshold: [0.1, 0.3, 0.6, 1] });
     el.querySelectorAll<HTMLElement>('[data-unread="1"]').forEach(n => io.observe(n));
     return () => { io.disconnect(); window.clearTimeout(timer); flush(); };
@@ -5086,7 +5102,7 @@ function StoryLyrics({ ly, idx, onMove, onScale, onRotate }: { ly: StoryLy; idx:
   const next = idx >= 0 ? ly.l[idx + 1]?.[1] ?? '' : ly.l[0]?.[1] ?? '';
   const dur = idx >= 0 && ly.l[idx + 1] ? Math.min(5, Math.max(0.8, ly.l[idx + 1][0] - ly.l[idx][0])) : 3;
   const sh = '0 2px 14px rgba(0,0,0,.55)';
-  const anim: React.CSSProperties = { animation: 'kyIn .35s cubic-bezier(.2,.8,.2,1) both' };
+  const anim: React.CSSProperties = { animation: 'kyIn .2s cubic-bezier(.2,.8,.2,1) both' };
   const big = 'text-[26px] font-extrabold leading-tight';
   let body: React.ReactNode = null;
   if (ly.st === 0) body = cur && <div key={idx} className={big} style={{ color: c, textShadow: sh, ...anim }}>{cur}</div>;
@@ -5616,7 +5632,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
           ) : (
             <div {...ignore} dir={DIR}>
               {!replyFocus && <div className="flex items-center justify-between gap-1 mb-2 px-1">{['🔥', '😂', '😍', '😮', '😢', '👏'].map(em => <button key={em} onClick={() => void sendReaction(em)} className="text-2xl w-11 h-11 rounded-full bg-white/10 active:scale-125 transition-transform">{em}</button>)}</div>}
-              {flyEm && <motion.div key={flyEm.k} initial={{ opacity: 1, y: 0, scale: 0.6 }} animate={{ opacity: 0, y: -170, scale: 1.8 }} transition={{ duration: 0.9 }} className="fixed inset-x-0 bottom-40 text-center text-6xl pointer-events-none z-50">{flyEm.e}</motion.div>}
+              {flyEm && <motion.div key={flyEm.k} initial={{ opacity: 1, y: 0, scale: 0.6 }} animate={{ opacity: 0, y: -170, scale: 1.8 }} transition={{ duration: 0.5 }} className="fixed inset-x-0 bottom-40 text-center text-6xl pointer-events-none z-50">{flyEm.e}</motion.div>}
             <div className="flex items-center gap-2">
               <input
                 value={replyText}
@@ -5632,7 +5648,7 @@ function StoryViewer({ groups, startGroup, users, currentUser, onSeen, onChanged
                 ? <button onPointerDown={e => e.preventDefault()} onClick={() => void sendReply()} aria-label="إرسال الرد" className="w-11 h-11 shrink-0 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white flex items-center justify-center active:scale-90 transition-transform"><Send size={18} /></button>
                 : (
                   <button onClick={() => void toggleLike()} aria-label="إعجاب" className="relative w-11 h-11 shrink-0 rounded-full bg-white/10 border border-white/25 flex items-center justify-center active:scale-90 transition-transform">
-                    <motion.span key={burst} initial={{ scale: 0.6 }} animate={{ scale: [0.6, 1.35, 1] }} transition={{ duration: 0.35 }} className="flex">
+                    <motion.span key={burst} initial={{ scale: 0.6 }} animate={{ scale: [0.6, 1.35, 1] }} transition={{ duration: 0.2 }} className="flex">
                       <Heart size={22} className={liked ? 'fill-rose-500 text-rose-500' : 'text-white'} />
                     </motion.span>
                   </button>
@@ -6363,7 +6379,7 @@ function GlobalUploadBar({ onOpen }: { onOpen: () => void }) {
                 : <button onClick={r.close} aria-label="إغلاق" className="shrink-0 p-1 text-gray-500"><X size={14} /></button>}
             </div>
             <div className="mt-2 h-1.5 rounded-full bg-white/10 overflow-hidden" role="progressbar" aria-valuenow={r.pct === null ? undefined : pct} aria-valuemin={0} aria-valuemax={100}>
-              <div className={`h-full rounded-full ${r.pct === null && !done && !fail ? 'w-1/3 animate-pulse bg-cyan-400' : `transition-all duration-300 ${fail ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`}`} style={r.pct === null && !done && !fail ? undefined : { width: `${Math.max(4, done ? 100 : pct)}%` }} />
+              <div className={`h-full rounded-full ${r.pct === null && !done && !fail ? 'w-1/3 animate-pulse bg-cyan-400' : `transition-all duration-150 ${fail ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`}`} style={r.pct === null && !done && !fail ? undefined : { width: `${Math.max(4, done ? 100 : pct)}%` }} />
             </div>
           </div>
         );
@@ -6608,14 +6624,23 @@ export default function App() {
             toastRef.current({ title: g?.name ?? 'مجموعة', body: `${who}: ${messagePreviewText(row.text, row.media_type)}`, avatar: g?.avatar, group: true, onOpen: () => navRef.current.openGroup(row.group_id) });
           }
         }
-        const urls = row.media_path ? await signPaths([row.media_path]) : new Map<string, string>();
-        const msg = groupRowToMessage(row, urls);
+        const msg = groupRowToMessage(row, row.media_path ? new Map([[row.media_path, PENDING_MEDIA_URL]]) : new Map<string, string>());
         setGroups(prev => {
           const g = prev.find(x => x.id === row.group_id);
           if (!g) { soon(); return prev; }
           if (g.messages.some(m => m.id === msg.id)) return prev;
           return prev.map(x => x.id !== row.group_id ? x : { ...x, lastActivity: msg.timestamp, messages: [...x.messages, msg] });
         });
+        if (row.media_path) {
+          const mp = row.media_path;
+          const fill = async () => {
+            const real = (await signPaths([mp])).get(mp);
+            if (!real) return false;
+            setGroups(prev => prev.map(x => (x.id !== row.group_id ? x : { ...x, messages: x.messages.map(m => (m.id === row.id && m.media ? { ...m, media: { ...m.media, url: real } } : m)) })));
+            return true;
+          };
+          if (!(await fill()) && !(await fill())) soon();
+        }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_messages' }, payload => {
         const row = payload.new as { id?: string; text?: string; edited_at?: string | null };
@@ -6733,13 +6758,23 @@ export default function App() {
           await refreshConversations();
           return;
         }
-        const urls = row.media_path ? await signPaths([row.media_path]) : new Map<string, string>();
-        const msg = rowToMessage(row, urls);
+        // The message shows AT ONCE (media as a grey box); the real link fills in as soon as it is signed.
+        const msg = rowToMessage(row, row.media_path ? new Map([[row.media_path, PENDING_MEDIA_URL]]) : new Map<string, string>());
         setConversations(prev => prev.map(c =>
           c.id !== row.conversation_id || c.messages.some(m => m.id === msg.id)
             ? c
             : { ...c, messages: [...c.messages, msg], lastActivity: msg.timestamp }
         ));
+        if (row.media_path) {
+          const mp = row.media_path;
+          const fill = async () => {
+            const real = (await signPaths([mp])).get(mp);
+            if (!real) return false;
+            setConversations(prev => prev.map(c => (c.id !== row.conversation_id ? c : { ...c, messages: c.messages.map(m => (m.id === row.id && m.media ? { ...m, media: { ...m.media, url: real } } : m)) })));
+            return true;
+          };
+          if (!(await fill()) && !(await fill())) void refreshConversations();
+        }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
         const row = payload.new as unknown as MessageRow;
@@ -6780,8 +6815,10 @@ export default function App() {
       .subscribe();
     const onVisible = () => { if (document.visibilityState === 'visible') void refreshConversations(); };
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', onVisible);
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', onVisible);
       void supabase.removeChannel(channel);
     };
   }, [currentUserId]);
@@ -7246,7 +7283,7 @@ export default function App() {
       </main>
 
       {/* Home refresh: a pill drops from the top while the feed reloads */}
-      <style>{'@keyframes kanHomeSpin{0%{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.25)}100%{transform:rotate(360deg) scale(1)}}@keyframes kanHomePop{0%{transform:scale(1)}40%{transform:scale(1.35) translateY(-3px)}100%{transform:scale(1)}}@keyframes kanRing{to{transform:rotate(360deg)}}.kan-home-spin{animation:kanHomeSpin .9s ease-in-out infinite}.kan-home-pop{animation:kanHomePop .35s cubic-bezier(.2,.9,.3,1.4)}'}</style>
+      <style>{'@keyframes kanHomeSpin{0%{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.25)}100%{transform:rotate(360deg) scale(1)}}@keyframes kanHomePop{0%{transform:scale(1)}40%{transform:scale(1.35) translateY(-3px)}100%{transform:scale(1)}}@keyframes kanRing{to{transform:rotate(360deg)}}.kan-home-spin{animation:kanHomeSpin .9s ease-in-out infinite}.kan-home-pop{animation:kanHomePop .2s cubic-bezier(.2,.9,.3,1.2)}'}</style>
       <div
         aria-hidden
         style={{ position: 'fixed', top: 'max(0.75rem, env(safe-area-inset-top))', left: '50%', transform: homeRefreshing ? 'translate(-50%, 0) scale(1)' : 'translate(-50%, -140%) scale(.85)', opacity: homeRefreshing ? 1 : 0, transition: 'transform .45s cubic-bezier(.2,.9,.3,1.2), opacity .3s ease' }}
@@ -7273,7 +7310,7 @@ export default function App() {
                 <button
                   key={tab}
                   data-tab={tab}
-                  onClick={() => (tab === 'feed' ? onHomeTap() : goTab(tab))}
+                  onClick={() => (tab === 'feed' ? onHomeTap() : tab === 'messages' && activeTab === 'messages' ? (setSelectedChat(null), window.dispatchEvent(new Event('kan-messages-home'))) : goTab(tab))}
                   className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-0.5 py-2 rounded-2xl transition-colors active:scale-95 ${active ? 'text-white' : 'text-gray-300 hover:text-white'}`}
                 >
                   <Icon key={tab === 'feed' ? `hb${homeBounce}` : undefined} size={tab === 'reels' ? 31 : 24} strokeWidth={active ? 2.4 : 2} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'kan-home-spin' : tab === 'feed' && homeBounce > 0 ? 'kan-home-pop' : ''}`} />
@@ -11624,7 +11661,7 @@ function MyFilesPanel() {
                 : <button onClick={() => dropDown(j.id)} aria-label="إخفاء" className="shrink-0 p-1.5 text-gray-500 hover:text-white"><X size={15} /></button>}
             </div>
             <div className="mt-2 h-2 rounded-full bg-gray-800 overflow-hidden">
-              <div className={`h-full rounded-full ${!known && j.status === 'run' ? 'w-1/3 animate-pulse bg-cyan-400' : `transition-all duration-300 ${fail ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`}`} style={!known && j.status === 'run' ? undefined : { width: `${Math.max(3, pct)}%` }} />
+              <div className={`h-full rounded-full ${!known && j.status === 'run' ? 'w-1/3 animate-pulse bg-cyan-400' : `transition-all duration-150 ${fail ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-cyan-400'}`}`} style={!known && j.status === 'run' ? undefined : { width: `${Math.max(3, pct)}%` }} />
             </div>
           </div>
         );
@@ -12250,6 +12287,7 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
   const [section, setSection] = useState<'direct' | 'groups'>('direct');
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   useBackLayer(selectedGroup !== null, () => setSelectedGroup(null), 20);
+  useEffect(() => { const h = () => setSelectedGroup(null); window.addEventListener('kan-messages-home', h); return () => window.removeEventListener('kan-messages-home', h); }, []);
   useEffect(() => { onActiveGroupChange(selectedGroup); }, [selectedGroup]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (openGroupId && groups.some(g => g.id === openGroupId)) {
@@ -12581,14 +12619,27 @@ function VoicePlayer({ url, knownDuration = 0 }: { url: string; knownDuration?: 
       if (Number.isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
     };
     const onTime = () => setProgress(audio.currentTime);
-    const onEnd = () => { setPlaying(false); setProgress(0); };
+    const onEnd = () => {
+      setPlaying(false); setProgress(0);
+      // Next voice note in the chat starts by itself.
+      const all = Array.from(document.querySelectorAll<HTMLElement>('[data-voice-player]'));
+      const me = audio.closest('[data-voice-player]') as HTMLElement | null;
+      const i = me ? all.indexOf(me) : -1;
+      if (i >= 0 && i + 1 < all.length) all[i + 1].querySelector<HTMLButtonElement>('[data-voice-play]')?.click();
+    };
+    const onPause = () => setPlaying(false);
+    const onPlay = () => setPlaying(true);
     audio.addEventListener('loadedmetadata', onLoaded);
     audio.addEventListener('timeupdate', onTime);
     audio.addEventListener('ended', onEnd);
+    audio.addEventListener('pause', onPause);
+    audio.addEventListener('play', onPlay);
     return () => {
       audio.removeEventListener('loadedmetadata', onLoaded);
       audio.removeEventListener('timeupdate', onTime);
       audio.removeEventListener('ended', onEnd);
+      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('play', onPlay);
     };
   }, []);
 
@@ -12598,6 +12649,7 @@ function VoicePlayer({ url, knownDuration = 0 }: { url: string; knownDuration?: 
       audioRef.current.pause();
       setPlaying(false);
     } else {
+      document.querySelectorAll<HTMLAudioElement>('[data-voice-player] audio').forEach(a => { if (a !== audioRef.current) a.pause(); });
       audioRef.current.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
     }
   };
@@ -12611,9 +12663,9 @@ function VoicePlayer({ url, knownDuration = 0 }: { url: string; knownDuration?: 
   };
 
   return (
-    <div className="flex items-center gap-2 min-w-[180px]">
+    <div data-voice-player="1" className="flex items-center gap-2 min-w-[180px]">
       <audio ref={audioRef} src={url} preload="metadata" />
-      <button onClick={togglePlay} className="p-1.5 bg-white/20 rounded-full hover:bg-white/30 transition-colors">
+      <button data-voice-play="1" onClick={togglePlay} className="p-1.5 bg-white/20 rounded-full hover:bg-white/30 transition-colors">
         {playing ? <Pause size={14} /> : <Play size={14} />}
       </button>
       <div className="flex-1 flex items-center gap-2">
@@ -13450,11 +13502,45 @@ const STORE_ITEMS: [string, string, string][] = [
 const notoSticker = (cp: string): StoreSticker => ({ id: 'noto-' + cp, gif: `${NOTO_BASE}/${cp}/512.gif`, webp: `${NOTO_BASE}/${cp}/512.webp`, thumb: `${NOTO_BASE}/${cp}/512.webp`, still: `${NOTO_BASE}/${cp}/emoji.svg` });
 const GIF_QUICK: [string, string][] = [['😂', 'funny'], ['❤️', 'love'], ['💃', 'dance'], ['😮', 'wow'], ['😢', 'sad'], ['👏', 'clap'], ['🔥', 'fire'], ['😎', 'cool']];
 // A store pick becomes a chat file: stickers keep the sticker look, GIFs go out as ordinary animated images.
-const storeToSaved = async (st: StoreSticker): Promise<SavedSticker | null> => {
+// A sticker is only used if it is a REAL picture (an error page / empty file used to turn into a black square).
+const fetchImageBlob = async (url: string): Promise<Blob | null> => {
   try {
-    const blob = await (await fetch(st.kind === 'gif' ? st.gif : st.webp)).blob();
-    return { id: crypto.randomUUID(), kind: 'image', blob, at: Date.now(), gif: st.kind === 'gif' };
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const b = await r.blob();
+    return b.size > 200 && b.type.startsWith('image/') ? b : null;
   } catch { return null; }
+};
+const svgToPngBlob = async (url: string, size = 512): Promise<Blob | null> => {
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    await new Promise<void>((ok, bad) => { img.onload = () => ok(); img.onerror = () => bad(new Error('img')); img.src = url; });
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    c.getContext('2d')?.drawImage(img, 0, 0, size, size);
+    return await new Promise<Blob | null>(res => c.toBlob(b => res(b), 'image/png'));
+  } catch { return null; }
+};
+const stickerCache = new Map<string, Promise<Blob | null>>();
+const loadStoreBlob = (st: StoreSticker): Promise<Blob | null> => {
+  const key = st.id + (st.kind ?? '');
+  let p = stickerCache.get(key);
+  if (!p) {
+    p = (async () => {
+      const first = await fetchImageBlob(st.kind === 'gif' ? st.gif : st.webp);
+      if (first) return first;
+      return st.still ? svgToPngBlob(st.still) : null; // flags etc. that have no animated file: use the still picture
+    })();
+    stickerCache.set(key, p);
+    void p.then(b => { if (!b) stickerCache.delete(key); });
+  }
+  return p;
+};
+const storeToSaved = async (st: StoreSticker): Promise<SavedSticker | null> => {
+  const blob = await loadStoreBlob(st);
+  if (!blob) return null;
+  return { id: crypto.randomUUID(), kind: 'image', blob, at: Date.now(), gif: st.kind === 'gif' && blob.type === 'image/gif' };
 };
 function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { onPick: (s: StoreSticker) => void | Promise<void>; onClose: () => void; inline?: boolean; startKind?: 'sticker' | 'gif' }) {
   useBackLayer(!inline, onClose);
@@ -13530,7 +13616,7 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
         {!all.length && !busy && <p className="text-center text-white/60 text-xs py-10">مفيش نتائج، جرّب كلمة تانية</p>}
         {kind === 'gif' && !GIPHY_KEY && <p className="text-center text-white/50 text-[11px] pb-2">دي GIF متحركة جاهزة. للبحث في ملايين الـ GIF أضف VITE_GIPHY_KEY.</p>}
         <div className={`grid gap-2 ${gifOnline ? 'grid-cols-3' : 'grid-cols-4 min-[420px]:grid-cols-5'}`}>
-          {visible.map(st => { const still = !gifOnline && !!st.still && hot !== st.id && !noStill.has(st.id); return <button key={st.id} onClick={() => void choose(st)} onPointerEnter={e => { if (e.pointerType === 'mouse') setHot(st.id); }} onPointerLeave={e => { if (e.pointerType === 'mouse') setHot(h => (h === st.id ? '' : h)); }} onPointerDown={() => setHot(st.id)} className={`relative aspect-square rounded-2xl bg-white/5 ${gifOnline ? 'p-0.5 overflow-hidden' : 'p-1.5'} active:scale-90 transition-transform ${pickBusy === st.id ? 'opacity-50' : ''}`}><img src={still ? st.still : st.thumb} alt="" loading="lazy" decoding="async" draggable={false} onError={() => { if (still) setNoStill(s => new Set(s).add(st.id)); else setBad(b => new Set(b).add(st.id)); }} className={`w-full h-full ${gifOnline ? 'object-cover rounded-xl' : 'object-contain'}`} /></button>; })}
+          {visible.map(st => { const still = !gifOnline && !!st.still && hot !== st.id && !noStill.has(st.id); return <button key={st.id} onClick={() => void choose(st)} onPointerEnter={e => { if (e.pointerType === 'mouse') { setHot(st.id); void loadStoreBlob(st); } }} onPointerLeave={e => { if (e.pointerType === 'mouse') setHot(h => (h === st.id ? '' : h)); }} onPointerDown={() => { setHot(st.id); void loadStoreBlob(st); }} className={`relative aspect-square rounded-2xl bg-white/5 ${gifOnline ? 'p-0.5 overflow-hidden' : 'p-1.5'} active:scale-90 transition-transform ${pickBusy === st.id ? 'opacity-50' : ''}`}><img src={still ? st.still : st.thumb} alt="" loading="lazy" decoding="async" draggable={false} onError={() => { if (still) setNoStill(s => new Set(s).add(st.id)); else setBad(b => new Set(b).add(st.id)); }} className={`w-full h-full ${gifOnline ? 'object-cover rounded-xl' : 'object-contain'}`} /></button>; })}
         </div>
         {visible.length < all.length && <div ref={moreRef} className="h-10" />}
         {busy && <p className="text-center text-white/50 text-[11px] py-3">جارٍ تحميل المزيد...</p>}
@@ -14752,7 +14838,6 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     if (paths.length) void kanRemove(CHAT_MEDIA_BUCKET, paths);
   };
 
-  const lastSeenId = [...messages].reverse().find(m => m.senderId === currentUser.id && m.read)?.id;
 
   return (
     <div className="fixed left-0 right-0 z-[70] flex justify-center bg-gray-950" style={{ top: vp.top, height: vp.height }}>
@@ -14960,7 +15045,6 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   {isMine && (msg.read
                     ? <CheckCheck size={14} className="inline mr-1 text-cyan-400" aria-label="تمت المشاهدة" />
                     : <Check size={14} className="inline mr-1 text-gray-500" aria-label="تم الإرسال" />)}
-                  {isMine && msg.id === lastSeenId && <span className="mr-1 text-cyan-400">تمت المشاهدة</span>}
                 </span>
                 {msg.reactions && msg.reactions.length > 0 && (() => {
                   const groups = new Map<string, string[]>();
@@ -14970,7 +15054,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                       {[...groups.entries()].map(([emoji, ids]) => (
                         <button
                           key={emoji}
-                          style={{ animation: 'kanReactChip .35s ease-out' }}
+                          style={{ animation: 'kanReactChip .2s ease-out' }}
                           onClick={() => { void setReaction(msg, emoji); }}
                           className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 border ${ids.includes(currentUser.id) ? 'bg-violet-600/30 border-violet-500/50 text-white' : 'bg-gray-800 border-gray-700 text-gray-300'}`}
                         >
