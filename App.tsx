@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useSyncExternalStore, startTransition, memo, useCallback } from 'react';
 import type React from 'react';
+import type { Room as LkRoom } from 'livekit-client';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -11,6 +12,8 @@ import {
   Link as LinkIcon, Calendar, MessageSquare, Mic,
   Gamepad2, Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon, ChevronDown, Repeat, PictureInPicture2, BarChart3, HelpCircle, Clock, AtSign, Type as TypeIcon, Wand2,
   AlertTriangle, Info, AlarmClock, Library, ThumbsUp, Pin,
+  Phone as CallIcon, PhoneOff as HangUpIcon, MicOff,
+  VideoOff,
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -6565,6 +6568,7 @@ export default function App() {
   const loadFeedFirst = async () => {
     if (feedBusy.current) return;
     feedBusy.current = true;
+    reshuffleOrder();
     setFeedLoading(true);
     try {
       const page = await fetchPosts({ limit: FEED_PAGE });
@@ -7217,6 +7221,7 @@ export default function App() {
       <style>{'html,body{scrollbar-width:none!important;-ms-overflow-style:none;-webkit-text-size-adjust:100%;overflow-x:hidden;overscroll-behavior-y:none;scroll-behavior:auto;-webkit-tap-highlight-color:transparent}img,video{-webkit-user-drag:none}.post-card{contain:layout style}[id^="msg-"],[id^="gmsg-"]{contain:layout style}.overflow-y-auto,.overflow-y-scroll{-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}.no-scrollbar,[class*=overflow-y-auto],[class*=overflow-x-auto]{-webkit-overflow-scrolling:touch}button,a{touch-action:manipulation}@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
       <KanDialogHost />
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
+      <CallHost currentUser={currentUser} users={users} />
       {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={popScreen} />}
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/90 md:bg-gray-950/70 md:backdrop-blur-xl border-b border-white/5">
@@ -7722,7 +7727,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
 }) {
   const [mode, setMode] = useState<'all' | 'following' | 'files'>('all');
   const sentinel = useRef<HTMLDivElement>(null);
-  const sorted = useMemo(() => randomOrder(posts.filter(p => p.timestamp >= frontier)), [posts, frontier, currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sorted = useStableOrder(posts.filter(p => p.timestamp >= frontier));
   const allPosts = mode === 'all'
     ? sorted
     : mode === 'files'
@@ -9021,7 +9026,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   const [lockH, setLockH] = useState<number | null>(null); // keyboard must not resize the reels list (that scrolled to the next reel)
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const reelsByTime = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
-  const reels = randomOrder(reelsByTime);
+  const reels = useStableOrder(reelsByTime);
   const commentPost = commentsFor ? posts.find(p => p.id === commentsFor) : undefined;
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
@@ -9245,7 +9250,7 @@ function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile
           {post.text && (
             <div className="mt-3 bg-gray-900 border border-gray-800 rounded-xl p-3 text-sm text-gray-200 whitespace-pre-wrap"><PostText text={post.text} className="whitespace-pre-wrap" /></div>
           )}
-          <YtComments post={post} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} />
+          <YtCommentsPreview post={post} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} />
         </div>
       </div>
 
@@ -9410,6 +9415,233 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
         ))}
       </div>
     </section>
+  );
+}
+
+// ============ YouTube-style comments teaser + sheet (videos tab) ============
+// A small rectangle under the video: one comment at a time (rotating every few seconds; a pinned comment stays put).
+// Tap it and the full comments open in a bottom sheet, like YouTube.
+function CommentsSheet({ total, onClose, children }: { total: number; onClose: () => void; children: React.ReactNode }) {
+  useBackLayer(true, onClose);
+  return createPortal(
+    <div dir={DIR} className="fixed inset-0 z-[150] flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} transition={{ type: 'tween', duration: 0.25 }} onClick={e => e.stopPropagation()} className="kan-theme-text relative w-full max-w-2xl h-[78svh] bg-gray-950 rounded-t-3xl border-t border-white/10 flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/10 shrink-0">
+          <h3 className="text-white font-bold text-base">التعليقات <span className="text-gray-400 font-normal text-sm">{total}</span></h3>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 text-white" aria-label="إغلاق"><X size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-8">{children}</div>
+      </motion.div>
+    </div>,
+    document.body,
+  );
+}
+
+function YtCommentsPreview({ post, users, currentUser, setPosts, onOpenProfile }: { post: Post; users: User[]; currentUser: User; setPosts: React.Dispatch<React.SetStateAction<Post[]>>; onOpenProfile: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [i, setI] = useState(0);
+  const total = post.comments.reduce((n, c) => n + 1 + c.replies.length, 0);
+  const pinned = post.comments.find(c => c.pinned);
+  const pool = pinned ? [pinned] : [...post.comments].sort((a, b) => b.likes.length - a.likes.length || b.timestamp - a.timestamp).slice(0, 8);
+  useEffect(() => {
+    if (pool.length < 2 || open) return;
+    const t = window.setInterval(() => setI(x => x + 1), 4000);
+    return () => window.clearInterval(t);
+  }, [pool.length, open]);
+  const cur = pool.length ? pool[i % pool.length] : null;
+  const author = cur ? users.find(u => u.id === cur.userId) : undefined;
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="mt-4 w-full text-start bg-gray-900 hover:bg-gray-800/80 active:scale-[0.99] rounded-xl px-3.5 py-3 transition">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-white font-bold text-sm">التعليقات</span>
+          <span className="text-gray-400 text-xs">{total}</span>
+          {pinned && <Pin size={12} className="text-gray-400" />}
+          <ChevronDown size={16} className="ms-auto text-gray-400" />
+        </div>
+        {cur ? (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={cur.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }} className="flex items-center gap-2.5">
+              <Avatar userId={cur.userId} src={author?.avatar ?? ''} name={author?.displayName ?? ''} size="sm" />
+              <p className="text-sm text-gray-200 line-clamp-2 min-w-0" dir="auto">{cur.text}</p>
+            </motion.div>
+          </AnimatePresence>
+        ) : (
+          <p className="text-sm text-gray-400">أضف تعليقاً...</p>
+        )}
+      </button>
+      {open && (
+        <CommentsSheet total={total} onClose={() => setOpen(false)}>
+          <YtComments post={post} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} />
+        </CommentsSheet>
+      )}
+    </>
+  );
+}
+
+// ============ Voice / video calls (LiveKit) ============
+// Tokens come from the `livekit-token` Supabase Edge Function (the API secret never reaches the browser).
+// Ringing goes through a Supabase broadcast channel `calls:<userId>`.
+type CallState = { peer: User; video: boolean; dir: 'out' | 'in'; phase: 'ringing' | 'connecting' | 'live'; room: string };
+
+function startCall(peerId: string, video: boolean) {
+  window.dispatchEvent(new CustomEvent('kan-start-call', { detail: { peerId, video } }));
+}
+
+function callSignal(peerId: string, payload: Record<string, unknown>) {
+  const ch = supabase.channel(`calls:${peerId}`);
+  ch.subscribe(st => {
+    if (st === 'SUBSCRIBED') {
+      void ch.send({ type: 'broadcast', event: 'call', payload }).finally(() => window.setTimeout(() => void supabase.removeChannel(ch), 1500));
+    }
+  });
+}
+
+function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) {
+  const [call, setCall] = useState<CallState | null>(null);
+  const callRef = useRef<CallState | null>(null);
+  callRef.current = call;
+  const usersRef = useRef(users);
+  usersRef.current = users;
+  const roomRef = useRef<LkRoom | null>(null);
+  const remoteEl = useRef<HTMLDivElement>(null);
+  const localEl = useRef<HTMLVideoElement>(null);
+  const audioEls = useRef<HTMLElement[]>([]);
+  const ringTimer = useRef<number | undefined>(undefined);
+  const endRef = useRef<(notify: boolean) => void>(() => undefined);
+  const [muted, setMuted] = useState(false);
+  const [camOff, setCamOff] = useState(false);
+  const [secs, setSecs] = useState(0);
+
+  const cleanup = () => {
+    window.clearTimeout(ringTimer.current);
+    void roomRef.current?.disconnect();
+    roomRef.current = null;
+    audioEls.current.forEach(e => e.remove());
+    audioEls.current = [];
+    setCall(null); setMuted(false); setCamOff(false); setSecs(0);
+  };
+  endRef.current = (notify: boolean) => {
+    const c = callRef.current;
+    if (c && notify) callSignal(c.peer.id, { t: c.dir === 'in' && c.phase === 'ringing' ? 'decline' : 'end', from: currentUser.id });
+    cleanup();
+  };
+
+  const join = async (room: string, video: boolean) => {
+    const { data, error } = await supabase.functions.invoke('livekit-token', { body: { room } });
+    const d = data as { token?: string; url?: string } | null;
+    if (error || !d?.token || !d.url) throw new Error(error?.message || 'livekit-token failed');
+    const { Room, RoomEvent, Track } = await import('livekit-client');
+    const r = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    r.on(RoomEvent.TrackSubscribed, track => {
+      const el = track.attach();
+      if (track.kind === Track.Kind.Video) { el.className = 'w-full h-full object-cover'; remoteEl.current?.appendChild(el); }
+      else { el.style.display = 'none'; document.body.appendChild(el); audioEls.current.push(el); }
+    });
+    r.on(RoomEvent.TrackUnsubscribed, track => { track.detach().forEach(e => e.remove()); });
+    r.on(RoomEvent.ParticipantConnected, () => { window.clearTimeout(ringTimer.current); setCall(c => (c ? { ...c, phase: 'live' } : c)); });
+    r.on(RoomEvent.ParticipantDisconnected, () => endRef.current(false));
+    await r.connect(d.url, d.token);
+    roomRef.current = r;
+    await r.localParticipant.setMicrophoneEnabled(true);
+    if (video) {
+      await r.localParticipant.setCameraEnabled(true);
+      const pub = r.localParticipant.getTrackPublication(Track.Source.Camera);
+      if (pub?.videoTrack && localEl.current) pub.videoTrack.attach(localEl.current);
+    }
+    if (r.remoteParticipants.size > 0) { window.clearTimeout(ringTimer.current); setCall(c => (c ? { ...c, phase: 'live' } : c)); }
+  };
+
+  const startOut = async (peerId: string, video: boolean) => {
+    if (callRef.current) return;
+    const peer = usersRef.current.find(u => u.id === peerId);
+    if (!peer) return;
+    const room = `call-${crypto.randomUUID()}`;
+    setCall({ peer, video, dir: 'out', phase: 'ringing', room });
+    try {
+      await join(room, video);
+      callSignal(peer.id, { t: 'invite', from: currentUser.id, video, room });
+      ringTimer.current = window.setTimeout(() => endRef.current(true), 45000);
+    } catch (e) {
+      console.error(e);
+      window.alert('تعذّر بدء المكالمة. تأكد من إذن الميكروفون/الكاميرا ومن إعداد الخادم.');
+      cleanup();
+    }
+  };
+
+  const accept = async () => {
+    const c = callRef.current;
+    if (!c) return;
+    window.clearTimeout(ringTimer.current);
+    setCall({ ...c, phase: 'connecting' });
+    try { await join(c.room, c.video); }
+    catch (e) { console.error(e); window.alert('تعذّر الانضمام للمكالمة.'); endRef.current(true); }
+  };
+
+  useEffect(() => {
+    const onStart = (e: Event) => { const d = (e as CustomEvent<{ peerId: string; video: boolean }>).detail; void startOut(d.peerId, d.video); };
+    window.addEventListener('kan-start-call', onStart);
+    return () => window.removeEventListener('kan-start-call', onStart);
+  }, [currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const ch = supabase.channel(`calls:${currentUser.id}`);
+    ch.on('broadcast', { event: 'call' }, ({ payload }) => {
+      const m = payload as { t?: string; from?: string; video?: boolean; room?: string };
+      const cur = callRef.current;
+      if (m.t === 'invite') {
+        const peer = usersRef.current.find(u => u.id === m.from);
+        if (!peer || !m.room) return;
+        if (cur) { callSignal(peer.id, { t: 'busy', from: currentUser.id }); return; }
+        setCall({ peer, video: !!m.video, dir: 'in', phase: 'ringing', room: m.room });
+        ringTimer.current = window.setTimeout(() => endRef.current(false), 45000);
+        if (document.visibilityState === 'hidden') systemNotify(peer.displayName, m.video ? 'مكالمة فيديو واردة' : 'مكالمة صوتية واردة', `call-${peer.id}`, () => undefined, peer.avatar);
+      } else if (cur && cur.peer.id === m.from && (m.t === 'end' || m.t === 'decline' || m.t === 'busy')) {
+        endRef.current(false);
+      }
+    });
+    ch.subscribe();
+    return () => { void supabase.removeChannel(ch); };
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    if (call?.phase !== 'live') return;
+    const iv = window.setInterval(() => setSecs(s => s + 1), 1000);
+    return () => window.clearInterval(iv);
+  }, [call?.phase]);
+
+  if (!call) return null;
+  const live = call.phase === 'live';
+  const incoming = call.dir === 'in' && call.phase === 'ringing';
+  const status = live ? formatDuration(secs) : incoming ? (call.video ? 'مكالمة فيديو واردة...' : 'مكالمة صوتية واردة...') : call.phase === 'connecting' ? 'جارٍ التوصيل...' : 'جارٍ الاتصال...';
+  const btn = 'w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-transform';
+  return createPortal(
+    <div dir={DIR} className="kan-theme-text fixed inset-0 z-[300] bg-gray-950 flex flex-col text-white">
+      {call.video && <div ref={remoteEl} className="absolute inset-0 bg-black" />}
+      {call.video && <video ref={localEl} muted playsInline autoPlay className="absolute top-4 end-4 z-10 w-24 h-36 rounded-xl object-cover bg-gray-800 shadow-lg [transform:scaleX(-1)]" />}
+      <div className={`relative z-10 flex-1 flex flex-col items-center justify-center gap-3 ${call.video && live ? 'justify-start pt-6 bg-gradient-to-b from-black/60 to-transparent flex-none h-28' : ''}`}>
+        {!(call.video && live) && <div className="scale-150 mb-6"><Avatar userId={call.peer.id} src={call.peer.avatar} name={call.peer.displayName} size="md" /></div>}
+        <div className="text-xl font-bold">{call.peer.displayName}</div>
+        <div className="text-sm text-gray-300">{status}</div>
+      </div>
+      {call.video && live && <div className="flex-1" />}
+      <div className="relative z-10 flex items-center justify-center gap-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6">
+        {incoming ? (
+          <>
+            <button onClick={() => endRef.current(true)} className={`${btn} bg-red-500`} aria-label="رفض"><HangUpIcon size={26} color="#fff" /></button>
+            <button onClick={() => void accept()} className={`${btn} bg-green-500`} aria-label="رد"><CallIcon size={26} color="#fff" /></button>
+          </>
+        ) : (
+          <>
+            <button onClick={() => { const r = roomRef.current; if (!r) return; void r.localParticipant.setMicrophoneEnabled(muted); setMuted(!muted); }} className={`${btn} ${muted ? 'bg-white text-gray-900' : 'bg-white/15'}`} aria-label="كتم"><MicOff size={24} color={muted ? '#111' : '#fff'} /></button>
+            {call.video && <button onClick={() => { const r = roomRef.current; if (!r) return; void r.localParticipant.setCameraEnabled(camOff); setCamOff(!camOff); }} className={`${btn} ${camOff ? 'bg-white' : 'bg-white/15'}`} aria-label="الكاميرا"><VideoOff size={24} color={camOff ? '#111' : '#fff'} /></button>}
+            <button onClick={() => endRef.current(true)} className={`${btn} bg-red-500`} aria-label="إنهاء"><HangUpIcon size={26} color="#fff" /></button>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -9597,7 +9829,7 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const [loading, setLoading] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
-  const videos = randomOrder(posts.filter(p => p.isVideo && p.media?.type === 'video'));
+  const videos = useStableOrder(posts.filter(p => p.isVideo && p.media?.type === 'video'));
   const [vf, setVf] = useState<'all' | 'subs' | 'saved' | 'lib'>('all');
   const [sort, setSort] = useState<'new' | 'top'>('new');
   const [channel, setChannel] = useState<string | null>(null);
@@ -11996,9 +12228,29 @@ function bumpInterests(uid: string, text: string, amount = 2) {
 }
 // Takes posts newest-first and lifts the ones that match the person's interests; everything else keeps its order.
 // Until the ranking algorithms exist, every list of posts is shown in a random order that stays the same during the session.
-const ORDER_SEED = Math.random().toString(36).slice(2);
+let ORDER_SEED = Math.random().toString(36).slice(2);
+let ORDER_EPOCH = 0;
+// Called when the feed is refreshed (Home icon / first load): the next render deals a brand-new random order.
+const reshuffleOrder = () => { ORDER_SEED = Math.random().toString(36).slice(2); ORDER_EPOCH++; };
 const orderKey = (id: string) => { let h = 2166136261; const s = ORDER_SEED + id; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 const randomOrder = <T extends { id: string }>(list: T[]): T[] => [...list].sort((a, b) => orderKey(a.id) - orderKey(b.id));
+// Random order that never moves under your finger: posts already dealt keep their place, posts that load later
+// are added at the END, and only a refresh deals a new order. A post you publish yourself goes to the top.
+function useStableOrder<T extends { id: string; timestamp?: number }>(list: T[]): T[] {
+  const st = useRef<{ epoch: number; ids: string[]; born: number }>({ epoch: ORDER_EPOCH, ids: [], born: Date.now() });
+  if (st.current.epoch !== ORDER_EPOCH) st.current = { epoch: ORDER_EPOCH, ids: [], born: Date.now() };
+  const known = new Set(st.current.ids);
+  const fresh = list.filter(p => !known.has(p.id));
+  if (fresh.length) {
+    const first = st.current.ids.length === 0;
+    const mine = first ? [] : fresh.filter(p => (p.timestamp ?? 0) > st.current.born);
+    const mineIds = new Set(mine.map(p => p.id));
+    const rest = randomOrder(fresh.filter(p => !mineIds.has(p.id)));
+    st.current.ids = [...mine.map(p => p.id), ...st.current.ids, ...rest.map(p => p.id)];
+  }
+  const byId = new Map(list.map(p => [p.id, p] as const));
+  return st.current.ids.flatMap(id => { const p = byId.get(id); return p ? [p] : []; });
+}
 void rankByInterests; // kept for the ranking algorithms that come later
 function rankByInterests(list: Post[], uid: string): Post[] {
   const hour = Math.floor(Date.now() / 36e5) * 36e5;
@@ -12967,13 +13219,14 @@ function VoiceRecorder({ onSend, onCancel }: {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: 48000 } });
       if (unmountedRef.current) {
         stream.getTracks().forEach(t => t.stop());
         return;
       }
       streamRef.current = stream;
-      const mediaRecorder = new MediaRecorder(stream);
+      const voiceMime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus'].find(m => MediaRecorder.isTypeSupported(m));
+      const mediaRecorder = new MediaRecorder(stream, { ...(voiceMime ? { mimeType: voiceMime } : {}), audioBitsPerSecond: 96000 });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -12982,7 +13235,7 @@ function VoiceRecorder({ onSend, onCancel }: {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: (mediaRecorder.mimeType || 'audio/webm').split(';')[0] });
         const reader = new FileReader();
         reader.onload = () => {
           onSend(reader.result as string, durationRef.current);
@@ -15395,6 +15648,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
 
   // "Typing..." indicator: a lightweight live signal between the two people (nothing is stored).
   const [peerTyping, setPeerTyping] = useState(false);
+  const [peerRecording, setPeerRecording] = useState(false);
+  const recTimer = useRef<number | undefined>(undefined);
   const typingTimer = useRef<number | undefined>(undefined);
   const lastTypingSent = useRef(0);
   const typingChannel = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -15420,6 +15675,12 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       window.clearTimeout(typingTimer.current);
       typingTimer.current = window.setTimeout(() => setPeerTyping(false), 3500);
     });
+    channel.on('broadcast', { event: 'recording' }, payload => {
+      const m = payload.payload as { userId?: string; on?: boolean } | undefined;
+      if (!m || m.userId !== chatUser.id) return;
+      window.clearTimeout(recTimer.current);
+      if (m.on) { setPeerRecording(true); recTimer.current = window.setTimeout(() => setPeerRecording(false), 4500); } else setPeerRecording(false);
+    });
     channel.on('broadcast', { event: 'seen' }, payload => { // the other person just saw my messages: show it at once, no database round trip
       const m = payload.payload as { ids?: string[]; from?: string } | undefined;
       if (!m || m.from !== chatUser.id || !Array.isArray(m.ids)) return;
@@ -15442,11 +15703,21 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     return () => {
       document.removeEventListener('visibilitychange', vis);
       window.clearTimeout(typingTimer.current);
+      window.clearTimeout(recTimer.current);
       typingChannel.current = null;
       peerHere.current = false; presumed.current.clear();
       void supabase.removeChannel(channel);
     };
   }, [convId]);
+
+  // While I hold the mic, the other person sees "recording a voice message..." (a ping every 2s; it stops by itself).
+  useEffect(() => {
+    if (!recording) return;
+    const ping = (on: boolean) => { void typingChannel.current?.send({ type: 'broadcast', event: 'recording', payload: { userId: currentUser.id, on } }); };
+    ping(true);
+    const iv = window.setInterval(() => ping(true), 2000);
+    return () => { window.clearInterval(iv); ping(false); };
+  }, [recording]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const notifyTyping = () => {
     const channel = typingChannel.current;
@@ -15806,13 +16077,17 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           <Avatar userId={chatUser.id} src={chatUser.avatar} name={chatUser.displayName} size="md" />
           <div className="flex-1 min-w-0">
             <div className="font-medium text-white truncate">{chatUser.displayName}</div>
-            {peerTyping
+            {peerRecording
+              ? <div className="text-xs text-red-400 flex items-center gap-1"><Mic size={12} className="animate-pulse" /> يسجل رسالة صوتية...</div>
+              : peerTyping
               ? <div className="text-xs text-cyan-400">يكتب الآن...</div>
               : <div className="text-xs text-gray-500">@{chatUser.username}</div>}
           </div>
         </button>
         {showGames && <GamePicker onClose={() => setShowGames(false)} onInvite={(at, tc) => { sendGame({ k: 'inv', g: crypto.randomUUID(), at, tc }); setShowGames(false); }} />}
         {openGame && <ChessGame game={openGame} games={games} meId={currentUser.id} me={currentUser} other={chatUser} onMove={mv => sendGame({ k: 'mv', g: openGame.g, n: openGame.moves.length, m: mv })} onResign={() => sendGame({ k: 'res', g: openGame.g })} onDraw={k => sendGame({ k, g: openGame.g })} onTimeout={() => sendGame({ k: 'to', g: openGame.g })} onJoin={() => sendGame({ k: 'jn', g: openGame.g })} onNew={() => { sendGame({ k: 'inv', g: crypto.randomUUID(), at: Date.now(), tc: openGame.tc }); setOpenGid(null); }} onClose={() => setOpenGid(null)} chat={messages.filter(m => m.text && !parseGame(m.text) && !parseVote(m.text) && !parsePoll(m.text) && m.timestamp >= openGame.ts).slice(-4)} onChat={t => void send({ text: t })} />}
+        <button onClick={() => startCall(chatUser.id, false)} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-white" aria-label="مكالمة صوتية" title="مكالمة صوتية"><CallIcon size={20} color="#fff" /></button>
+        <button onClick={() => startCall(chatUser.id, true)} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-white" aria-label="مكالمة فيديو" title="مكالمة فيديو"><Video size={20} color="#fff" /></button>
         <div className="relative">
           <button
             onClick={() => setShowBgPicker(!showBgPicker)}
@@ -16061,7 +16336,14 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
             </motion.div>
           );
         })}
-        {peerTyping && (
+        {peerRecording && (
+          <div className="flex justify-start">
+            <div className="bg-gray-800 rounded-2xl px-4 py-3 flex items-center gap-2 text-red-400 text-sm">
+              <Mic size={16} className="animate-pulse" /> يسجل رسالة صوتية...
+            </div>
+          </div>
+        )}
+        {peerTyping && !peerRecording && (
           <div className="flex justify-start">
             <div className="bg-gray-800 rounded-2xl px-4 py-3 flex items-center gap-1">
               <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
