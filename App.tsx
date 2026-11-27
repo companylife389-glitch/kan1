@@ -15,6 +15,7 @@ import {
   VideoOff, Ban as BlockIcon, Lock as LockIcon, SwitchCamera, ScreenShare, Minimize2, Maximize2,
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
+import { bumpInterests, bumpAffinity, saveHobbies, rankItems, rankChannels, type RankEnv } from './interests'; // what shows first = interests.ts
 
 // ============ Language (Arabic is the default; English is added first for the main screens) ============
 type Lang = string;
@@ -9868,7 +9869,12 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
   const hashOf = (id: string) => { let h = 2166136261; const s = seed + id; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   // Pinned first, then what I just posted (newest first), then a random order that stays put while the page is open.
   const rank = (c: Comment) => (c.pinned ? 0 : fresh.includes(c.id) ? 1 : 2);
-  const list = [...post.comments].sort((a, b) => (rank(a) - rank(b)) || (rank(a) === 1 ? fresh.indexOf(a.id) - fresh.indexOf(b.id) : hashOf(a.id) - hashOf(b.id)));
+  // Below those: comments that match my interests (or come from people I engage with) first, random among equals.
+  const list = (() => {
+    const sorted = [...post.comments].sort((a, b) => (rank(a) - rank(b)) || (rank(a) === 1 ? fresh.indexOf(a.id) - fresh.indexOf(b.id) : hashOf(a.id) - hashOf(b.id)));
+    const head = sorted.filter(c => rank(c) < 2);
+    return [...head, ...rankByInterests(sorted.filter(c => rank(c) === 2), me)];
+  })();
 
   const row = (r: { id: string; top: string; userId: string; text: string; timestamp: number; likes: string[]; pinned?: boolean }, isReply: boolean) => {
     const u = users.find(x => x.id === r.userId);
@@ -10567,7 +10573,7 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const okPost = makePostFilter(currentUser, users);
   const videos = useStableOrder(posts.filter(p => p.isVideo && p.media?.type === 'video' && okPost(p)), currentUser.id);
   const [vf, setVf] = useState<'all' | 'subs' | 'saved' | 'lib'>('all');
-  const [sort, setSort] = useState<'new' | 'top'>('new');
+  const [sort, setSort] = useState<'for' | 'new' | 'top'>('for'); // 'for' = the interest-ranked order (default)
   const [channel, setChannel] = useState<string | null>(null);
   const wlKey = `kan_wl_${currentUser.id}`;
   const [wl, setWl] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(wlKey) || '[]'); } catch { return []; } });
@@ -10680,8 +10686,13 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const chMatches = qn ? users.filter(u => u.displayName.toLowerCase().includes(qn) && videos.some(x => x.userId === u.id)) : [];
   const merged = results ? [...results, ...videos.filter(x => chMatches.some(u => u.id === x.userId) && !results.some(r => r.id === x.id))] : videos;
   const base = vf === 'saved' && !results ? posts.filter(p => wl.includes(p.id) && p.isVideo && p.media?.type === 'video') : fresh(merged);
-  const shown = base.filter(x => (channel ? x.userId === channel : vf === 'subs' ? isSub(x.userId) : true)).sort(sort === 'top' ? (x, y) => y.likes.length - x.likes.length : (x, y) => y.timestamp - x.timestamp);
+  const filtered = base.filter(x => (channel ? x.userId === channel : vf === 'subs' ? isSub(x.userId) : true));
+  const shown = sort === 'for' && vf !== 'saved' ? filtered : filtered.sort(sort === 'top' ? (x, y) => y.likes.length - x.likes.length : (x, y) => y.timestamp - x.timestamp);
   const chStrip = qn ? chMatches : users.filter(u => isSub(u.id) && videos.some(x => x.userId === u.id));
+  // Channels you are not subscribed to yet, closest to your taste first (shown when you open Videos).
+  const suggest = !channel && !qn && (vf === 'all' || vf === 'subs')
+    ? rankChannels(users.filter(u => u.id !== currentUser.id && !isSub(u.id) && videos.some(x => x.userId === u.id)), id => videos.filter(x => x.userId === id).map(x => `${x.text} ${x.title ?? ''}`).join(' '), currentUser.id, rankEnv(currentUser.id)).slice(0, 12)
+    : [];
   const channelUser = channel ? users.find(u => u.id === channel) : undefined;
   const watching = watchId ? posts.find(p => p.id === watchId) : undefined;
 
@@ -10755,8 +10766,25 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
           ))}
         </div>
       )}
+      {suggest.length > 0 && (
+        <div className="mb-4">
+          <div className="text-sm font-bold text-white mb-2">قنوات مقترحة ليك</div>
+          <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+            {suggest.map(u => (
+              <div key={u.id} className="shrink-0 w-28 rounded-2xl p-3 flex flex-col items-center gap-1.5 bg-gray-900 border border-gray-800">
+                <button onClick={() => setChannel(u.id)} className="flex flex-col items-center gap-1.5 w-full">
+                  <Avatar userId={u.id} src={u.avatar} name={u.displayName} size="md" />
+                  <span className="text-xs text-white font-semibold truncate w-full text-center">{u.displayName}</span>
+                </button>
+                <span className="text-[10px] text-gray-400">{subsOf(u.id)} مشترك</span>
+                <button onClick={() => void toggleSub(u.id)} className="kan-chip-on w-full py-1 rounded-full text-xs font-semibold">اشترك</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className={`flex gap-2 mb-4 text-xs ${vf === 'lib' && !channelUser ? 'hidden' : ''}`}>
-        {([['new', 'الأحدث'], ['top', 'الأكثر إعجاباً']] as const).map(([k, l]) => (
+        {([['for', 'لك'], ['new', 'الأحدث'], ['top', 'الأكثر إعجاباً']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setSort(k)} className={`px-3 py-1 rounded-full ${sort === k ? 'kan-chip-on' : 'kan-chip'}`}>{l}</button>
         ))}
       </div>
@@ -12946,31 +12974,7 @@ function CreatePost({ currentUser, setPosts, users = [] }: {
 
 // ============ Search Tab ============
 // ============ Interests (what a person searches for is shown to them more) ============
-type InterestMap = Record<string, { w: number; t: number }>;
-const interestKey = (uid: string) => `kan_interests_${uid}`;
-const interestTokens = (text: string) => Array.from(new Set(text.toLowerCase().split(/[\s,.;:!?()"'#،؟]+/).filter(w => w.length >= 3))).slice(0, 6);
-function readInterests(uid: string): InterestMap {
-  try { const r = JSON.parse(localStorage.getItem(interestKey(uid)) ?? '{}'); return r && typeof r === 'object' ? (r as InterestMap) : {}; } catch { return {}; }
-}
-function bumpInterests(uid: string, text: string, amount = 2) {
-  const now = Date.now();
-  const cur = readInterests(uid);
-  for (const k of interestTokens(text)) {
-    const old = cur[k];
-    const decayed = old ? old.w * Math.pow(0.5, (now - old.t) / (3 * 864e5)) : 0;
-    cur[k] = { w: Math.min(decayed + amount, 20), t: now };
-  }
-  const top = Object.entries(cur).sort((a, b) => b[1].w - a[1].w).slice(0, 60);
-  try { localStorage.setItem(interestKey(uid), JSON.stringify(Object.fromEntries(top))); } catch { /* ignore */ }
-}
-// Hobbies picked at sign-up: a steady baseline that does not fade (searches / likes add on top and do fade).
-const hobbyKey = (uid: string) => `kan_hobbies_${uid}`;
-function readHobbies(uid: string): string[] {
-  try { const r = JSON.parse(localStorage.getItem(hobbyKey(uid)) ?? 'null') as { kw?: string[] } | null; return Array.isArray(r?.kw) ? r!.kw!.filter(k => typeof k === 'string') : []; } catch { return []; }
-}
-function saveHobbies(uid: string, ids: string[], kw: string[]) {
-  try { localStorage.setItem(hobbyKey(uid), JSON.stringify({ ids, kw: Array.from(new Set(kw.map(k => k.toLowerCase().trim()).filter(k => k.length >= 2))) })); } catch { /* ignore */ }
-}
+// (interest + hobby + affinity storage and the scoring now live in ./interests.ts)
 // Takes posts newest-first and lifts the ones that match the person's interests; everything else keeps its order.
 // Until the ranking algorithms exist, every list of posts is shown in a random order that stays the same during the session.
 let ORDER_SEED = Math.random().toString(36).slice(2);
@@ -12997,61 +13001,20 @@ function useStableOrder<T extends { id: string; timestamp?: number }>(list: T[],
   const byId = new Map(list.map(p => [p.id, p] as const));
   return st.current.ids.flatMap(id => { const p = byId.get(id); return p ? [p] : []; });
 }
-// Who the person really engages with (likes, comments, replies): a slow-fading weight per author.
-const affKey = (uid: string) => `kan_aff_${uid}`;
-function readAffinity(uid: string): Record<string, { w: number; t: number }> {
-  try { const r = JSON.parse(localStorage.getItem(affKey(uid)) ?? '{}'); return r && typeof r === 'object' ? r : {}; } catch { return {}; }
-}
-function bumpAffinity(uid: string, authorId: string, amount = 2) {
-  if (!authorId || authorId === uid) return;
-  const now = Date.now();
-  const cur = readAffinity(uid);
-  const old = cur[authorId];
-  const decayed = old ? old.w * Math.pow(0.5, (now - old.t) / (7 * 864e5)) : 0;
-  cur[authorId] = { w: Math.min(decayed + amount, 15), t: now };
-  const top = Object.entries(cur).sort((a, b) => b[1].w - a[1].w).slice(0, 80);
-  try { localStorage.setItem(affKey(uid), JSON.stringify(Object.fromEntries(top))); } catch { /* ignore */ }
-}
 // Content that tends to upset people: pushed far down when the person asked to be shielded at sign-up.
 const KAN_DISTRESS = /جثة|جثث|مقتل|قتيل|دماء|ذبح|انتحار|اغتصاب|تعذيب|مجزرة|مشاهد صادمة|حادث مروع|gore|massacre|suicide|torture|corpse|bloody|brutal|graphic violence/i;
-// Understands the person: hobbies + searches/likes (interests), who they engage with, the mood they picked, and their language.
-// Then it keeps the feed varied (no long run from one author) and calm (distressing posts sink) when they asked for that.
-function rankByInterests<T extends { text: string; title?: string; media?: { name?: string }; userId?: string }>(list: T[], uid: string): T[] {
-  const hour = Math.floor(Date.now() / 36e5) * 36e5;
-  const score = new Map<string, number>();
-  for (const k of readHobbies(uid)) score.set(k, 2);
+// Hands the app's own knowledge (word families, mood, language) to ./interests.ts, which does the ranking.
+const rankEnv = (uid: string): RankEnv => {
   const vibe = readVibe(uid);
-  for (const v of VIBES) if (vibe.ids.includes(v.id)) for (const k of v.kw) score.set(k.toLowerCase(), (score.get(k.toLowerCase()) ?? 0) + 1);
-  for (const [k, v] of Object.entries(readInterests(uid))) score.set(k, (score.get(k) ?? 0) + v.w * Math.pow(0.5, (hour - v.t) / (3 * 864e5)));
-  const entries = Array.from(score.entries()).filter(([, w]) => w >= 0.3);
-  const aff = readAffinity(uid);
-  if (entries.length === 0 && Object.keys(aff).length === 0 && !vibe.shield) return list;
-  const arabicUser = LANG === 'ar';
-  const scored = list
-    .map((p, i) => {
-      const hay = `${p.text} ${p.title ?? ''} ${p.media?.name ?? ''}`.toLowerCase();
-      let b = 0;
-      for (const [k, w] of entries) if (hay.includes(k)) b += w;
-      let sc = -i + Math.min(b, 12) * 4;
-      const a = p.userId ? aff[p.userId] : undefined;
-      if (a) sc += Math.min(a.w * Math.pow(0.5, (hour - a.t) / (7 * 864e5)), 10) * 3;
-      const ar = kanArabicCount(hay), la = kanLatinCount(hay);
-      if (ar + la >= 4) sc += (ar > la) === arabicUser ? 6 : -4; // text in the person's own language first
-      if (vibe.shield && KAN_DISTRESS.test(hay)) sc -= 80;
-      return { p, s: sc };
-    })
-    .sort((a, b) => b.s - a.s)
-    .map(x => x.p);
-  // Variety: never show the same author twice in a row when someone else is close by.
-  const out: T[] = [];
-  const rest = [...scored];
-  while (rest.length) {
-    const last = out[out.length - 1]?.userId;
-    let k = 0;
-    if (last && rest[0].userId === last) { const f = rest.findIndex((x, idx) => idx < 6 && x.userId !== last); if (f > 0) k = f; }
-    out.push(rest.splice(k, 1)[0]);
-  }
-  return out;
+  return {
+    groups: [...HOBBIES.map(h => h.kw), ...VIBES.map(v => v.kw)],
+    vibeKw: VIBES.filter(v => vibe.ids.includes(v.id)).flatMap(v => v.kw),
+    shield: vibe.shield, distress: KAN_DISTRESS, arabicUser: LANG === 'ar',
+  };
+};
+// Same or close interests first; the incoming random order only breaks ties.
+function rankByInterests<T extends { text: string; title?: string; media?: { name?: string }; userId?: string }>(list: T[], uid: string): T[] {
+  return rankItems(list, uid, rankEnv(uid));
 }
 
 function SearchAI({ q, me, onPick }: { q: string; me: User; onPick: (w: string) => void }) {
