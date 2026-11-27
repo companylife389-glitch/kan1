@@ -16,7 +16,7 @@
 }
 
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto; /* smooth here fights the app's own glide and every programmatic scroll */
   overscroll-behavior-y: contain;
 }
 
@@ -30,11 +30,10 @@ body {
   background-image:
     radial-gradient(60rem 28rem at 50% -8%, var(--kan-glow-a), transparent 60%),
     radial-gradient(36rem 24rem at 100% 8%, var(--kan-glow-b), transparent 60%);
-  background-attachment: fixed;
   color: var(--color-white);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  text-rendering: auto;
   font-family: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   font-weight: 400;
 }
@@ -43,23 +42,9 @@ body {
 h1, h2, h3, strong, b { font-weight: 700; }
 input, textarea, button { font-family: inherit; }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: #15152b;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #35355a;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #4f4f75;
-}
+/* No scrollbar strip anywhere (it showed as a bar on the Home page); scrolling itself is unchanged. */
+html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
 
 /* Selection color */
 ::selection {
@@ -80,15 +65,7 @@ textarea:focus {
 }
 
 /* Smooth transitions for all interactive elements */
-button, a {
-  transition: all 0.2s ease;
-}
 
-/* Hide scrollbar for chat messages on mobile */
-.overflow-y-auto {
-  scrollbar-width: thin;
-  scrollbar-color: #35355a #15152b;
-}
 
 
 /* Animated "publish" button in the bottom bar */
@@ -188,8 +165,6 @@ html[data-theme='light'] {
 /* Full-screen reels/posts/stories: white text on photos and video in every theme. */
 .kan-always-white { --color-white: #ffffff; }
 html[data-theme='light'] .seg-pill { display: none; }
-html[data-theme='light'] ::-webkit-scrollbar-track { background: #f3f3f7; }
-html[data-theme='light'] ::-webkit-scrollbar-thumb { background: #cfcfdc; }
 
 
 /* Pickers (reactions, emoji panel) pop in smoothly. */
@@ -223,7 +198,6 @@ button, a, [role='button'] { touch-action: manipulation; }
 button:active:not(:disabled) { transform: scale(0.97); }
 .overflow-y-auto, .overflow-auto { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 img, video { -webkit-user-drag: none; }
-img { content-visibility: auto; }
 .post-card { content-visibility: auto; contain-intrinsic-size: auto 520px; }
 button, a { transition-property: color, background-color, border-color, opacity, box-shadow, transform; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } button:active:not(:disabled) { transform: none; } }
@@ -240,13 +214,12 @@ html[dir='ltr'] .text-right { text-align: left; }
 .fixed { backface-visibility: hidden; }
 
 
-/* Phones and tablets: a post is full-width like Facebook (no card box, photo edge to edge) with a thick gap between posts. */
-@media (max-width: 1023px) {
-  html .post-card, html[data-theme] .post-card {
-    background: var(--color-gray-900);
-    border: 0;
-    border-bottom: 8px solid var(--color-gray-950);
-    border-radius: 0;
-    box-shadow: none;
-  }
+/* Weak phones: no endless animations, no background gradients, no shadows that repaint every frame. */
+@media (max-width: 767px) {
+  body { background-image: none; }
+  .kan-fab { animation: none; box-shadow: 0 6px 18px rgba(6, 182, 212, 0.35); }
+  * { -webkit-tap-highlight-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce), (update: slow) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

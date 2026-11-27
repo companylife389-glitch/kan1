@@ -1366,7 +1366,20 @@ async function uploadToB2(
   }
 }
 
+// A flaky mobile connection no longer loses the picture: up to 3 tries, and "already exists" after a retry counts as sent.
 async function uploadWithProgress(
+  bucket: string, path: string, file: Blob, contentType: string, cacheControl: string,
+  onProgress?: (pct: number) => void, signal?: AbortSignal,
+): Promise<{ error: Error | null }> {
+  let last = await uploadWithProgressOnce(bucket, path, file, contentType, cacheControl, onProgress, signal);
+  for (let i = 1; i < 3 && last.error && !signal?.aborted && !/aborted|too large/i.test(last.error.message); i++) {
+    await new Promise(r => setTimeout(r, 700 * i));
+    last = await uploadWithProgressOnce(bucket, path, file, contentType, cacheControl, onProgress, signal);
+    if (last.error && /already exists|Duplicate|\b409\b/i.test(last.error.message)) { onProgress?.(100); return { error: null }; }
+  }
+  return last;
+}
+async function uploadWithProgressOnce(
   bucket: string, path: string, file: Blob, contentType: string, cacheControl: string,
   onProgress?: (pct: number) => void, signal?: AbortSignal,
 ): Promise<{ error: Error | null }> {
@@ -1462,6 +1475,19 @@ let openReelHandler: (postId: string) => void = () => undefined;
 function openReel(postId: string) { stopPostMusic(); openReelHandler(postId); }
 // Only one piece of post music plays at a time.
 let playingAudio: HTMLAudioElement | null = null;
+// One sound at a time: of everything with music that is on screen, only the one showing the biggest part plays.
+const musicVis = new Map<object, { ratio: number; on: boolean; apply: (on: boolean) => void }>();
+function musicArbitrate() {
+  let best: object | null = null; let br = 0.4;
+  musicVis.forEach((v, k) => { if (v.ratio > br + 0.001) { br = v.ratio; best = k; } });
+  musicVis.forEach((v, k) => { const want = k === best; if (want !== v.on) { v.on = want; v.apply(want); } });
+}
+function musicReport(key: object, ratio: number, apply: (on: boolean) => void) {
+  const old = musicVis.get(key);
+  musicVis.set(key, { ratio, on: old?.on ?? false, apply });
+  musicArbitrate();
+}
+function musicForget(key: object) { musicVis.delete(key); musicArbitrate(); }
 function stopPostMusic() { if (playingAudio) { playingAudio.pause(); playingAudio = null; } }
 if (typeof document !== 'undefined') document.addEventListener('play', e => { if (e.target instanceof HTMLVideoElement) stopPostMusic(); }, true);
 let openPostHandler: (postId: string, commentId?: string) => void = () => undefined;
@@ -2549,7 +2575,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
   const [toolsOpen, setToolsOpen] = useState(false);
   const [locSheet, setLocSheet] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
-  const [limit, setLimit] = useState(60);
+  const [limit, setLimit] = useState(30);
   const [infoOpen, setInfoOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -2817,7 +2843,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     )}
                     {isStickerName(m.media?.name) && m.media && (
                       m.media.type === 'video'
-                        ? <video src={m.media.url} autoPlay loop muted playsInline className="w-36 h-36 object-contain pointer-events-none" />
+                        ? <LoopVideo src={m.media.url} className="w-36 h-36 object-contain pointer-events-none" />
                         : <img src={m.media.url} alt="" draggable={false} className="w-36 h-36 object-contain pointer-events-none" />
                     )}
                     {!isStickerName(m.media?.name) && m.media?.type === 'image' && (
@@ -5667,6 +5693,7 @@ function ReactionSheet({ current, onPick, onClose }: { current?: string; onPick:
   const vp = useVisualViewport();
   const [more, setMore] = useState(false);
   const kb = Math.max(0, Math.round(window.innerHeight - vp.height - vp.top));
+  const gridH = Math.max(96, Math.min(240, Math.round(vp.height - 190)));
   // Portal events still bubble through React to the message bubble (swipe-to-reply, long press...): stop them here.
   const stop = { onClick: (e: React.SyntheticEvent) => e.stopPropagation(), onPointerUp: (e: React.SyntheticEvent) => e.stopPropagation(), onPointerMove: (e: React.SyntheticEvent) => e.stopPropagation(), onTouchStart: (e: React.SyntheticEvent) => e.stopPropagation(), onTouchMove: (e: React.SyntheticEvent) => e.stopPropagation(), onTouchEnd: (e: React.SyntheticEvent) => e.stopPropagation(), onContextMenu: (e: React.SyntheticEvent) => { e.stopPropagation(); e.preventDefault(); } };
   return createPortal(
@@ -5680,7 +5707,7 @@ function ReactionSheet({ current, onPick, onClose }: { current?: string; onPick:
               <button key={e} onClick={() => onPick(e)} className={`shrink-0 w-11 h-11 text-[26px] rounded-full flex items-center justify-center active:scale-125 transition-transform ${current === e ? 'bg-violet-500/30 ring-1 ring-violet-300/60' : 'hover:bg-white/10'}`}>{e}</button>
             ))}
           </div>
-          {more && <EmojiPicker docked onPick={onPick} onClose={() => setMore(false)} />}
+          {more && <EmojiPicker docked gridH={gridH} onPick={onPick} onClose={() => setMore(false)} />}
         </div>
       </div>
     </>,
@@ -5688,7 +5715,7 @@ function ReactionSheet({ current, onPick, onClose }: { current?: string; onPick:
   );
 }
 
-function EmojiPicker({ onPick, onClose, docked = false, onSticker, startOnStickers = false }: { onPick: (emoji: string) => void; onClose: () => void; docked?: boolean; onSticker?: (st: SavedSticker) => void; startOnStickers?: boolean }) {
+function EmojiPicker({ onPick, onClose, docked = false, gridH, onSticker, startOnStickers = false }: { onPick: (emoji: string) => void; onClose: () => void; docked?: boolean; gridH?: number; onSticker?: (st: SavedSticker) => void; startOnStickers?: boolean }) {
   const [group, setGroup] = useState(0);
   const [stk, setStk] = useState(!!onSticker && startOnStickers);
   const [shop, setShop] = useState(false);
@@ -5711,7 +5738,7 @@ function EmojiPicker({ onPick, onClose, docked = false, onSticker, startOnSticke
         <button onClick={onClose} className="p-1 text-gray-400 hover:text-white" aria-label="إغلاق"><X size={16} /></button>
       </div>
       {shop && onSticker ? <KixStore inline onClose={() => setShop(false)} onPick={async st => { const sv = await storeToSaved(st); if (sv) onSticker(sv); }} /> : stk && onSticker ? <StickerPane onSend={onSticker} /> : (
-      <div className={`grid gap-0.5 p-2 overflow-y-auto overscroll-contain ${docked ? 'grid-cols-8 min-[420px]:grid-cols-10 sm:grid-cols-14 h-60' : 'grid-cols-8 max-h-52'}`}>
+      <div style={docked && gridH ? { height: gridH } : undefined} className={`grid gap-0.5 p-2 overflow-y-auto overscroll-contain content-start ${docked ? `grid-cols-8 min-[420px]:grid-cols-10 sm:grid-cols-14 ${gridH ? '' : 'h-60'}` : 'grid-cols-8 max-h-52'}`}>
         {EMOJI_GROUPS[group].items.map(e => (
           <button key={e} onClick={() => onPick(e)} className="h-9 text-2xl rounded-lg hover:bg-gray-800 active:scale-125 transition-transform">{e}</button>
         ))}
@@ -5760,7 +5787,7 @@ async function shrinkPhoto(file: File): Promise<File> {
     bmp.close();
     const type = file.type === 'image/png' ? 'image/webp' : 'image/jpeg';
     const blob = await new Promise<Blob | null>(res => c.toBlob(res, type, 0.85));
-    if (!blob || blob.size >= file.size) return file;
+    if (!blob || blob.size >= file.size || blob.type !== type) return file;
     return new File([blob], file.name.replace(/\.\w+$/, '') + (type === 'image/webp' ? '.webp' : '.jpg'), { type });
   } catch { return file; }
 }
@@ -6726,6 +6753,15 @@ export default function App() {
     setScreens([]);
     setActiveTab(tab);
   };
+  // Opening any tab other than Home starts at its top (the page below it may have been scrolled).
+  useEffect(() => {
+    if (activeTab === 'feed' || activeTab === 'messages') return;
+    const top = () => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    top();
+    const raf = requestAnimationFrame(top);
+    const t = window.setTimeout(top, 120);
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(t); };
+  }, [activeTab]);
   navRef.current = {
     openChat: id => { setSelectedChat(id); goTab('messages'); },
     openGroup: id => { setOpenGroupId(id); goTab('messages'); },
@@ -6944,7 +6980,7 @@ export default function App() {
 
   return (
     <div dir={LANG === 'en' ? 'ltr' : 'rtl'} className="min-h-[100dvh] bg-gray-950 text-white font-sans overflow-x-clip">
-      <style>{'html,body{-webkit-text-size-adjust:100%;overflow-x:hidden;overscroll-behavior-y:none;scroll-behavior:auto;-webkit-tap-highlight-color:transparent}img,video{-webkit-user-drag:none}.post-card{contain:layout style}.no-scrollbar,[class*=overflow-y-auto],[class*=overflow-x-auto]{-webkit-overflow-scrolling:touch}button,a{touch-action:manipulation}@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
+      <style>{'html,body{scrollbar-width:none!important;-ms-overflow-style:none;-webkit-text-size-adjust:100%;overflow-x:hidden;overscroll-behavior-y:none;scroll-behavior:auto;-webkit-tap-highlight-color:transparent}img,video{-webkit-user-drag:none}.post-card{contain:layout style;content-visibility:auto;contain-intrinsic-size:auto 560px}[id^="msg-"],[id^="gmsg-"]{contain:layout style}.overflow-y-auto,.overflow-y-scroll{-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}.no-scrollbar,[class*=overflow-y-auto],[class*=overflow-x-auto]{-webkit-overflow-scrolling:touch}button,a{touch-action:manipulation}@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
       <KanDialogHost />
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={popScreen} />}
@@ -7659,21 +7695,22 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
     const box = (card?.querySelector('img, video') as HTMLElement | null) ?? card ?? holder.current;
     if (!a || !box || typeof IntersectionObserver === 'undefined') return;
     let vis = false;
-    const io = new IntersectionObserver(([en]) => {
-      vis = en.isIntersecting && en.intersectionRatio >= 0.4;
-      if (vis) {
+    const turn = (on: boolean) => {
+      vis = on;
+      if (on) {
         if (playingAudio && playingAudio !== a) playingAudio.pause();
         playingAudio = a;
         // Browsers can refuse sound before a tap: retry on the first touch while the post is on screen.
         const go = () => { if (a.currentTime < start || a.currentTime >= start + win) a.currentTime = start; void a.play().catch(() => { const r = () => { if (vis && a.paused) void a.play().catch(() => undefined); }; window.addEventListener('pointerdown', r, { once: true }); window.addEventListener('touchend', r, { once: true }); }); };
         if (a.readyState >= 1) go(); else { a.addEventListener('loadedmetadata', go, { once: true }); a.load(); }
       } else { a.pause(); }
-    }, { threshold: [0, 0.15, 0.4, 0.7, 1] });
+    };
+    const io = new IntersectionObserver(([en]) => { musicReport(a, en.isIntersecting ? en.intersectionRatio : 0, turn); }, { threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1] });
     io.observe(box);
     const hide = () => { if (document.hidden) a.pause(); };
     document.addEventListener('visibilitychange', hide);
     window.addEventListener('pagehide', () => a.pause());
-    return () => { io.disconnect(); document.removeEventListener('visibilitychange', hide); a.pause(); if (playingAudio === a) playingAudio = null; };
+    return () => { io.disconnect(); musicForget(a); document.removeEventListener('visibilitychange', hide); a.pause(); if (playingAudio === a) playingAudio = null; };
   }, [auto, start, win]);
   if (auto) {
     return (
@@ -8348,19 +8385,14 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
     const box = boxRef.current;
     const video = videoRef.current;
     if (!box || !video) return;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
-        activeRef.current = true;
-        setPaused(false);
-        void video.play().catch(() => undefined);
-      } else {
-        activeRef.current = false;
-        video.pause();
-        video.currentTime = 0;
-      }
-    }, { threshold: [0, 0.6, 1] });
+    const turn = (on: boolean) => {
+      if (on) { activeRef.current = true; setPaused(false); void video.play().catch(() => undefined); }
+      else if (activeRef.current) { activeRef.current = false; video.pause(); video.currentTime = 0; }
+    };
+    // Two reels half on screen: only the one showing the bigger part plays (and its music).
+    const observer = new IntersectionObserver(([entry]) => { musicReport(box, entry.isIntersecting ? entry.intersectionRatio : 0, turn); }, { threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1] });
     observer.observe(box);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); musicForget(box); };
   }, []);
 
   // Only reels near the screen keep their video loaded: less memory, smoother swiping.
@@ -9610,7 +9642,7 @@ function ReelLyricsStudio({ file, src, name, start, end, bgUrl, bgType, onPack }
       </div>
       {ly.on && (
         <>
-          <div className="relative mx-auto mt-3 w-40 aspect-[9/16] rounded-2xl overflow-hidden bg-black ring-1 ring-white/15">
+          <div className="relative mx-auto mt-3 w-60 max-w-full aspect-[9/16] rounded-2xl overflow-hidden bg-black ring-1 ring-white/15 touch-none">
             {bgType === 'video' ? <video src={bgUrl} muted playsInline loop autoPlay className="absolute inset-0 w-full h-full object-cover opacity-80" /> : <img src={bgUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-80" />}
             {shown.length > 0 && <StoryLyrics ly={{ l: shown, st: ly.st, c: ly.c, p: ly.p, f: ly.f }} idx={idx} onMove={q => patch({ p: { ...ly.p, x: q.x, y: q.y } })} onScale={sc => patch({ p: { ...ly.p, s: sc } })} onRotate={rr => patch({ p: { ...ly.p, r: rr } })} />}
           </div>
@@ -10636,7 +10668,7 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
       if (f.sp || f.bl || f.lk || f.gr || f.v) drawLookFx(ctx, c, f, I, supportsFilter, performance.now());
       if (fxR.current > 0) {
         const lk = lmkRef.current; const now = performance.now();
-        if (lk && now - lastDet > 45) { lastDet = now; try { lmRef.current = lk.detectForVideo(v, now).faceLandmarks?.[0] ?? null; } catch { /* skip this frame */ } }
+        if (lk && now - lastDet > 70) { lastDet = now; try { lmRef.current = lk.detectForVideo(v, now).faceLandmarks?.[0] ?? null; } catch { /* skip this frame */ } }
         if (fxR.current >= 36 && fxR.current <= 37) warpFaceFx(ctx, c, fxR.current, null, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
         else if (lmRef.current && ((fxR.current >= 32 && fxR.current <= 40) || (fxR.current >= 42 && fxR.current <= 47))) warpFaceFx(ctx, c, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
         else if (lmRef.current && fxR.current >= 58 && fxR.current <= 70) colorFaceFx(ctx, c, fxR.current, lmRef.current, { CW, vw, vh, sc, ox, oy, mirror }, now, supportsFilter);
@@ -10691,7 +10723,10 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
   };
   const snap = () => {
     const c = cref.current; if (!c) return;
-    c.toBlob(b => { if (!b) return; const f = new File([b], `kix-studio-${Date.now()}.jpg`, { type: 'image/jpeg' }); setShot({ file: f, url: URL.createObjectURL(f) }); }, 'image/jpeg', 0.92);
+    // Freeze the exact frame the moment the button is touched: the live canvas keeps changing (and face effects keep it busy) while the photo is being encoded.
+    const t = document.createElement('canvas'); t.width = c.width; t.height = c.height;
+    t.getContext('2d')!.drawImage(c, 0, 0);
+    t.toBlob(b => { if (!b) return; const f = new File([b], `kix-studio-${Date.now()}.jpg`, { type: 'image/jpeg' }); setShot({ file: f, url: URL.createObjectURL(f) }); }, 'image/jpeg', 0.92);
   };
   const startRec = async () => {
     const c = cref.current; if (!c || rec || typeof MediaRecorder === 'undefined') return;
@@ -10823,7 +10858,7 @@ function KixStudio({ onClose, onUse }: { onClose: () => void; onUse: (file: File
         <div className="grid grid-cols-3 items-center px-5">
           <div className="flex justify-start"><button onClick={() => { if (rec) return; setSheet(track ? 'trim' : 'lib'); }} className={`w-12 h-12 rounded-full flex items-center justify-center ${track ? 'bg-white text-black' : 'bg-white/15 text-white'}`} aria-label="موسيقى"><Music size={20} /></button></div>
           <div className="flex justify-center">
-            <button onClick={() => { if (mode === 'photo') snap(); else if (rec) stopRec(); else void startRec(); }} disabled={!ready} aria-label={mode === 'photo' ? 'التقاط صورة' : rec ? 'إيقاف التسجيل' : 'بدء التسجيل'} className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40">
+            <button onPointerDown={() => { if (mode === 'photo' && ready) snap(); }} onClick={e => { if (mode === 'photo') { if (e.detail === 0) snap(); } else if (rec) stopRec(); else void startRec(); }} disabled={!ready} aria-label={mode === 'photo' ? 'التقاط صورة' : rec ? 'إيقاف التسجيل' : 'بدء التسجيل'} className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40">
               <span className={`bg-white transition-all ${rec ? 'w-6 h-6 rounded-md' : 'w-14 h-14 rounded-full'}`} />
             </button>
           </div>
@@ -13422,6 +13457,19 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
   );
 }
 
+// A looping sticker video plays only while it is on screen (dozens of autoplaying videos made the chat and the sticker panel heavy).
+function LoopVideo({ src, className }: { src: string; className?: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([en]) => { if (en.isIntersecting) void v.play().catch(() => undefined); else v.pause(); }, { threshold: 0.1 });
+    io.observe(v);
+    return () => io.disconnect();
+  }, [src]);
+  return <video ref={ref} src={src} loop muted playsInline preload="metadata" className={className} />;
+}
+
 function StickerThumb({ st, className }: { st: SavedSticker; className?: string }) {
   const [url, setUrl] = useState('');
   useEffect(() => {
@@ -13431,7 +13479,7 @@ function StickerThumb({ st, className }: { st: SavedSticker; className?: string 
   }, [st.blob]);
   if (!url) return null;
   return st.kind === 'video'
-    ? <video src={url} autoPlay loop muted playsInline className={className} />
+    ? <LoopVideo src={url} className={className} />
     : <img src={url} alt="" draggable={false} className={className} />;
 }
 
@@ -14189,7 +14237,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [toolsOpen, setToolsOpen] = useState(false);
   const [locSheet, setLocSheet] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
-  const [limit, setLimit] = useState(60);
+  const [limit, setLimit] = useState(30);
   const [sel, setSel] = useState<string[] | null>(null);
   const [burst, setBurst] = useState<{ id: string; e: string; k: number } | null>(null);
   const stickerStart = false; // stickers now live only inside the emoji panel (its stickers tab)
@@ -14734,7 +14782,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                           <div key={it.id} className="relative aspect-square rounded-xl overflow-hidden bg-black/40">
                             {it.media!.type === 'image'
                               ? <img src={it.media!.url} alt="" onLoad={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }} onClick={e => { e.stopPropagation(); setViewer({ src: it.media!.url, name: it.media!.name }); }} className="w-full h-full object-cover cursor-zoom-in" />
-                              : <video src={it.media!.url} controls playsInline preload="metadata" onClick={e => e.stopPropagation()} className="w-full h-full object-cover" />}
+                              : <video src={`${it.media!.url}#t=0.1`} controls playsInline preload="metadata" onClick={e => e.stopPropagation()} className="w-full h-full object-cover" />}
                           </div>
                         ))}
                       </div>
@@ -14742,8 +14790,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   })()}
                   {!albumMap.first.has(msg.id) && isStickerName(msg.media?.name) && msg.media && (
                     msg.media.type === 'video'
-                      ? <video src={msg.media.url} autoPlay loop muted playsInline className="w-36 h-36 object-contain pointer-events-none" />
-                      : <img src={msg.media.url} alt="" draggable={false} onLoad={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }} className="w-36 h-36 object-contain pointer-events-none" />
+                      ? <LoopVideo src={msg.media.url} className="w-36 h-36 object-contain pointer-events-none" />
+                      : <img src={msg.media.url} alt="" draggable={false} decoding="async" onLoad={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }} className="w-36 h-36 object-contain pointer-events-none" />
                   )}
                   {!albumMap.first.has(msg.id) && !isStickerName(msg.media?.name) && msg.media?.type === 'image' && (
                     <div className="mb-2 relative">
@@ -14844,7 +14892,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   />
                 )}
                 {activeMsgId === msg.id && (
-                  <div data-msg-ui className={`flex items-center gap-1.5 mt-1 ${isMine ? 'flex-row-reverse' : ''}`}>
+                  <div data-msg-ui className={`flex flex-wrap items-center gap-1.5 mt-1 ${isMine ? 'flex-row-reverse' : ''}`}>
                     <button
                       onClick={() => setReactingTo(prev => (prev === msg.id ? null : msg.id))}
                       className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"
@@ -14998,7 +15046,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               </motion.button>
             )}
           </div>
-          <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onClose={() => setToolsOpen(false)} onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }} onGames={() => { setToolsOpen(false); inputRef.current?.blur(); setShowGames(true); }} />}</AnimatePresence>
+          <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onClose={() => setToolsOpen(false)} onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }}  />}</AnimatePresence>
           {locSheet && <LocationShareSheet onClose={() => setLocSheet(false)} onSend={l => { setLocSheet(false); void send({ text: locMsgText(l) }); }} />}
           {emojiOpen && <EmojiPicker key={stickerStart ? 's' : 'e'} docked onPick={insertEmoji} onClose={() => setEmojiOpen(false)} startOnStickers={stickerStart} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `${st.gif ? 'kix-gif' : 'kan-sticker'}.${stkExt(st.blob, st.kind)}` }); }} />}
         </div>
