@@ -10,7 +10,7 @@ import {
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
   Gamepad2, Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon, ChevronDown, Repeat, PictureInPicture2, BarChart3, HelpCircle, Clock, AtSign, Type as TypeIcon, Wand2,
-  AlertTriangle, Info, AlarmClock, Library, ThumbsUp,
+  AlertTriangle, Info, AlarmClock, Library, ThumbsUp, Pin,
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -185,6 +185,7 @@ interface Comment {
   timestamp: number;
   likes: string[];
   replies: Reply[];
+  pinned?: boolean;
 }
 
 interface Reply {
@@ -472,10 +473,11 @@ interface PostRow {
     text: string;
     created_at: string;
     comment_likes: { user_id: string }[];
+    pinned?: boolean;
   }[];
 }
 
-const POST_SELECT = 'id, user_id, text, media_url, media_type, media_name, media_size, is_reel, is_video, title, cover_url, media_extra, created_at, post_likes(user_id), bookmarks(user_id), comments(id, parent_id, user_id, text, created_at, comment_likes(user_id))';
+const POST_SELECT = 'id, user_id, text, media_url, media_type, media_name, media_size, is_reel, is_video, title, cover_url, media_extra, created_at, post_likes(user_id), bookmarks(user_id), comments(id, parent_id, user_id, text, created_at, pinned, comment_likes(user_id))';
 
 function rowToPost(row: PostRow): Post {
   const repliesByParent = new Map<string, Reply[]>();
@@ -517,6 +519,7 @@ function rowToPost(row: PostRow): Post {
         timestamp: new Date(c.created_at).getTime(),
         likes: c.comment_likes.map(l => l.user_id),
         replies: repliesByParent.get(c.id) ?? [],
+        pinned: !!c.pinned,
       })),
   };
 }
@@ -7719,7 +7722,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
 }) {
   const [mode, setMode] = useState<'all' | 'following' | 'files'>('all');
   const sentinel = useRef<HTMLDivElement>(null);
-  const sorted = useMemo(() => rankByInterests(posts.filter(p => p.timestamp >= frontier).sort((a, b) => b.timestamp - a.timestamp), currentUser.id), [posts, frontier, currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sorted = useMemo(() => randomOrder(posts.filter(p => p.timestamp >= frontier)), [posts, frontier, currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const allPosts = mode === 'all'
     ? sorted
     : mode === 'files'
@@ -9018,7 +9021,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   const [lockH, setLockH] = useState<number | null>(null); // keyboard must not resize the reels list (that scrolled to the next reel)
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const reelsByTime = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
-  const reels = rankByInterests(reelsByTime, currentUser.id);
+  const reels = randomOrder(reelsByTime);
   const commentPost = commentsFor ? posts.find(p => p.id === commentsFor) : undefined;
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
@@ -9225,9 +9228,6 @@ function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile
                 {post.likes.length}
               </button>
             </div>
-            <button onClick={() => document.getElementById('yt-comments')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-full text-sm text-gray-300 flex items-center gap-2">
-              <MessageCircle size={18} color="#fff" /> {commentCount > 0 ? commentCount : 'تعليق'}
-            </button>
             <button onClick={() => setShareOpen(true)} className="px-4 py-2 bg-gradient-to-r from-violet-600/25 to-cyan-500/20 border border-violet-400/30 rounded-full text-sm text-white flex items-center gap-2 active:scale-95 transition-transform">
               <Share2 size={16} color="#fff" /> مشاركة
             </button>
@@ -9272,8 +9272,9 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
   const me = currentUser.id;
   const [text, setText] = useState('');
   const [focus, setFocus] = useState(false);
-  const [sort, setSort] = useState<'top' | 'new'>('top');
-  const [sortOpen, setSortOpen] = useState(false);
+  const [fresh, setFresh] = useState<string[]>([]); // comments I just posted: they show right away, under the pinned one
+  const [seed] = useState(() => Math.random().toString(36).slice(2));
+  const isOwner = post.userId === me;
   const [replyFor, setReplyFor] = useState<string | null>(null);
   const [rText, setRText] = useState('');
   const [open, setOpen] = useState<Set<string>>(() => new Set());
@@ -9292,6 +9293,7 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
     } else {
       const comment: Comment = { id, userId: me, text: b, timestamp: Date.now(), likes: [], replies: [] };
       mutate(p => ({ ...p, comments: [...p.comments, comment] }));
+      setFresh(f => [id, ...f]);
     }
     const { error } = await supabase.from('comments').insert(parentId
       ? { id, post_id: post.id, parent_id: parentId, user_id: me, text: b }
@@ -9309,6 +9311,13 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
     const { error } = await supabase.from('comments').delete().eq('id', id);
     if (error) { mutate(p => ({ ...p, comments: snapshot })); window.alert('تعذّر الحذف، حاول مرة أخرى'); }
   };
+  const pinRow = async (id: string, on: boolean) => {
+    setMenu(null);
+    const snapshot = post.comments;
+    mutate(p => ({ ...p, comments: p.comments.map(c => ({ ...c, pinned: c.id === id ? on : on ? false : c.pinned })) }));
+    const { error } = await supabase.rpc('pin_comment', { p_comment: id, p_pin: on });
+    if (error) { console.error(error); mutate(p => ({ ...p, comments: snapshot })); window.alert('تعذّر تثبيت التعليق، حاول مرة أخرى'); }
+  };
   const likeRow = async (id: string) => {
     const was = post.comments.some(c => (c.id === id ? c.likes.includes(me) : c.replies.some(r => r.id === id && r.likes.includes(me))));
     const toggle = (l: string[], on: boolean) => (on ? [...l.filter(x => x !== me), me] : l.filter(x => x !== me));
@@ -9320,9 +9329,12 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
     if (error) apply(was);
   };
 
-  const list = [...post.comments].sort((a, b) => (sort === 'top' ? (b.likes.length - a.likes.length) || (b.timestamp - a.timestamp) : b.timestamp - a.timestamp));
+  const hashOf = (id: string) => { let h = 2166136261; const s = seed + id; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+  // Pinned first, then what I just posted (newest first), then a random order that stays put while the page is open.
+  const rank = (c: Comment) => (c.pinned ? 0 : fresh.includes(c.id) ? 1 : 2);
+  const list = [...post.comments].sort((a, b) => (rank(a) - rank(b)) || (rank(a) === 1 ? fresh.indexOf(a.id) - fresh.indexOf(b.id) : hashOf(a.id) - hashOf(b.id)));
 
-  const row = (r: { id: string; top: string; userId: string; text: string; timestamp: number; likes: string[] }, isReply: boolean) => {
+  const row = (r: { id: string; top: string; userId: string; text: string; timestamp: number; likes: string[]; pinned?: boolean }, isReply: boolean) => {
     const u = users.find(x => x.id === r.userId);
     if (!u) return null;
     const liked = r.likes.includes(me);
@@ -9330,6 +9342,7 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
       <div key={r.id} className="flex gap-3">
         <button onClick={() => onOpenProfile(u.id)} className="self-start shrink-0"><Avatar userId={u.id} src={u.avatar} name={u.displayName} size={isReply ? 'sm' : 'md'} /></button>
         <div className="flex-1 min-w-0">
+          {r.pinned && <div className="flex items-center gap-1 text-xs text-gray-400 mb-0.5"><Pin size={12} /> تم التثبيت بواسطة {users.find(x => x.id === post.userId)?.displayName ?? 'صاحب الفيديو'}</div>}
           <div className="flex items-center gap-2 text-[13px]">
             <button onClick={() => onOpenProfile(u.id)} className="font-semibold text-white truncate max-w-[60%]" dir="auto">@{u.username || u.displayName}</button>
             <span className="text-xs text-gray-400 shrink-0">{formatTime(r.timestamp)}</span>
@@ -9341,10 +9354,10 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
             <button onClick={() => { setReplyFor(r.top); setRText(isReply ? `@${u.username || u.displayName} ` : ''); }} className="px-3 py-1.5 rounded-full hover:bg-white/10 text-xs font-semibold text-gray-200">رد</button>
           </div>
         </div>
-        {r.userId === me && (
+        {(r.userId === me || (isOwner && !isReply)) && (
           <div className="relative shrink-0 self-start">
             <button onClick={() => setMenu(menu === r.id ? null : r.id)} aria-label="المزيد" className="p-1.5 rounded-full hover:bg-white/10 text-gray-300"><MoreHorizontal size={18} /></button>
-            {menu === r.id && <div className="absolute end-0 top-full z-10 mt-1 w-28 rounded-xl bg-gray-800 ring-1 ring-white/10 shadow-xl overflow-hidden"><button onClick={() => void remove(r.id)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-white/10"><Trash2 size={15} /> حذف</button></div>}
+            {menu === r.id && <div className="absolute end-0 top-full z-10 mt-1 w-40 rounded-xl bg-gray-800 ring-1 ring-white/10 shadow-xl overflow-hidden">{isOwner && !isReply && <button onClick={() => void pinRow(r.id, !r.pinned)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-white hover:bg-white/10"><Pin size={15} /> {r.pinned ? 'إلغاء التثبيت' : 'تثبيت'}</button>}{r.userId === me && <button onClick={() => void remove(r.id)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-white/10"><Trash2 size={15} /> حذف</button>}</div>}
           </div>
         )}
       </div>
@@ -9355,16 +9368,6 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
     <section id="yt-comments" className="mt-6 pt-2 scroll-mt-16">
       <div className="flex items-center gap-6 mb-4">
         <h3 className="text-white font-bold text-base">{total} تعليق</h3>
-        <div className="relative">
-          <button onClick={() => setSortOpen(o => !o)} className="flex items-center gap-1.5 text-sm text-white font-medium"><Menu size={18} /> ترتيب حسب</button>
-          {sortOpen && (
-            <div className="absolute start-0 top-full z-10 mt-1.5 w-36 rounded-xl bg-gray-800 ring-1 ring-white/10 shadow-xl overflow-hidden">
-              {([['top', 'التعليقات الأهم'], ['new', 'الأحدث أولاً']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => { setSort(k); setSortOpen(false); }} className={`w-full text-start px-4 py-2.5 text-sm hover:bg-white/10 ${sort === k ? 'text-white font-semibold bg-white/5' : 'text-gray-300'}`}>{l}</button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
       <div className="flex gap-3 mb-6">
         <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="md" />
@@ -9382,7 +9385,7 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
         {list.length === 0 && <p className="text-center text-gray-500 text-sm py-6">لا توجد تعليقات بعد. كن أول من يعلّق!</p>}
         {list.map(c => (
           <div key={c.id}>
-            {row({ id: c.id, top: c.id, userId: c.userId, text: c.text, timestamp: c.timestamp, likes: c.likes }, false)}
+            {row({ id: c.id, top: c.id, userId: c.userId, text: c.text, timestamp: c.timestamp, likes: c.likes, pinned: c.pinned }, false)}
             <div className="ms-[52px]">
               {replyFor === c.id && (
                 <div className="flex gap-3 mt-2">
@@ -9594,7 +9597,7 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const [loading, setLoading] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
-  const videos = posts.filter(p => p.isVideo && p.media?.type === 'video').sort((a, b) => b.timestamp - a.timestamp);
+  const videos = randomOrder(posts.filter(p => p.isVideo && p.media?.type === 'video'));
   const [vf, setVf] = useState<'all' | 'subs' | 'saved' | 'lib'>('all');
   const [sort, setSort] = useState<'new' | 'top'>('new');
   const [channel, setChannel] = useState<string | null>(null);
@@ -11992,6 +11995,11 @@ function bumpInterests(uid: string, text: string, amount = 2) {
   try { localStorage.setItem(interestKey(uid), JSON.stringify(Object.fromEntries(top))); } catch { /* ignore */ }
 }
 // Takes posts newest-first and lifts the ones that match the person's interests; everything else keeps its order.
+// Until the ranking algorithms exist, every list of posts is shown in a random order that stays the same during the session.
+const ORDER_SEED = Math.random().toString(36).slice(2);
+const orderKey = (id: string) => { let h = 2166136261; const s = ORDER_SEED + id; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+const randomOrder = <T extends { id: string }>(list: T[]): T[] => [...list].sort((a, b) => orderKey(a.id) - orderKey(b.id));
+void rankByInterests; // kept for the ranking algorithms that come later
 function rankByInterests(list: Post[], uid: string): Post[] {
   const hour = Math.floor(Date.now() / 36e5) * 36e5;
   const entries = Object.entries(readInterests(uid))
