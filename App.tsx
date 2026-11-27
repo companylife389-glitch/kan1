@@ -1,6 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useSyncExternalStore, startTransition, memo, useCallback } from 'react';
 import type React from 'react';
-import type { Room as LkRoom } from 'livekit-client';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -9483,6 +9482,13 @@ function YtCommentsPreview({ post, users, currentUser, setPosts, onOpenProfile }
 // ============ Voice / video calls (LiveKit) ============
 // Tokens come from the `livekit-token` Supabase Edge Function (the API secret never reaches the browser).
 // Ringing goes through a Supabase broadcast channel `calls:<userId>`.
+// LiveKit is loaded from a CDN only when a call starts, so the build does not need the `livekit-client` package.
+const LIVEKIT_CDN = 'https://esm.sh/livekit-client@2';
+type LkTrack = { kind: string; attach(): HTMLElement; detach(): HTMLElement[] };
+type LkRoom = {
+  disconnect(): unknown;
+  localParticipant: { setMicrophoneEnabled(on: boolean): Promise<unknown>; setCameraEnabled(on: boolean): Promise<unknown> };
+};
 type CallState = { peer: User; video: boolean; dir: 'out' | 'in'; phase: 'ringing' | 'connecting' | 'live'; room: string };
 
 function startCall(peerId: string, video: boolean) {
@@ -9532,14 +9538,14 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
     const { data, error } = await supabase.functions.invoke('livekit-token', { body: { room } });
     const d = data as { token?: string; url?: string } | null;
     if (error || !d?.token || !d.url) throw new Error(error?.message || 'livekit-token failed');
-    const { Room, RoomEvent, Track } = await import('livekit-client');
+    const { Room, RoomEvent, Track } = await import(/* @vite-ignore */ LIVEKIT_CDN);
     const r = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-    r.on(RoomEvent.TrackSubscribed, track => {
+    r.on(RoomEvent.TrackSubscribed, (track: LkTrack) => {
       const el = track.attach();
       if (track.kind === Track.Kind.Video) { el.className = 'w-full h-full object-cover'; remoteEl.current?.appendChild(el); }
       else { el.style.display = 'none'; document.body.appendChild(el); audioEls.current.push(el); }
     });
-    r.on(RoomEvent.TrackUnsubscribed, track => { track.detach().forEach(e => e.remove()); });
+    r.on(RoomEvent.TrackUnsubscribed, (track: LkTrack) => { track.detach().forEach(e => e.remove()); });
     r.on(RoomEvent.ParticipantConnected, () => { window.clearTimeout(ringTimer.current); setCall(c => (c ? { ...c, phase: 'live' } : c)); });
     r.on(RoomEvent.ParticipantDisconnected, () => endRef.current(false));
     await r.connect(d.url, d.token);

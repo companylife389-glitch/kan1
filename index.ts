@@ -1,6 +1,8 @@
+// @ts-nocheck
+// Deno Edge Function: not part of the web app build.
 // supabase/functions/livekit-token/index.ts
 // Deploy:  supabase functions deploy livekit-token
-// Secrets: supabase secrets set LIVEKIT_URL=wss://kix-0bizrf5u.livekit.cloud LIVEKIT_API_KEY=APIWDyuyxVjpUNH LIVEKIT_API_SECRET=<your secret>
+// Secrets: supabase secrets set LIVEKIT_URL=wss://kix-0bizrf5u.livekit.cloud LIVEKIT_API_KEY=<your key> LIVEKIT_API_SECRET=<your secret>
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { AccessToken } from 'npm:livekit-server-sdk@2';
 
