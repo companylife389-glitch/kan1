@@ -10,7 +10,7 @@ import {
   Bookmark, Share2, Camera, Eye, EyeOff, MapPin,
   Link as LinkIcon, Calendar, MessageSquare, Mic,
   Gamepad2, Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon, ChevronDown, Repeat, PictureInPicture2, BarChart3, HelpCircle, Clock, AtSign, Type as TypeIcon, Wand2,
-  AlertTriangle, Info, AlarmClock, Library,
+  AlertTriangle, Info, AlarmClock, Library, ThumbsUp,
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -2889,6 +2889,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                       () => { setReplyingTo(m); window.setTimeout(() => inputRef.current?.focus(), 30); },
                       () => { setActiveMsgId(m.id); setReactingTo(m.id); },
                     )}
+                    onMouseDown={keepKb}
                     onClick={e => { e.stopPropagation(); if (gsel) { setGsel(x => ((x ?? []).includes(m.id) ? (x ?? []).filter(y => y !== m.id) : [...(x ?? []), m.id])); return; } if (Date.now() - justClosed.current < 450) return; setActiveMsgId(active ? null : m.id); setReactingTo(null); }}
                     className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words cursor-pointer select-none touch-pan-y transition-shadow ${highlightId === m.id ? 'ring-2 ring-cyan-400' : ''} ${gsel?.includes(m.id) ? 'ring-2 ring-white brightness-110' : ''} ${isStickerName(m.media?.name) && !m.text ? 'bg-transparent !p-0' : mine ? 'bg-gradient-to-br from-violet-600 to-cyan-600 text-white rounded-bl-md' : 'bg-gray-800 text-white rounded-br-md'}`}
                   >
@@ -2958,18 +2959,19 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     />
                   )}
                   {active && (
-                    <div data-msg-ui className={`flex flex-wrap items-center gap-1.5 mt-1 ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()}>
-                      <button onClick={() => setReactingTo(p => (p === m.id ? null : m.id))} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Smile size={12} /> تفاعل</button>
-                      <button onClick={() => { setReplyingTo(m); setActiveMsgId(null); inputRef.current?.focus(); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Reply size={12} /> رد</button>
+                    <div data-msg-ui className={`${ACT_BAR} ${mine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()} onMouseDown={keepKb}>
+                      <button onClick={() => setReactingTo(p => (p === m.id ? null : m.id))} className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"><Smile size={18} /> تفاعل</button>
+                      <button onClick={() => { setReplyingTo(m); setActiveMsgId(null); inputRef.current?.focus(); }} className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"><Reply size={18} /> رد</button>
                       {isStickerName(m.media?.name) && m.media && <SaveStickerBtn url={m.media.url} onDone={() => setActiveMsgId(null)} />}
+                      {isGifMedia(m.media) && <FavGifBtn url={m.media!.url} onDone={() => setActiveMsgId(null)} />}
                       {m.media && m.media.type !== 'voice' && !isStickerName(m.media.name) && (
-                        <button onClick={() => { void downloadFile(m.media!.url, m.media!.name || (m.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Download size={12} /> تحميل</button>
+                        <button onClick={() => { void downloadFile(m.media!.url, m.media!.name || (m.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); setActiveMsgId(null); }} className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"><Download size={18} /> تحميل</button>
                       )}
-                      {mine && <button onClick={() => setSeenFor(seenFor === m.id ? null : m.id)} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-cyan-300 text-xs flex items-center gap-1"><Eye size={12} /> من شاهدها</button>}
-                      {!!m.text && !parsePoll(m.text) && !parseLocMsg(m.text) && <button onClick={() => { void navigator.clipboard?.writeText(m.text ?? '').catch(() => undefined); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Copy size={12} /> نسخ</button>}
-                      <button onClick={() => { setGsel([m.id]); setActiveMsgId(null); setReactingTo(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Check size={12} /> تحديد</button>
-                      {mine && m.media?.type !== 'voice' && <button onClick={() => { setEditing(m); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Pencil size={12} /> تعديل</button>}
-                      {mine && <button onClick={() => void deleteMessage(m)} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-red-400 text-xs flex items-center gap-1"><Trash2 size={12} /> حذف</button>}
+                      {mine && <button onClick={() => setSeenFor(seenFor === m.id ? null : m.id)} className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-cyan-300"><Eye size={18} /> من شاهدها</button>}
+                      {!!m.text && !parsePoll(m.text) && !parseLocMsg(m.text) && <button onClick={() => { void navigator.clipboard?.writeText(m.text ?? '').catch(() => undefined); setActiveMsgId(null); }} className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"><Copy size={18} /> نسخ</button>}
+                      <button onClick={() => { setGsel([m.id]); setActiveMsgId(null); setReactingTo(null); }} className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"><Check size={18} /> تحديد</button>
+                      {mine && m.media?.type !== 'voice' && <button onClick={() => { setEditing(m); setActiveMsgId(null); }} className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"><Pencil size={18} /> تعديل</button>}
+                      {mine && <button onClick={() => void deleteMessage(m)} className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-red-400"><Trash2 size={18} /> حذف</button>}
                     </div>
                   )}
                   {mine && seenFor === m.id && (
@@ -5785,62 +5787,82 @@ function messageGestures(onReply: () => void, onLongPress: () => void) {
   };
 }
 
-// Reaction picker: a fixed sheet that rides above the keyboard (so it never hides under it) with the quick emojis and a + that opens every emoji.
-function ReactionSheet({ current, onPick, onClose }: { current?: string; onPick: (emoji: string) => void; onClose: () => void }) {
-  const vp = useVisualViewport();
+// Reaction bar: opens right under the message (like WhatsApp) and never takes focus, so the keyboard stays open.
+function ReactionSheet({ current, onPick }: { current?: string; onPick: (emoji: string) => void; onClose?: () => void }) {
   const [more, setMore] = useState(false);
-  const kb = Math.max(0, Math.round(window.innerHeight - vp.height - vp.top));
-  const gridH = Math.max(96, Math.min(240, Math.round(vp.height - 190)));
-  // Portal events still bubble through React to the message bubble (swipe-to-reply, long press...): stop them here.
-  const stop = { onClick: (e: React.SyntheticEvent) => e.stopPropagation(), onPointerUp: (e: React.SyntheticEvent) => e.stopPropagation(), onPointerMove: (e: React.SyntheticEvent) => e.stopPropagation(), onTouchStart: (e: React.SyntheticEvent) => e.stopPropagation(), onTouchMove: (e: React.SyntheticEvent) => e.stopPropagation(), onTouchEnd: (e: React.SyntheticEvent) => e.stopPropagation(), onContextMenu: (e: React.SyntheticEvent) => { e.stopPropagation(); e.preventDefault(); } };
-  return createPortal(
-    <>
-      <div data-msg-ui {...stop} onPointerDown={e => e.stopPropagation()} className="fixed inset-0 z-[158] bg-black/35" onClick={e => { e.stopPropagation(); onClose(); }} />
-      <div data-msg-ui {...stop} onPointerDown={e => e.stopPropagation()} dir="ltr" className="fixed inset-x-0 z-[159] flex justify-end px-3 pointer-events-none transition-[bottom] duration-150" style={{ bottom: `calc(${kb}px + 0.75rem + env(safe-area-inset-bottom))` }}>
-        <div dir={DIR} className="pointer-events-auto w-full max-w-md rounded-[28px] bg-gray-900/95 backdrop-blur-2xl ring-1 ring-white/15 shadow-2xl shadow-black/60 overflow-hidden kan-pop" onPointerDown={e => { e.stopPropagation(); e.preventDefault(); }} onMouseDown={e => e.preventDefault()}>
-          <div className="flex items-center gap-1 p-2 overflow-x-auto no-scrollbar">
-            <button onClick={() => { setMore(m => !m); (document.activeElement as HTMLElement | null)?.blur?.(); }} aria-label="كل الإيموجي" className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-all ${more ? 'bg-white text-black rotate-45' : 'bg-white/12 text-white'}`}><Plus size={22} /></button>
-            {QUICK_REACTIONS.map(e => (
-              <button key={e} onClick={() => onPick(e)} className={`shrink-0 w-11 h-11 text-[26px] rounded-full flex items-center justify-center active:scale-125 transition-transform ${current === e ? 'bg-violet-500/30 ring-1 ring-violet-300/60' : 'hover:bg-white/10'}`}>{e}</button>
-            ))}
-          </div>
-          {more && <EmojiPicker docked gridH={gridH} onPick={onPick} onClose={() => setMore(false)} />}
-        </div>
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const tm = window.setTimeout(() => ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 80);
+    return () => window.clearTimeout(tm);
+  }, [more]);
+  return (
+    <div ref={ref} data-msg-ui dir={DIR} onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.preventDefault()} onContextMenu={e => e.preventDefault()} className="kan-pop mt-1.5 w-[min(21rem,80vw)] rounded-3xl bg-gray-900/95 backdrop-blur-xl ring-1 ring-white/15 shadow-xl shadow-black/50 overflow-hidden">
+      <div className="flex items-center gap-1 p-1.5 overflow-x-auto no-scrollbar">
+        <button onClick={() => setMore(m => !m)} aria-label="كل الإيموجي" className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-all ${more ? 'bg-white text-black rotate-45' : 'bg-white/12 text-white'}`}><Plus size={22} /></button>
+        {QUICK_REACTIONS.map(e => (
+          <button key={e} onClick={() => onPick(e)} className={`shrink-0 w-11 h-11 text-[26px] rounded-full flex items-center justify-center active:scale-125 transition-transform ${current === e ? 'bg-violet-500/30 ring-1 ring-violet-300/60' : 'hover:bg-white/10'}`}>{e}</button>
+        ))}
       </div>
-    </>,
-    document.body,
+      {more && <EmojiPicker docked gridH={180} onPick={onPick} onClose={() => setMore(false)} />}
+    </div>
   );
 }
 
+const RECENT_EMOJI_KEY = 'kix-recent-emoji';
+const readRecentEmoji = (): string[] => { try { const a = JSON.parse(localStorage.getItem(RECENT_EMOJI_KEY) || '[]'); return Array.isArray(a) ? a.filter((x: unknown) => typeof x === 'string').slice(0, 36) : []; } catch { return []; } };
+
+// Tabs: my stickers, the store, recent emoji, then every emoji group. Swipe the content left / right to move between them.
 function EmojiPicker({ onPick, onClose, docked = false, gridH, onSticker, startOnStickers = false }: { onPick: (emoji: string) => void; onClose: () => void; docked?: boolean; gridH?: number; onSticker?: (st: SavedSticker) => void; startOnStickers?: boolean }) {
-  const [group, setGroup] = useState(0);
-  const [stk, setStk] = useState(!!onSticker && startOnStickers);
-  const [shop, setShop] = useState(false);
+  const [recent, setRecent] = useState<string[]>(readRecentEmoji);
+  const [tab, setTab] = useState<string>(() => (onSticker && startOnStickers ? 'stk' : readRecentEmoji().length ? 'recent' : 'g0'));
+  const [dirn, setDirn] = useState(1);
+  const tabs = [...(onSticker ? ['stk', 'shop'] : []), 'recent', ...EMOJI_GROUPS.map((_, i) => `g${i}`)];
+  const goTo = (k: string) => { if (k === tab) return; setDirn(tabs.indexOf(k) > tabs.indexOf(tab) ? 1 : -1); setTab(k); };
+  const swipe = useRef<{ x: number; y: number; ok: boolean } | null>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { activeRef.current?.scrollIntoView({ inline: 'center', block: 'nearest' }); }, [tab]);
+  const pick = (e: string) => {
+    setRecent(prev => { const n = [e, ...prev.filter(x => x !== e)].slice(0, 36); try { localStorage.setItem(RECENT_EMOJI_KEY, JSON.stringify(n)); } catch { /* storage blocked */ } return n; });
+    onPick(e);
+  };
+  const onTouchStart = (e: React.TouchEvent) => { const t = e.touches[0]; swipe.current = { x: t.clientX, y: t.clientY, ok: e.touches.length === 1 && !(e.target as HTMLElement).closest('.overflow-x-auto') }; };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const s = swipe.current; swipe.current = null;
+    if (!s || !s.ok) return;
+    const t = e.changedTouches[0]; const dx = t.clientX - s.x; const dy = t.clientY - s.y;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const fwd = DIR === 'rtl' ? dx > 0 : dx < 0;
+    const ni = tabs.indexOf(tab) + (fwd ? 1 : -1);
+    if (ni >= 0 && ni < tabs.length) goTo(tabs[ni]);
+  };
+  const tabBtn = (k: string, label: React.ReactNode, text: boolean) => (
+    <button key={k} ref={tab === k ? activeRef : undefined} onClick={() => goTo(k)} className={`shrink-0 ${text ? 'px-3 text-xs font-semibold flex items-center gap-1' : 'px-2.5 text-lg'} h-9 rounded-t-lg active:scale-95 ${tab === k ? `bg-gray-800 ${text ? 'text-cyan-300' : ''}` : text ? 'text-gray-400 hover:text-white' : 'opacity-60 hover:opacity-100'}`}>{label}</button>
+  );
+  const gi = tab.startsWith('g') ? Number(tab.slice(1)) : -1;
+  const items = tab === 'recent' ? recent : gi >= 0 ? EMOJI_GROUPS[gi].items : [];
   return (
     <div dir={DIR} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} className={docked ? 'kan-pop mt-2 w-full bg-gray-900/70 border-t border-white/10' : 'absolute bottom-full mb-2 right-0 z-30 w-72 max-w-[92vw] bg-gray-900 border border-gray-700 rounded-2xl shadow-xl'}>
       <div className="flex items-center justify-between px-2 pt-2 border-b border-gray-800">
         <div className="flex overflow-x-auto no-scrollbar">
-          {onSticker && (
-            <button onClick={() => { setStk(true); setShop(false); }} className={`shrink-0 px-3 h-9 text-xs font-semibold rounded-t-lg active:scale-95 ${stk && !shop ? 'bg-gray-800 text-cyan-300' : 'text-gray-400 hover:text-white'}`}>ملصقاتي</button>
-          )}
-          {onSticker && (
-            <button onClick={() => { setShop(true); setStk(false); }} className={`shrink-0 px-3 h-9 text-xs font-semibold rounded-t-lg flex items-center gap-1 active:scale-95 ${shop ? 'bg-gray-800 text-cyan-300' : 'text-gray-400 hover:text-white'}`}><Sparkles size={13} />متجر KIX</button>
-          )}
-          {EMOJI_GROUPS.map((g, i) => (
-            <button key={g.icon} onClick={() => { setStk(false); setShop(false); setGroup(i); }} className={`shrink-0 px-2.5 h-9 text-lg rounded-t-lg ${!stk && !shop && i === group ? 'bg-gray-800' : 'opacity-60 hover:opacity-100'}`}>
-              {g.icon}
-            </button>
-          ))}
+          {onSticker && tabBtn('stk', 'ملصقاتي', true)}
+          {onSticker && tabBtn('shop', <><Sparkles size={13} />متجر KIX</>, true)}
+          {tabBtn('recent', '🕘', false)}
+          {EMOJI_GROUPS.map((g, i) => tabBtn(`g${i}`, g.icon, false))}
         </div>
         <button onClick={onClose} className="p-1 text-gray-400 hover:text-white" aria-label="إغلاق"><X size={16} /></button>
       </div>
-      {shop && onSticker ? <KixStore inline onClose={() => setShop(false)} onPick={async st => { const sv = await storeToSaved(st); if (sv) onSticker(sv); }} /> : stk && onSticker ? <StickerPane onSend={onSticker} /> : (
-      <div style={docked && gridH ? { height: gridH } : undefined} className={`grid gap-0.5 p-2 overflow-y-auto overscroll-contain content-start ${docked ? `grid-cols-8 min-[420px]:grid-cols-10 sm:grid-cols-14 ${gridH ? '' : 'h-60'}` : 'grid-cols-8 max-h-52'}`}>
-        {EMOJI_GROUPS[group].items.map(e => (
-          <button key={e} onClick={() => onPick(e)} className="h-9 text-2xl rounded-lg hover:bg-gray-800 active:scale-125 transition-transform">{e}</button>
-        ))}
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="overflow-hidden">
+        <motion.div key={tab} initial={{ opacity: 0, x: dirn * (DIR === 'rtl' ? -28 : 28) }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.16 }}>
+          {tab === 'shop' && onSticker ? <KixStore inline onClose={() => goTo('recent')} onPick={async st => { const sv = await storeToSaved(st); if (sv) onSticker(sv); }} /> : tab === 'stk' && onSticker ? <StickerPane onSend={onSticker} /> : (
+            <div style={docked && gridH ? { height: gridH } : undefined} className={`grid gap-0.5 p-2 overflow-y-auto overscroll-contain content-start ${docked ? `grid-cols-8 min-[420px]:grid-cols-10 sm:grid-cols-14 ${gridH ? '' : 'h-60'}` : 'grid-cols-8 max-h-52'}`}>
+              {tab === 'recent' && items.length === 0 && <p className="col-span-full text-center text-gray-500 text-xs pt-6 leading-6">الإيموجي اللي بتستخدمها هتظهر هنا</p>}
+              {items.map(e => (
+                <button key={e} onClick={() => pick(e)} className="h-9 text-2xl rounded-lg hover:bg-gray-800 active:scale-125 transition-transform">{e}</button>
+              ))}
+            </div>
+          )}
+        </motion.div>
       </div>
-      )}
     </div>
   );
 }
@@ -9152,8 +9174,6 @@ function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile
   onCreatePl: (name: string, firstId?: string) => void;
 }) {
   const [plOpen, setPlOpen] = useState(false);
-  const [commentsOpen, setCommentsOpen] = useState(false);
-  const [autoNext, setAutoNext] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const author = users.find(u => u.id === post.userId);
@@ -9172,7 +9192,7 @@ function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile
           <ChevronRight size={18} color="#fff" /> {t('رجوع')}
         </button>
         <div className="aspect-video w-full bg-black sm:rounded-xl overflow-hidden">
-          <VideoPlayer key={post.id} src={post.media!.url} poster={post.coverUrl} autoPlay onEnded={autoNext && related[0] ? () => onOpenRelated(related[0].id) : undefined} className="w-full h-full object-contain" />
+          <VideoPlayer key={post.id} src={post.media!.url} poster={post.coverUrl} className="w-full h-full object-contain" />
         </div>
         <div className="px-4 sm:px-0 mt-3">
           <h1 className="text-lg font-bold text-white leading-snug">{post.title || 'فيديو'}</h1>
@@ -9205,7 +9225,7 @@ function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile
                 {post.likes.length}
               </button>
             </div>
-            <button onClick={() => setCommentsOpen(true)} className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-full text-sm text-gray-300 flex items-center gap-2">
+            <button onClick={() => document.getElementById('yt-comments')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-full text-sm text-gray-300 flex items-center gap-2">
               <MessageCircle size={18} color="#fff" /> {commentCount > 0 ? commentCount : 'تعليق'}
             </button>
             <button onClick={() => setShareOpen(true)} className="px-4 py-2 bg-gradient-to-r from-violet-600/25 to-cyan-500/20 border border-violet-400/30 rounded-full text-sm text-white flex items-center gap-2 active:scale-95 transition-transform">
@@ -9221,13 +9241,11 @@ function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile
               <Plus size={16} color="#fff" /> قائمة تشغيل
             </button>
             {plOpen && <PlaylistSheet pls={pls} postId={post.id} onToggle={onTogglePl} onCreate={onCreatePl} onClose={() => setPlOpen(false)} />}
-            <button onClick={() => setAutoNext(x => !x)} className={`px-4 py-2 border rounded-full text-sm ${autoNext ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
-              ⏭ تشغيل تلقائي
-            </button>
           </div>
           {post.text && (
             <div className="mt-3 bg-gray-900 border border-gray-800 rounded-xl p-3 text-sm text-gray-200 whitespace-pre-wrap"><PostText text={post.text} className="whitespace-pre-wrap" /></div>
           )}
+          <YtComments post={post} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} />
         </div>
       </div>
 
@@ -9241,14 +9259,154 @@ function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile
         </aside>
       )}
 
-      {commentsOpen && (
-        <ReelComments post={post} users={users} currentUser={currentUser} setPosts={setPosts} onOpenProfile={onOpenProfile} onClose={() => setCommentsOpen(false)} />
-      )}
       {shareOpen && author && <ShareSheet post={post} author={author} users={users} currentUser={currentUser} onClose={() => setShareOpen(false)} />}
       {listModal && (
         <UserListModal title={listModal.title} userIds={listModal.ids} users={users} onOpenProfile={onOpenProfile} onClose={() => setListModal(null)} />
       )}
     </div>
+  );
+}
+
+// YouTube-style comments under a video: count + sort, "add a comment" line, avatar + @handle + time, like / reply, collapsible replies.
+function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { post: Post; users: User[]; currentUser: User; setPosts: React.Dispatch<React.SetStateAction<Post[]>>; onOpenProfile: (id: string) => void }) {
+  const me = currentUser.id;
+  const [text, setText] = useState('');
+  const [focus, setFocus] = useState(false);
+  const [sort, setSort] = useState<'top' | 'new'>('top');
+  const [sortOpen, setSortOpen] = useState(false);
+  const [replyFor, setReplyFor] = useState<string | null>(null);
+  const [rText, setRText] = useState('');
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const [menu, setMenu] = useState<string | null>(null);
+  const mutate = (fn: (p: Post) => Post) => setPosts(prev => prev.map(p => (p.id === post.id ? fn(p) : p)));
+  const total = post.comments.reduce((n, c) => n + 1 + c.replies.length, 0);
+
+  const add = async (body: string, parentId: string | null) => {
+    const b = body.trim();
+    if (!b) return;
+    const id = crypto.randomUUID();
+    if (parentId) {
+      const reply: Reply = { id, userId: me, text: b, timestamp: Date.now(), likes: [] };
+      mutate(p => ({ ...p, comments: p.comments.map(c => (c.id === parentId ? { ...c, replies: [...c.replies, reply] } : c)) }));
+      setOpen(s => new Set(s).add(parentId));
+    } else {
+      const comment: Comment = { id, userId: me, text: b, timestamp: Date.now(), likes: [], replies: [] };
+      mutate(p => ({ ...p, comments: [...p.comments, comment] }));
+    }
+    const { error } = await supabase.from('comments').insert(parentId
+      ? { id, post_id: post.id, parent_id: parentId, user_id: me, text: b }
+      : { id, post_id: post.id, user_id: me, text: b });
+    if (error) {
+      mutate(p => ({ ...p, comments: p.comments.filter(c => c.id !== id).map(c => ({ ...c, replies: c.replies.filter(r => r.id !== id) })) }));
+      window.alert('تعذّر إضافة التعليق، حاول مرة أخرى');
+    }
+  };
+  const remove = async (id: string) => {
+    setMenu(null);
+    if (!(await kanConfirm('حذف هذا التعليق؟'))) return;
+    const snapshot = post.comments;
+    mutate(p => ({ ...p, comments: p.comments.filter(c => c.id !== id).map(c => ({ ...c, replies: c.replies.filter(r => r.id !== id) })) }));
+    const { error } = await supabase.from('comments').delete().eq('id', id);
+    if (error) { mutate(p => ({ ...p, comments: snapshot })); window.alert('تعذّر الحذف، حاول مرة أخرى'); }
+  };
+  const likeRow = async (id: string) => {
+    const was = post.comments.some(c => (c.id === id ? c.likes.includes(me) : c.replies.some(r => r.id === id && r.likes.includes(me))));
+    const toggle = (l: string[], on: boolean) => (on ? [...l.filter(x => x !== me), me] : l.filter(x => x !== me));
+    const apply = (on: boolean) => mutate(p => ({ ...p, comments: p.comments.map(c => ({ ...c, likes: c.id === id ? toggle(c.likes, on) : c.likes, replies: c.replies.map(r => (r.id === id ? { ...r, likes: toggle(r.likes, on) } : r)) })) }));
+    apply(!was);
+    const { error } = was
+      ? await supabase.from('comment_likes').delete().eq('comment_id', id).eq('user_id', me)
+      : await supabase.from('comment_likes').insert({ comment_id: id, user_id: me });
+    if (error) apply(was);
+  };
+
+  const list = [...post.comments].sort((a, b) => (sort === 'top' ? (b.likes.length - a.likes.length) || (b.timestamp - a.timestamp) : b.timestamp - a.timestamp));
+
+  const row = (r: { id: string; top: string; userId: string; text: string; timestamp: number; likes: string[] }, isReply: boolean) => {
+    const u = users.find(x => x.id === r.userId);
+    if (!u) return null;
+    const liked = r.likes.includes(me);
+    return (
+      <div key={r.id} className="flex gap-3">
+        <button onClick={() => onOpenProfile(u.id)} className="self-start shrink-0"><Avatar userId={u.id} src={u.avatar} name={u.displayName} size={isReply ? 'sm' : 'md'} /></button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 text-[13px]">
+            <button onClick={() => onOpenProfile(u.id)} className="font-semibold text-white truncate max-w-[60%]" dir="auto">@{u.username || u.displayName}</button>
+            <span className="text-xs text-gray-400 shrink-0">{formatTime(r.timestamp)}</span>
+          </div>
+          <CommentText text={r.text} cls="text-sm text-gray-100 whitespace-pre-wrap break-words mt-0.5" />
+          <div className="flex items-center gap-1 mt-1 -ms-2">
+            <button onClick={() => void likeRow(r.id)} aria-label="إعجاب" className="p-2 rounded-full hover:bg-white/10 active:scale-90 transition-transform"><ThumbsUp size={17} color={liked ? '#3ea6ff' : '#fff'} fill={liked ? '#3ea6ff' : 'none'} /></button>
+            <span className="text-xs text-gray-400 min-w-[1rem] -ms-1 me-2">{r.likes.length > 0 ? r.likes.length : ''}</span>
+            <button onClick={() => { setReplyFor(r.top); setRText(isReply ? `@${u.username || u.displayName} ` : ''); }} className="px-3 py-1.5 rounded-full hover:bg-white/10 text-xs font-semibold text-gray-200">رد</button>
+          </div>
+        </div>
+        {r.userId === me && (
+          <div className="relative shrink-0 self-start">
+            <button onClick={() => setMenu(menu === r.id ? null : r.id)} aria-label="المزيد" className="p-1.5 rounded-full hover:bg-white/10 text-gray-300"><MoreHorizontal size={18} /></button>
+            {menu === r.id && <div className="absolute end-0 top-full z-10 mt-1 w-28 rounded-xl bg-gray-800 ring-1 ring-white/10 shadow-xl overflow-hidden"><button onClick={() => void remove(r.id)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-white/10"><Trash2 size={15} /> حذف</button></div>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <section id="yt-comments" className="mt-6 pt-2 scroll-mt-16">
+      <div className="flex items-center gap-6 mb-4">
+        <h3 className="text-white font-bold text-base">{total} تعليق</h3>
+        <div className="relative">
+          <button onClick={() => setSortOpen(o => !o)} className="flex items-center gap-1.5 text-sm text-white font-medium"><Menu size={18} /> ترتيب حسب</button>
+          {sortOpen && (
+            <div className="absolute start-0 top-full z-10 mt-1.5 w-36 rounded-xl bg-gray-800 ring-1 ring-white/10 shadow-xl overflow-hidden">
+              {([['top', 'التعليقات الأهم'], ['new', 'الأحدث أولاً']] as const).map(([k, l]) => (
+                <button key={k} onClick={() => { setSort(k); setSortOpen(false); }} className={`w-full text-start px-4 py-2.5 text-sm hover:bg-white/10 ${sort === k ? 'text-white font-semibold bg-white/5' : 'text-gray-300'}`}>{l}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-3 mb-6">
+        <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="md" />
+        <div className="flex-1 min-w-0">
+          <input value={text} onChange={e => setText(e.target.value)} onFocus={() => setFocus(true)} onKeyDown={e => { if (e.key === 'Enter' && text.trim()) { void add(text, null); setText(''); setFocus(false); } }} placeholder="أضف تعليقًا..." dir="auto" className="w-full bg-transparent border-b border-gray-600 focus:border-white pb-1.5 text-[16px] text-white placeholder-gray-400 outline-none transition-colors" />
+          {(focus || text.trim() !== '') && (
+            <div className="flex justify-end gap-2 mt-2.5">
+              <button onClick={() => { setText(''); setFocus(false); }} className="px-4 py-2 rounded-full text-sm font-semibold text-gray-200 hover:bg-white/10">إلغاء</button>
+              <button disabled={!text.trim()} onClick={() => { void add(text, null); setText(''); setFocus(false); }} className={`px-4 py-2 rounded-full text-sm font-semibold ${text.trim() ? 'bg-[#3ea6ff] text-black' : 'bg-white/10 text-gray-500'}`}>تعليق</button>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="space-y-5">
+        {list.length === 0 && <p className="text-center text-gray-500 text-sm py-6">لا توجد تعليقات بعد. كن أول من يعلّق!</p>}
+        {list.map(c => (
+          <div key={c.id}>
+            {row({ id: c.id, top: c.id, userId: c.userId, text: c.text, timestamp: c.timestamp, likes: c.likes }, false)}
+            <div className="ms-[52px]">
+              {replyFor === c.id && (
+                <div className="flex gap-3 mt-2">
+                  <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <input autoFocus value={rText} onChange={e => setRText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && rText.trim()) { void add(rText, c.id); setRText(''); setReplyFor(null); } }} placeholder="أضف ردًا..." dir="auto" className="w-full bg-transparent border-b border-gray-600 focus:border-white pb-1.5 text-[16px] text-white placeholder-gray-400 outline-none" />
+                    <div className="flex justify-end gap-2 mt-2.5">
+                      <button onClick={() => { setReplyFor(null); setRText(''); }} className="px-4 py-2 rounded-full text-sm font-semibold text-gray-200 hover:bg-white/10">إلغاء</button>
+                      <button disabled={!rText.trim()} onClick={() => { void add(rText, c.id); setRText(''); setReplyFor(null); }} className={`px-4 py-2 rounded-full text-sm font-semibold ${rText.trim() ? 'bg-[#3ea6ff] text-black' : 'bg-white/10 text-gray-500'}`}>رد</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {c.replies.length > 0 && (
+                <button onClick={() => setOpen(s => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })} className="mt-1 -ms-3 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold text-[#3ea6ff] hover:bg-[#3ea6ff]/10">
+                  <ChevronDown size={18} className={`transition-transform ${open.has(c.id) ? 'rotate-180' : ''}`} /> {c.replies.length} {c.replies.length === 1 ? 'رد' : 'ردود'}
+                </button>
+              )}
+              {open.has(c.id) && <div className="space-y-4 mt-3">{c.replies.map(r => row({ id: r.id, top: c.id, userId: r.userId, text: r.text, timestamp: r.timestamp, likes: r.likes }, true))}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -13183,9 +13341,9 @@ function SaveStickerBtn({ url, onDone }: { url: string; onDone: () => void }) {
           window.setTimeout(onDone, 800);
         } catch { setSt('idle'); window.alert(t('تعذّر حفظ الملصق')); }
       }}
-      className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-violet-300 text-xs flex items-center gap-1"
+      className={`${ACT_BTN} text-violet-300`}
     >
-      <Plus size={12} /> {st === 'done' ? t('تم الحفظ ✓') : t('حفظ الملصق')}
+      <Plus size={18} /> {st === 'done' ? t('تم الحفظ ✓') : t('حفظ الملصق')}
     </button>
   );
 }
@@ -13273,6 +13431,30 @@ const STORE_CATS: [string, string][] = [['all', 'الكل'], ['faces', 'وجوه
 // Favourites: long-press any sticker or GIF in the store to add / remove it; the first chip shows them.
 const STORE_FAV_KEY = 'kix-store-favs';
 const readStoreFavs = (): StoreSticker[] => { try { const a = JSON.parse(localStorage.getItem(STORE_FAV_KEY) || '[]'); return Array.isArray(a) ? a.filter((x: StoreSticker) => x && typeof x.id === 'string' && x.thumb) : []; } catch { return []; } };
+const isGifMedia = (m?: { name?: string | null; url?: string; type?: string } | null) => !!m && m.type === 'image' && (/^kix-gif/i.test(m.name ?? '') || /\.gif($|\?)/i.test(m.name ?? '') || /\.gif($|\?)/i.test(m.url ?? ''));
+// Keeps the keyboard open while you tap a message / its reaction and action bars (like WhatsApp).
+const keepKb = (e: React.SyntheticEvent) => { const a = document.activeElement as HTMLElement | null; if (a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT')) e.preventDefault(); };
+const ACT_BTN = 'shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1';
+const ACT_BAR = 'flex items-stretch gap-0.5 mt-1.5 p-1 max-w-full overflow-x-auto no-scrollbar rounded-2xl bg-gray-900/90 backdrop-blur-xl ring-1 ring-white/10 shadow-lg shadow-black/40 kan-pop';
+// "Add to favourites" for a GIF that was sent in a chat: it lands in the store's favourites tab.
+function FavGifBtn({ url, onDone }: { url: string; onDone: () => void }) {
+  const id = 'sent-' + url.split('?')[0].slice(-80);
+  const [on, setOn] = useState(() => readStoreFavs().some(x => x.id === id));
+  return (
+    <button
+      onClick={() => {
+        const cur = readStoreFavs();
+        const next = cur.some(x => x.id === id) ? cur.filter(x => x.id !== id) : [{ id, gif: url, webp: url, thumb: url, kind: 'gif' as const }, ...cur].slice(0, 300);
+        try { localStorage.setItem(STORE_FAV_KEY, JSON.stringify(next)); } catch { /* storage blocked */ }
+        setOn(!on);
+        window.setTimeout(onDone, 500);
+      }}
+      className={`${ACT_BTN} ${on ? 'text-yellow-300' : 'text-gray-200'}`}
+    >
+      <span className="text-[18px] leading-[17px]">{on ? '★' : '☆'}</span> {on ? 'في المفضلة' : 'للمفضلة'}
+    </button>
+  );
+}
 const STORE_ITEMS: [string, string, string][] = [
  ['1f600', 'faces', 'ابتسامة سعيد happy grin smile'],
  ['1f603', 'faces', 'سعيد فرحان happy smile'],
@@ -15560,7 +15742,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     const first = new Map<string, Message[]>();
     const hidden = new Set<string>();
     let run: Message[] = [];
-    const isVisual = (m: Message) => (m.media?.type === 'image' || m.media?.type === 'video') && !m.sharedPostId && !isStickerName(m.media?.name);
+    const isVisual = (m: Message) => (m.media?.type === 'image' || m.media?.type === 'video') && !m.sharedPostId && !isStickerName(m.media?.name) && !isGifMedia(m.media);
     const flush = () => {
       if (run.length > 1) { first.set(run[0].id, run); run.slice(1).forEach(m => hidden.add(m.id)); }
       run = [];
@@ -15688,6 +15870,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                     () => { setReplyingTo(msg); window.setTimeout(() => inputRef.current?.focus(), 30); },
                     () => { setActiveMsgId(null); setReactingTo(msg.id); },
                   )}
+                  onMouseDown={keepKb}
                   onClick={() => (sel ? setSel(x => ((x ?? []).includes(msg.id) ? (x ?? []).filter(y => y !== msg.id) : [...(x ?? []), msg.id])) : Date.now() - justClosed.current < 450 ? undefined : handleBubbleTap(msg))}
                   className={`relative select-none touch-pan-y max-w-full [overflow-wrap:anywhere] px-4 py-2.5 rounded-2xl cursor-pointer transition-shadow ${highlightId === msg.id ? 'ring-2 ring-cyan-400' : ''} ${sel?.includes(msg.id) ? 'ring-2 ring-white brightness-110' : ''} ${
                     isStickerName(msg.media?.name) && !msg.text ? 'bg-transparent !p-0'
@@ -15823,44 +16006,45 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   />
                 )}
                 {activeMsgId === msg.id && (
-                  <div data-msg-ui className={`flex flex-wrap items-center gap-1.5 mt-1 ${isMine ? 'flex-row-reverse' : ''}`}>
+                  <div data-msg-ui className={`${ACT_BAR} ${isMine ? 'flex-row-reverse' : ''}`} onClick={e => e.stopPropagation()} onMouseDown={keepKb}>
                     <button
                       onClick={() => setReactingTo(prev => (prev === msg.id ? null : msg.id))}
-                      className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"
+                      className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"
                     >
-                      <Smile size={12} /> تفاعل
+                      <Smile size={18} /> تفاعل
                     </button>
                     <button
                       onClick={() => { setReplyingTo(msg); setActiveMsgId(null); inputRef.current?.focus(); }}
-                      className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"
+                      className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"
                     >
-                      <Reply size={12} /> رد
+                      <Reply size={18} /> رد
                     </button>
                     {isStickerName(msg.media?.name) && msg.media && <SaveStickerBtn url={msg.media.url} onDone={() => setActiveMsgId(null)} />}
+                    {isGifMedia(msg.media) && <FavGifBtn url={msg.media!.url} onDone={() => setActiveMsgId(null)} />}
                     {msg.media && msg.media.type !== 'voice' && !isStickerName(msg.media.name) && (
                       <button
                         onClick={() => { void downloadFile(msg.media!.url, msg.media!.name || (msg.media!.type === 'video' ? 'video.mp4' : 'image.jpg')); setActiveMsgId(null); }}
-                        className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"
+                        className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"
                       >
-                        <Download size={12} /> تحميل
+                        <Download size={18} /> تحميل
                       </button>
                     )}
                     {isMine && msg.media?.type !== 'voice' && (
                       <button
                         onClick={() => { setEditing(msg); setActiveMsgId(null); }}
-                        className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"
+                        className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"
                       >
-                        <Pencil size={12} /> تعديل
+                        <Pencil size={18} /> تعديل
                       </button>
                     )}
-                    {!!msg.text && !parsePoll(msg.text) && !parseLocMsg(msg.text) && <button onClick={() => { void navigator.clipboard?.writeText(msg.text ?? '').catch(() => undefined); setActiveMsgId(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Copy size={12} /> نسخ</button>}
-                    <button onClick={() => { setSel([msg.id]); setActiveMsgId(null); setReactingTo(null); }} className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs flex items-center gap-1"><Check size={12} /> تحديد</button>
+                    {!!msg.text && !parsePoll(msg.text) && !parseLocMsg(msg.text) && <button onClick={() => { void navigator.clipboard?.writeText(msg.text ?? '').catch(() => undefined); setActiveMsgId(null); }} className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"><Copy size={18} /> نسخ</button>}
+                    <button onClick={() => { setSel([msg.id]); setActiveMsgId(null); setReactingTo(null); }} className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-gray-200"><Check size={18} /> تحديد</button>
                     {isMine && (
                       <button
                         onClick={() => (albumMap.first.has(msg.id) ? void deleteAlbum(albumMap.first.get(msg.id)!) : deleteMessage(msg))}
-                        className="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-red-500/20 text-red-400 text-xs flex items-center gap-1"
+                        className="shrink-0 min-w-[3.4rem] px-2.5 py-1.5 rounded-xl hover:bg-white/10 active:scale-90 transition-transform text-[11px] font-semibold flex flex-col items-center gap-1 text-red-400"
                       >
-                        <Trash2 size={12} /> حذف
+                        <Trash2 size={18} /> حذف
                       </button>
                     )}
                   </div>
