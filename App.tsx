@@ -12,7 +12,7 @@ import {
   Gamepad2, Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon, ChevronDown, Repeat, PictureInPicture2, BarChart3, HelpCircle, Clock, AtSign, Type as TypeIcon, Wand2,
   AlertTriangle, Info, AlarmClock, Library, ThumbsUp, Pin,
   Phone as CallIcon, PhoneOff as HangUpIcon, MicOff,
-  VideoOff, Ban as BlockIcon, Lock as LockIcon,
+  VideoOff, Ban as BlockIcon, Lock as LockIcon, SwitchCamera, ScreenShare, Minimize2, Maximize2,
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
@@ -21,7 +21,7 @@ type Lang = string;
 const LANGS: { id: string; name: string; rtl?: boolean }[] = [
   { id: 'ar', name: 'العربية', rtl: true }, { id: 'en', name: 'English' }, { id: 'fr', name: 'Français' }, { id: 'es', name: 'Español' }, { id: 'de', name: 'Deutsch' },
   { id: 'it', name: 'Italiano' }, { id: 'pt', name: 'Português' }, { id: 'ru', name: 'Русский' }, { id: 'tr', name: 'Türkçe' }, { id: 'fa', name: 'فارسی', rtl: true },
-  { id: 'ur', name: 'اردو', rtl: true }, { id: 'he', name: 'עברית', rtl: true }, { id: 'ps', name: 'پښتو', rtl: true }, { id: 'hi', name: 'हिन्दी' }, { id: 'bn', name: 'বাংলা' },
+  { id: 'ur', name: 'اردو', rtl: true }, { id: 'ps', name: 'پښتو', rtl: true }, { id: 'hi', name: 'हिन्दी' }, { id: 'bn', name: 'বাংলা' },
   { id: 'ta', name: 'தமிழ்' }, { id: 'te', name: 'తెలుగు' }, { id: 'id', name: 'Bahasa Indonesia' }, { id: 'ms', name: 'Bahasa Melayu' }, { id: 'zh', name: '中文' },
   { id: 'ja', name: '日本語' }, { id: 'ko', name: '한국어' }, { id: 'th', name: 'ไทย' }, { id: 'vi', name: 'Tiếng Việt' }, { id: 'nl', name: 'Nederlands' },
   { id: 'pl', name: 'Polski' }, { id: 'uk', name: 'Українська' }, { id: 'ro', name: 'Română' }, { id: 'el', name: 'Ελληνικά' }, { id: 'cs', name: 'Čeština' },
@@ -1004,11 +1004,12 @@ function fmtClock(t: number): string {
 const PLAYER_SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.5, 0.75];
 
 // KIX video player: big play button, double-tap to skip 10s, scrub bar with buffering, speed, volume, fullscreen.
-function VideoPlayer({ src, poster, className = '', autoPlay = false, onEnded }: {
+function VideoPlayer({ src, poster, className = '', autoPlay = false, onEnded, viewAutoplay = false }: {
   src: string;
   poster?: string;
   className?: string;
   autoPlay?: boolean;
+  viewAutoplay?: boolean; // Home feed: play while mostly on screen when the Autoplay setting is on
   onEnded?: () => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -1039,6 +1040,18 @@ function VideoPlayer({ src, poster, className = '', autoPlay = false, onEnded }:
   const holdTimer = useRef<number | undefined>(undefined);
   const heldRef = useRef(false);
 
+  useEffect(() => {
+    if (!viewAutoplay || !kanFlag(KAN_AUTOPLAY_KEY)) return;
+    const el = wrapRef.current; const v = videoRef.current;
+    if (!el || !v || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(es => {
+      const e = es[0];
+      if (e.intersectionRatio >= 0.6) { v.muted = true; setMuted(true); void v.play().catch(() => undefined); }
+      else if (!v.paused) v.pause();
+    }, { threshold: [0, 0.6] });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [viewAutoplay, src]);
   const poke = () => {
     setShowUi(true);
     window.clearTimeout(hideTimer.current);
@@ -2137,6 +2150,9 @@ const MAX_VIDEO_MB = 5120; // videos upload as-is, no compression
 const maxMbFor = (f: File) => (f.type.startsWith('video/') ? MAX_VIDEO_MB : MAX_FILE_MB);
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
 
+// Emojis that are hidden everywhere in the app (Israel flag, rainbow / pride flags, same-sex couples).
+const KAN_HIDDEN_EMOJI = /🇮🇱|🏳️‍🌈|🏳‍🌈|🏳️‍⚧️|🏳‍⚧|🧑‍🤝‍🧑|👨‍❤️‍👨|👩‍❤️‍👩|👨‍❤️‍💋‍👨|👩‍❤️‍💋‍👩|👨‍👨‍|👩‍👩‍|✡️|✡|🕎/;
+const kanSafeEmoji = (list: string[]) => list.filter(e => !KAN_HIDDEN_EMOJI.test(e));
 const EMOJI_GROUPS: { icon: string; items: string[] }[] = [
   { icon: '😀', items: '😀 😃 😄 😁 😆 😅 😂 🤣 🥲 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🤩 🥳 😏 😒 😞 😔 😟 😕 🙁 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🫡 🤭 🤫 🤥 😶 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 🤑 🤠 😈 👿 👹 👺 🤡 💩 👻 💀 👽 🤖 🎃'.split(' ') },
   { icon: '👍', items: '👍 👎 👌 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐️ 🖖 👋 🤝 🙏 ✍️ 💪 👏 🙌 👐 🤲 🫶 🫰 🫵 💅 🙋 🙆 🙅 🤷 🤦 🙇'.split(' ') },
@@ -5964,7 +5980,7 @@ function EmojiPicker({ onPick, onClose, docked = false, gridH, onSticker, startO
     <button key={k} ref={tab === k ? activeRef : undefined} onClick={() => goTo(k)} className={`shrink-0 ${text ? 'px-3 text-xs font-semibold flex items-center gap-1' : 'px-2.5 text-lg'} h-9 rounded-t-lg active:scale-95 ${tab === k ? `bg-gray-800 ${text ? 'text-cyan-300' : ''}` : text ? 'text-gray-400 hover:text-white' : 'opacity-60 hover:opacity-100'}`}>{label}</button>
   );
   const gi = tab.startsWith('g') ? Number(tab.slice(1)) : -1;
-  const items = tab === 'recent' ? recent : gi >= 0 ? EMOJI_GROUPS[gi].items : [];
+  const items = kanSafeEmoji(tab === 'recent' ? recent : gi >= 0 ? EMOJI_GROUPS[gi].items : []);
   return (
     <div dir={DIR} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} className={docked ? 'kan-pop mt-2 w-full bg-gray-900/70 border-t border-white/10' : 'absolute bottom-full mb-2 right-0 z-30 w-72 max-w-[92vw] bg-gray-900 border border-gray-700 rounded-2xl shadow-xl'}>
       <div className="flex items-center justify-between px-2 pt-2 border-b border-gray-800">
@@ -7210,6 +7226,7 @@ export default function App() {
   openReelHandler = id => { setReelStart(id); goTab('reels'); };
   createFromAudio = () => goTab('create');
   const [introDone, setIntroDone] = useState(false);
+  const [, setObTick] = useState(0); // re-render when onboarding finishes
   useEffect(() => { // keep fixed screens steady when the keyboard / browser bars move
     const m = document.querySelector('meta[name="viewport"]'); const c = m?.getAttribute('content') ?? '';
     if (m && !/interactive-widget/.test(c)) m.setAttribute('content', `${c || 'width=device-width, initial-scale=1'}, viewport-fit=cover, interactive-widget=resizes-visual`);
@@ -7393,12 +7410,18 @@ export default function App() {
     );
   }
 
+  const obNow = readOb();
+  if (obNow && (!obNow.uid || obNow.uid === currentUser.id)) {
+    return <Onboarding uid={currentUser.id} name={currentUser.displayName} onDone={() => setObTick(n => n + 1)} />;
+  }
+
   return (
     <div dir={DIR} className="min-h-[100dvh] bg-gray-950 text-white font-sans overflow-x-clip">
       <style>{'html,body{scrollbar-width:none!important;-ms-overflow-style:none;-webkit-text-size-adjust:100%;overflow-x:hidden;overscroll-behavior-y:none;scroll-behavior:auto;-webkit-tap-highlight-color:transparent}img,video{-webkit-user-drag:none}.post-card{contain:layout style}[id^="msg-"],[id^="gmsg-"]{contain:layout style}.overflow-y-auto,.overflow-y-scroll{-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}.no-scrollbar,[class*=overflow-y-auto],[class*=overflow-x-auto]{-webkit-overflow-scrolling:touch}button,a{touch-action:manipulation}@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
       <KanDialogHost />
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       <CallHost currentUser={currentUser} users={users} />
+      <OfflineReelsSync uid={currentUser.id} posts={posts} users={users} setPosts={setPosts} setUsers={setUsers} loadPage={loadPostsPage} />
       {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={popScreen} />}
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/90 md:bg-gray-950/70 md:backdrop-blur-xl border-b border-white/5">
@@ -7637,6 +7660,230 @@ export default function App() {
 }
 
 // ============ Auth Screen ============
+// ============ Onboarding (right after sign-up): KIX letters drawing -> language -> hobbies ============
+type ObState = { step: 'intro' | 'lang' | 'hobbies' | 'vibe'; uid?: string };
+const OB_KEY = 'kan_onboard';
+const readOb = (): ObState | null => { try { const r = JSON.parse(localStorage.getItem(OB_KEY) ?? 'null') as ObState | null; return r && (r.step === 'intro' || r.step === 'lang' || r.step === 'hobbies' || r.step === 'vibe') ? r : null; } catch { return null; } };
+const writeOb = (s: ObState | null) => { try { if (s) localStorage.setItem(OB_KEY, JSON.stringify(s)); else localStorage.removeItem(OB_KEY); } catch { /* ignore */ } };
+// What the person wants to feel here (asked once at sign-up). Used by the feed ranking to bring the right content and keep distressing posts away.
+const VIBES: { id: string; emoji: string; ar: string; en: string; kw: string[] }[] = [
+  { id: 'calm', emoji: '😌', ar: 'راحة وهدوء', en: 'Calm & relax', kw: ['راحة', 'هدوء', 'طبيعة', 'قرآن', 'استرخاء', 'relax', 'calm', 'nature', 'peace', 'سكينة'] },
+  { id: 'fun', emoji: '😂', ar: 'ضحك وترفيه', en: 'Fun & laughs', kw: ['ضحك', 'كوميدي', 'نكتة', 'مقلب', 'funny', 'comedy', 'meme', 'ميمز', 'هزار'] },
+  { id: 'learn', emoji: '📚', ar: 'تعلّم حاجة جديدة', en: 'Learn something', kw: ['تعلم', 'تعلّم', 'شرح', 'نصيحة', 'معلومة', 'learn', 'tutorial', 'tips', 'كورس'] },
+  { id: 'people', emoji: '🤝', ar: 'ناس وأصحاب', en: 'Friends & people', kw: ['أصحاب', 'صحاب', 'friends', 'مجتمع', 'قصة', 'story'] },
+  { id: 'create', emoji: '🎨', ar: 'إبداع وأفكار', en: 'Creativity', kw: ['تصميم', 'رسم', 'فن', 'تصوير', 'design', 'art', 'creative', 'مونتاج'] },
+  { id: 'motivate', emoji: '💪', ar: 'تحفيز ونجاح', en: 'Motivation', kw: ['تحفيز', 'نجاح', 'طموح', 'motivation', 'success', 'هدف', 'تطوير'] },
+];
+const vibeKey = (uid: string) => `kan_vibe_${uid}`;
+type VibePref = { ids: string[]; shield: boolean };
+function readVibe(uid: string): VibePref {
+  try { const r = JSON.parse(localStorage.getItem(vibeKey(uid)) ?? 'null') as Partial<VibePref> | null; return { ids: Array.isArray(r?.ids) ? r!.ids!.filter(x => typeof x === 'string') : [], shield: r?.shield !== false }; } catch { return { ids: [], shield: true }; }
+}
+function saveVibe(uid: string, v: VibePref) { try { localStorage.setItem(vibeKey(uid), JSON.stringify(v)); } catch { /* ignore */ } }
+const HOBBIES: { id: string; emoji: string; ar: string; en: string; kw: string[] }[] = [
+  { id: 'football', emoji: '⚽', ar: 'كرة القدم', en: 'Football', kw: ['كورة', 'كرة القدم', 'مباراة', 'football', 'soccer', 'الأهلي', 'الزمالك', 'ميسي', 'رونالدو', 'ريال مدريد', 'برشلونة'] },
+  { id: 'gaming', emoji: '🎮', ar: 'ألعاب', en: 'Gaming', kw: ['العاب', 'ألعاب', 'جيمنج', 'gaming', 'game', 'ببجي', 'pubg', 'fortnite', 'بلايستيشن', 'playstation', 'minecraft', 'ماين كرافت'] },
+  { id: 'tech', emoji: '💻', ar: 'تقنية', en: 'Tech', kw: ['تقنية', 'تكنولوجيا', 'tech', 'موبايل', 'ايفون', 'آيفون', 'iphone', 'اندرويد', 'android', 'لابتوب', 'gadget', 'سامسونج'] },
+  { id: 'coding', emoji: '👨‍💻', ar: 'برمجة', en: 'Coding', kw: ['برمجة', 'programming', 'coding', 'javascript', 'python', 'react', 'مطور', 'developer', 'software'] },
+  { id: 'ai', emoji: '🤖', ar: 'ذكاء اصطناعي', en: 'AI', kw: ['ذكاء اصطناعي', 'ذكاء', 'chatgpt', 'openai', 'claude', 'gpt', 'machine learning'] },
+  { id: 'cars', emoji: '🚗', ar: 'سيارات', en: 'Cars', kw: ['سيارات', 'سيارة', 'عربية', 'cars', 'bmw', 'mercedes', 'تويوتا', 'ferrari', 'فيراري'] },
+  { id: 'travel', emoji: '✈️', ar: 'سفر وسياحة', en: 'Travel', kw: ['سفر', 'سياحة', 'رحلة', 'travel', 'trip', 'فندق', 'hotel', 'طيران', 'vacation', 'اجازة'] },
+  { id: 'food', emoji: '🍔', ar: 'أكل وطبخ', en: 'Food', kw: ['أكل', 'اكل', 'طبخ', 'وصفة', 'recipe', 'food', 'cooking', 'مطعم', 'restaurant', 'حلويات', 'شيف', 'chef'] },
+  { id: 'music', emoji: '🎵', ar: 'موسيقى', en: 'Music', kw: ['موسيقى', 'أغنية', 'اغنية', 'اغاني', 'music', 'song', 'rap', 'راب', 'حفلة', 'concert', 'مهرجان'] },
+  { id: 'movies', emoji: '🎬', ar: 'أفلام ومسلسلات', en: 'Movies & TV', kw: ['فيلم', 'افلام', 'أفلام', 'مسلسل', 'movie', 'film', 'series', 'netflix', 'نتفليكس', 'انمي', 'anime'] },
+  { id: 'comedy', emoji: '😂', ar: 'كوميديا', en: 'Comedy', kw: ['كوميديا', 'ضحك', 'نكتة', 'نكت', 'funny', 'meme', 'ميمز', 'comedy', 'هزار', 'مقلب'] },
+  { id: 'fitness', emoji: '💪', ar: 'جيم ولياقة', en: 'Fitness', kw: ['جيم', 'لياقة', 'تمارين', 'رياضة', 'gym', 'fitness', 'workout', 'كمال اجسام', 'bodybuilding', 'دايت', 'diet'] },
+  { id: 'fashion', emoji: '👗', ar: 'موضة وجمال', en: 'Fashion', kw: ['موضة', 'ازياء', 'أزياء', 'fashion', 'style', 'ملابس', 'outfit', 'ماكياج', 'makeup', 'جمال', 'beauty'] },
+  { id: 'photo', emoji: '📷', ar: 'تصوير', en: 'Photography', kw: ['تصوير', 'صورة', 'photography', 'photo', 'كاميرا', 'camera', 'فوتوغرافيا'] },
+  { id: 'art', emoji: '🎨', ar: 'فن وتصميم', en: 'Art & Design', kw: ['رسم', 'فن', 'تصميم', 'design', 'drawing', 'فوتوشوب', 'photoshop', 'illustration', 'لوحة'] },
+  { id: 'news', emoji: '📰', ar: 'أخبار', en: 'News', kw: ['أخبار', 'اخبار', 'news', 'عاجل', 'سياسة', 'politics', 'اقتصاد', 'economy'] },
+  { id: 'faith', emoji: '🕌', ar: 'إسلاميات', en: 'Faith', kw: ['اسلام', 'إسلام', 'قرآن', 'quran', 'islam', 'دعاء', 'حديث', 'سيرة', 'رمضان', 'ramadan'] },
+  { id: 'edu', emoji: '📚', ar: 'تعليم وكتب', en: 'Learning', kw: ['تعليم', 'دراسة', 'كورس', 'course', 'study', 'education', 'جامعة', 'university', 'كتاب', 'books', 'تعلم', 'learn'] },
+  { id: 'business', emoji: '💼', ar: 'بيزنس واستثمار', en: 'Business', kw: ['بيزنس', 'أعمال', 'اعمال', 'business', 'تجارة', 'trading', 'تداول', 'crypto', 'عملات', 'استثمار', 'invest', 'startup', 'تسويق', 'marketing'] },
+  { id: 'animals', emoji: '🐱', ar: 'حيوانات', en: 'Animals', kw: ['حيوانات', 'قطط', 'كلاب', 'cats', 'dogs', 'animal', 'pets', 'طيور', 'حيوان'] },
+  { id: 'health', emoji: '🩺', ar: 'صحة وطب', en: 'Health', kw: ['صحة', 'طب', 'health', 'دكتور', 'doctor', 'medical', 'علاج'] },
+  { id: 'science', emoji: '🔬', ar: 'علوم وفضاء', en: 'Science', kw: ['علوم', 'science', 'فضاء', 'space', 'ناسا', 'nasa', 'فيزياء', 'physics', 'كيمياء', 'تاريخ', 'history'] },
+];
+Object.assign(EN, {
+  'أهلاً': 'Welcome', 'شبكة التواصل الاجتماعي': 'Social network',
+  'اختر لغتك': 'Choose your language', 'ابحث عن لغة...': 'Search a language...', 'التالي': 'Next',
+  'إيه اللي بتحبه؟': 'What are you into?', 'اختار 3 على الأقل وهنرتّب لك المنشورات على ذوقك. وكل ما تبحث عن حاجة بنفهم اهتماماتك أكتر.': 'Pick at least 3 and we will arrange your feed to match. The more you search, the better we get to know you.',
+  'أضف اهتماماً من عندك': 'Add your own interest', 'إضافة': 'Add', 'ابدأ': 'Start', 'تخطي': 'Skip', 'اخترت': 'Picked',
+});
+function KixLettersDraw() {
+  const letters = [
+    { d: 'M20 10 V90 M64 10 L22 52 L66 90', delay: 0.25, dur: 1.3 }, // K
+    { d: 'M96 10 H124 M96 90 H124 M110 10 V90', delay: 1.45, dur: 0.9 }, // I
+    { d: 'M150 10 L212 90 M212 10 L150 90', delay: 2.25, dur: 0.95 }, // X
+  ];
+  return (
+    <svg dir="ltr" viewBox="-8 -8 244 116" className="w-72 max-w-[80vw] overflow-visible" aria-label="KIX">
+      <defs>
+        <linearGradient id="kixDrawGrad" x1="0" y1="0" x2="230" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#a78bfa" /><stop offset="0.55" stopColor="#8b5cf6" /><stop offset="1" stopColor="#22d3ee" />
+        </linearGradient>
+        <filter id="kixDrawGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5" /></filter>
+      </defs>
+      {letters.map((l, i) => (
+        <g key={i} fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <motion.path d={l.d} stroke="url(#kixDrawGrad)" strokeWidth={14} filter="url(#kixDrawGlow)" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 0.55 }} transition={{ delay: l.delay, duration: l.dur, ease: 'easeInOut' }} />
+          <motion.path d={l.d} stroke="url(#kixDrawGrad)" strokeWidth={9} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: l.delay, duration: l.dur, ease: 'easeInOut' }} />
+        </g>
+      ))}
+      <motion.circle cx={211} cy={50} r={0} fill="#fff" initial={{ r: 0, opacity: 0 }} animate={{ r: [0, 7, 0], opacity: [0, 1, 0] }} transition={{ delay: 3.2, duration: 0.9 }} />
+    </svg>
+  );
+}
+function Onboarding({ uid, name, onDone }: { uid: string; name: string; onDone: () => void }) {
+  const [step, setStep] = useState<ObState['step']>(() => readOb()?.step ?? 'intro');
+  const [pick, setPick] = useState<string>(LANG);
+  const [langQ, setLangQ] = useState('');
+  const [sel, setSel] = useState<string[]>([]);
+  const [custom, setCustom] = useState<string[]>([]);
+  const [draft, setDraft] = useState('');
+  const [vibes, setVibes] = useState<string[]>([]);
+  const [shield, setShield] = useState(true);
+  useEffect(() => { writeOb({ step, uid }); }, [step, uid]);
+  useEffect(() => {
+    if (step !== 'intro') return;
+    const h = window.setTimeout(() => setStep('lang'), 3600);
+    return () => window.clearTimeout(h);
+  }, [step]);
+  const goLang = () => {
+    writeOb({ step: 'hobbies', uid });
+    if (pick !== LANG) setLangStored(pick); // reloads the page; onboarding resumes at the hobbies step
+    else setStep('hobbies');
+  };
+  const total = sel.length + custom.length;
+  const toVibe = (skip: boolean) => {
+    if (!skip && total > 0) saveHobbies(uid, sel, [...HOBBIES.filter(h => sel.includes(h.id)).flatMap(h => h.kw), ...custom.map(c => c.toLowerCase())]);
+    setStep('vibe');
+  };
+  const finish = (skip: boolean) => {
+    saveVibe(uid, { ids: skip ? [] : vibes, shield: skip ? true : shield });
+    writeOb(null);
+    reshuffleOrder();
+    onDone();
+  };
+  const addCustom = () => {
+    const v = draft.trim().slice(0, 24);
+    if (v.length < 2 || custom.length >= 8 || custom.some(c => c.toLowerCase() === v.toLowerCase())) { setDraft(''); return; }
+    setCustom(c => [...c, v]); setDraft('');
+  };
+  const langs = LANGS.filter(l => { const q = langQ.trim().toLowerCase(); return !q || l.name.toLowerCase().includes(q) || l.id.includes(q); });
+  return (
+    <div dir={DIR} className="fixed inset-0 z-[300] bg-gray-950 text-white flex flex-col overflow-hidden">
+      <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(40rem 26rem at 50% 30%, rgba(124,58,237,0.28), transparent 62%), radial-gradient(28rem 20rem at 90% 90%, rgba(6,182,212,0.16), transparent 60%)' }} />
+      <AnimatePresence mode="wait">
+        {step === 'intro' && (
+          <motion.div key="intro" onClick={() => setStep('lang')} exit={{ opacity: 0, scale: 1.06 }} transition={{ duration: 0.4 }} className="relative flex-1 flex flex-col items-center justify-center px-6 cursor-pointer">
+            {[0, 1, 2].map(i => (
+              <motion.span key={i} aria-hidden className="absolute w-56 h-56 rounded-full border border-violet-400/30" initial={{ scale: 0.6, opacity: 0.5 }} animate={{ scale: 2.6 + i * 0.6, opacity: 0 }} transition={{ duration: 3, repeat: Infinity, delay: i * 1, ease: 'easeOut' }} />
+            ))}
+            <KixLettersDraw />
+            <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3.3, duration: 0.6 }} className="relative mt-8 text-lg font-bold kan-gradient-text">{t('أهلاً')} {name} 👋</motion.p>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 3.6, duration: 0.6 }} className="relative mt-1 text-sm text-gray-400">{t('شبكة التواصل الاجتماعي')}</motion.p>
+          </motion.div>
+        )}
+        {step === 'lang' && (
+          <motion.div key="lang" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -30 }} className="relative flex-1 flex flex-col min-h-0 px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            <ObDots n={1} />
+            <h2 className="text-2xl font-extrabold text-center mt-4">🌐 {t('اختر لغتك')}</h2>
+            <p className="text-center text-xs text-gray-500 mt-1" dir="ltr">Choose your language</p>
+            <input value={langQ} onChange={e => setLangQ(e.target.value)} placeholder={t('ابحث عن لغة...')} className="mt-4 w-full px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-violet-500" />
+            <div className="mt-3 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+              <div className="grid grid-cols-2 gap-2 pb-2">
+                {langs.map((l, i) => (
+                  <motion.button key={l.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.025 }} whileTap={{ scale: 0.96 }} onClick={() => setPick(l.id)}
+                    className={`flex items-center justify-between gap-2 px-3.5 py-3 rounded-xl border text-sm font-medium ${pick === l.id ? 'bg-violet-500/20 border-violet-400/60 text-white' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
+                    <span dir={l.rtl ? 'rtl' : 'ltr'} className="truncate">{l.name}</span>
+                    {pick === l.id && <Check size={16} className="text-cyan-300 shrink-0" />}
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={goLang} className="mt-3 w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-bold shadow-lg shadow-violet-500/25">{t('التالي')}</motion.button>
+          </motion.div>
+        )}
+        {step === 'hobbies' && (
+          <motion.div key="hobbies" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="relative flex-1 flex flex-col min-h-0 px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            <ObDots n={2} />
+            <h2 className="text-2xl font-extrabold text-center mt-4">{t('إيه اللي بتحبه؟')}</h2>
+            <p className="text-center text-sm text-gray-400 mt-1.5 leading-6">{t('اختار 3 على الأقل وهنرتّب لك المنشورات على ذوقك. وكل ما تبحث عن حاجة بنفهم اهتماماتك أكتر.')}</p>
+            <div className="mt-4 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+              <div className="flex flex-wrap justify-center gap-2.5 pb-2">
+                {HOBBIES.map((h, i) => {
+                  const on = sel.includes(h.id);
+                  return (
+                    <motion.button key={h.id} initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.03, type: 'spring', damping: 14, stiffness: 220 }} whileTap={{ scale: 0.92 }} onClick={() => setSel(s => on ? s.filter(x => x !== h.id) : [...s, h.id])}
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full border text-sm font-semibold transition-colors ${on ? 'bg-gradient-to-r from-violet-600 to-cyan-500 border-transparent text-white shadow-lg shadow-violet-500/30' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
+                      <span className="text-base">{h.emoji}</span>{LANG === 'ar' ? h.ar : h.en}
+                      {on && <Check size={14} />}
+                    </motion.button>
+                  );
+                })}
+                {custom.map(c => (
+                  <motion.button key={c} initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} whileTap={{ scale: 0.92 }} onClick={() => setCustom(a => a.filter(x => x !== c))} className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold">
+                    ✨ {c} <X size={14} />
+                  </motion.button>
+                ))}
+              </div>
+              <div className="flex gap-2 mt-3">
+                <input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addCustom(); }} placeholder={t('أضف اهتماماً من عندك')} className="flex-1 min-w-0 px-4 py-2.5 bg-gray-900 border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-violet-500" />
+                <button onClick={addCustom} className="px-4 rounded-xl bg-white/10 text-white text-sm font-semibold">{t('إضافة')}</button>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <button onClick={() => toVibe(true)} className="px-4 py-3 rounded-full text-gray-400 text-sm font-medium">{t('تخطي')}</button>
+              <motion.button whileTap={{ scale: 0.97 }} disabled={total < 3} onClick={() => toVibe(false)} className="flex-1 py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-bold shadow-lg shadow-violet-500/25 disabled:opacity-40">
+                {LANG === 'ar' ? 'التالي' : 'Next'}{total > 0 ? ` · ${total}` : ''}
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+        {step === 'vibe' && (
+          <motion.div key="vibe" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="relative flex-1 flex flex-col min-h-0 px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            <ObDots n={3} />
+            <h2 className="text-2xl font-extrabold text-center mt-4">{LANG === 'ar' ? 'عايز تحس بإيه هنا؟' : 'How do you want to feel here?'}</h2>
+            <p className="text-center text-sm text-gray-400 mt-1.5 leading-6">{LANG === 'ar' ? 'هنختار لك محتوى يناسب مزاجك وشخصيتك، ونبعد عنك أي حاجة تضايقك.' : 'We will pick content that fits your mood and keep away what bothers you.'}</p>
+            <div className="mt-4 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+              <div className="grid grid-cols-2 gap-2.5 pb-2">
+                {VIBES.map((v, i) => {
+                  const on = vibes.includes(v.id);
+                  return (
+                    <motion.button key={v.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} whileTap={{ scale: 0.95 }} onClick={() => setVibes(a => (a.includes(v.id) ? a.filter(x => x !== v.id) : [...a, v.id]))}
+                      className={`flex flex-col items-center gap-1.5 px-3 py-4 rounded-2xl border text-sm font-semibold transition-colors ${on ? 'bg-gradient-to-br from-violet-600/40 to-cyan-500/30 border-violet-400/70 text-white' : 'bg-gray-900 border-gray-800 text-gray-300'}`}>
+                      <span className="text-3xl">{v.emoji}</span>{LANG === 'ar' ? v.ar : v.en}
+                    </motion.button>
+                  );
+                })}
+              </div>
+              <button onClick={() => setShield(x => !x)} className={`mt-2 w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-start ${shield ? 'bg-emerald-500/10 border-emerald-400/40' : 'bg-gray-900 border-gray-800'}`}>
+                <span className="text-xl">🛡️</span>
+                <span className="flex-1 text-sm font-semibold">{LANG === 'ar' ? 'قلّل المحتوى الصادم والمزعج' : 'Reduce shocking / upsetting content'}</span>
+                <span className={`w-5 h-5 rounded-md border flex items-center justify-center ${shield ? 'bg-emerald-400 border-emerald-400' : 'border-white/40'}`}>{shield && <Check size={14} color="#000" />}</span>
+              </button>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <button onClick={() => finish(true)} className="px-4 py-3 rounded-full text-gray-400 text-sm font-medium">{t('تخطي')}</button>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => finish(false)} className="flex-1 py-3 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full text-white font-bold shadow-lg shadow-violet-500/25">
+                {t('ابدأ')} ✨
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+function ObDots({ n }: { n: number }) {
+  return (
+    <div dir="ltr" className="flex justify-center gap-2">
+      {[1, 2, 3].map(i => <motion.span key={i} animate={{ width: i === n ? 28 : 8, opacity: i <= n ? 1 : 0.3 }} className="h-2 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400" />)}
+    </div>
+  );
+}
+
 function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
   onRefresh: () => Promise<void>;
   showLogin: boolean;
@@ -7721,11 +7968,13 @@ function AuthScreen({ onRefresh, showLogin, setShowLogin }: {
         setError(signupErrorMessage(code));
         return;
       }
+      writeOb({ step: 'intro' }); // the app shows the KIX intro, language and hobbies right after the first sign-in
       const { data, error: signInErr } = await supabase.auth.signInWithPassword({
         email: await usernameToEmail(uname),
         password,
       });
       if (signInErr || !data.user) {
+        writeOb(null);
         setInfo('تم إنشاء الحساب، سجّل الدخول الآن.');
         setShowLogin(true);
         return;
@@ -7906,7 +8155,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
   const sentinel = useRef<HTMLDivElement>(null);
   useBlocks();
   const okPost = makePostFilter(currentUser, users);
-  const sorted = useStableOrder(posts.filter(p => p.timestamp >= frontier && okPost(p)));
+  const sorted = useStableOrder(posts.filter(p => p.timestamp >= frontier && okPost(p)), currentUser.id);
   const allPosts = mode === 'all'
     ? sorted
     : mode === 'files'
@@ -7958,7 +8207,7 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
         </div>
       )}
       {displayPosts.map(post => (
-        <MemoPostCard key={post.id} post={post} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={stableOpenProfile} />
+        <MemoPostCard key={post.id} post={post} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={stableOpenProfile} homeFeed />
       ))}
       <div ref={sentinel} className="h-8 flex items-center justify-center text-xs text-gray-500">
         {loading ? t('جارٍ التحميل...') : !hasMore && allPosts.length <= cap && displayPosts.length > 0 ? t('وصلت لنهاية المنشورات') : ''}
@@ -8185,19 +8434,63 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
   );
 }
 
+// ============ Translate (comments / captions): shows a tiny white icon when the text is in a different language than the app ============
+const kanTrCache = new Map<string, string>();
+const kanLatinCount = (s: string) => (s.match(/[A-Za-z]/g) || []).length;
+const kanArabicCount = (s: string) => (s.match(/[\u0600-\u06FF]/g) || []).length;
+const kanNeedsTranslate = (s: string): boolean => {
+  const a = kanArabicCount(s), l = kanLatinCount(s);
+  return LANG === 'ar' ? l >= 4 && l > a : a >= 3 && a > l;
+};
+async function kanTranslate(text: string): Promise<string> {
+  const key = `${LANG}|${text}`;
+  const hit = kanTrCache.get(key);
+  if (hit) return hit;
+  const tl = LANG === 'zh' ? 'zh-CN' : LANG;
+  const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text.slice(0, 1500))}`);
+  if (!r.ok) throw new Error('translate failed');
+  const j = (await r.json()) as [string, ...unknown[]][][];
+  const out = (j[0] || []).map(x => x[0]).join('');
+  if (!out) throw new Error('empty');
+  kanTrCache.set(key, out);
+  return out;
+}
+function TranslateButton({ text, className = '' }: { text: string; className?: string }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'err'>('idle');
+  const [out, setOut] = useState('');
+  const [shown, setShown] = useState(false);
+  if (!kanNeedsTranslate(text)) return null;
+  const toggle = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (shown) { setShown(false); return; }
+    if (out) { setShown(true); return; }
+    setState('busy');
+    try { setOut(await kanTranslate(text)); setState('done'); setShown(true); } catch { setState('err'); window.setTimeout(() => setState('idle'), 2000); }
+  };
+  return (
+    <>
+      <button onClick={toggle} aria-label="ترجمة" title="ترجمة" className={`inline-flex items-center align-middle p-0.5 text-white ${state === 'busy' ? 'animate-pulse' : 'opacity-80 hover:opacity-100'} ${className}`}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 8 6 6" /><path d="m4 14 6-6 2-3" /><path d="M2 5h12" /><path d="M7 2h1" /><path d="m22 22-5-10-5 10" /><path d="M14 18h6" /></svg>
+      </button>
+      {shown && out && <span className="block w-full mt-1 text-[13px] text-gray-300 whitespace-pre-wrap break-words" dir="auto">{out}</span>}
+    </>
+  );
+}
+
 function CommentText({ text, cls }: { text: string; cls: string }) {
   const m = /^\[\[sticker:(https?:\/\/[^\]\s]+)\]\]$/.exec(text.trim());
   if (m) return <img decoding="async" src={m[1]} alt="" draggable={false} loading="lazy" className="w-28 h-28 object-contain" />;
-  return <p className={cls}>{text}</p>;
+  return <div><p className={cls} dir="auto">{text}</p><TranslateButton text={text} /></div>;
 }
 
-function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusCommentId }: {
+function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusCommentId, homeFeed = false }: {
   post: Post;
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
   users: User[];
   currentUser: User;
   onOpenProfile: (id: string) => void;
   focusCommentId?: string;
+  homeFeed?: boolean;
 }) {
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
   const [coinId, setCoinId] = useState(0);
@@ -8232,6 +8525,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
 
   const toggleLike = async () => {
     const was = isLiked;
+    if (!was) bumpInterests(me, `${post.text} ${post.title ?? ''}`, 3); if (!was) bumpAffinity(me, post.userId, 3);
     mutatePost(p => ({ ...p, likes: setIn(p.likes, !was) }));
     const { error } = was
       ? await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', me)
@@ -8241,6 +8535,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
 
   const toggleBookmark = async () => {
     const was = isBookmarked;
+    if (!was) bumpInterests(me, `${post.text} ${post.title ?? ''}`, 4); if (!was) bumpAffinity(me, post.userId, 4);
     mutatePost(p => ({ ...p, bookmarks: setIn(p.bookmarks, !was) }));
     const { error } = was
       ? await supabase.from('bookmarks').delete().eq('post_id', post.id).eq('user_id', me)
@@ -8419,6 +8714,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
               <VideoPlayer
                 src={post.media.url}
                 poster={post.coverUrl}
+                viewAutoplay={homeFeed}
                 className="w-full max-h-[75vh]"
               />
               )
@@ -9207,7 +9503,7 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   useBlocks();
   const okPost = makePostFilter(currentUser, users);
   const reelsByTime = posts.filter(p => p.media?.type === 'video' && !p.isVideo && okPost(p)).sort((a, b) => b.timestamp - a.timestamp);
-  const reels = useStableOrder(reelsByTime);
+  const reels = useStableOrder(reelsByTime, currentUser.id);
   const commentPost = commentsFor ? posts.find(p => p.id === commentsFor) : undefined;
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
@@ -9457,6 +9753,7 @@ function VideoWatch({ post, users, currentUser, setPosts, related, onOpenProfile
 function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { post: Post; users: User[]; currentUser: User; setPosts: React.Dispatch<React.SetStateAction<Post[]>>; onOpenProfile: (id: string) => void }) {
   const me = currentUser.id;
   const [text, setText] = useState('');
+  const [emojiFor, setEmojiFor] = useState<string | null>(null); // 'main' or the comment id of the reply box
   const [focus, setFocus] = useState(false);
   const [fresh, setFresh] = useState<string[]>([]); // comments I just posted: they show right away, under the pinned one
   const [seed] = useState(() => Math.random().toString(36).slice(2));
@@ -9558,7 +9855,11 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
       <div className="flex gap-3 mb-6">
         <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="md" />
         <div className="flex-1 min-w-0">
-          <input value={text} onChange={e => setText(e.target.value)} onFocus={() => setFocus(true)} onKeyDown={e => { if (e.key === 'Enter' && text.trim()) { void add(text, null); setText(''); setFocus(false); } }} placeholder="أضف تعليقًا..." dir="auto" className="w-full bg-transparent border-b border-gray-600 focus:border-white pb-1.5 text-[16px] text-white placeholder-gray-400 outline-none transition-colors" />
+          <div className="flex items-center gap-1 border-b border-gray-600 focus-within:border-white transition-colors">
+            <input value={text} onChange={e => setText(e.target.value)} onFocus={() => setFocus(true)} onKeyDown={e => { if (e.key === 'Enter' && text.trim()) { void add(text, null); setText(''); setFocus(false); setEmojiFor(null); } }} placeholder="أضف تعليقًا..." dir="auto" className="flex-1 min-w-0 bg-transparent pb-1.5 text-[16px] text-white placeholder-gray-400 outline-none" />
+            <button type="button" onClick={() => { setFocus(true); setEmojiFor(emojiFor === 'main' ? null : 'main'); }} aria-label="إيموجي" className="shrink-0 p-1.5 mb-1 rounded-full text-white hover:bg-white/10 active:scale-90"><Smile size={20} /></button>
+          </div>
+          {emojiFor === 'main' && <EmojiPicker docked gridH={180} onPick={em => setText(v => v + em)} onClose={() => setEmojiFor(null)} />}
           {(focus || text.trim() !== '') && (
             <div className="flex justify-end gap-2 mt-2.5">
               <button onClick={() => { setText(''); setFocus(false); }} className="px-4 py-2 rounded-full text-sm font-semibold text-gray-200 hover:bg-white/10">إلغاء</button>
@@ -9577,7 +9878,11 @@ function YtComments({ post, users, currentUser, setPosts, onOpenProfile }: { pos
                 <div className="flex gap-3 mt-2">
                   <Avatar userId={currentUser.id} src={currentUser.avatar} name={currentUser.displayName} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <input autoFocus value={rText} onChange={e => setRText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && rText.trim()) { void add(rText, c.id); setRText(''); setReplyFor(null); } }} placeholder="أضف ردًا..." dir="auto" className="w-full bg-transparent border-b border-gray-600 focus:border-white pb-1.5 text-[16px] text-white placeholder-gray-400 outline-none" />
+                    <div className="flex items-center gap-1 border-b border-gray-600 focus-within:border-white">
+                      <input autoFocus value={rText} onChange={e => setRText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && rText.trim()) { void add(rText, c.id); setRText(''); setReplyFor(null); setEmojiFor(null); } }} placeholder="أضف ردًا..." dir="auto" className="flex-1 min-w-0 bg-transparent pb-1.5 text-[16px] text-white placeholder-gray-400 outline-none" />
+                      <button type="button" onClick={() => setEmojiFor(emojiFor === c.id ? null : c.id)} aria-label="إيموجي" className="shrink-0 p-1.5 mb-1 rounded-full text-white hover:bg-white/10 active:scale-90"><Smile size={19} /></button>
+                    </div>
+                    {emojiFor === c.id && <EmojiPicker docked gridH={170} onPick={em => setRText(v => v + em)} onClose={() => setEmojiFor(null)} />}
                     <div className="flex justify-end gap-2 mt-2.5">
                       <button onClick={() => { setReplyFor(null); setRText(''); }} className="px-4 py-2 rounded-full text-sm font-semibold text-gray-200 hover:bg-white/10">إلغاء</button>
                       <button disabled={!rText.trim()} onClick={() => { void add(rText, c.id); setRText(''); setReplyFor(null); }} className={`px-4 py-2 rounded-full text-sm font-semibold ${rText.trim() ? 'bg-[#3ea6ff] text-black' : 'bg-white/10 text-gray-500'}`}>رد</button>
@@ -9677,13 +9982,46 @@ function startCall(peerId: string, video: boolean) {
   window.dispatchEvent(new CustomEvent('kan-start-call', { detail: { peerId, video } }));
 }
 
+// One long-lived channel per person we call: subscribing a fresh channel on every signal added ~1s to ringing.
+const callChans = new Map<string, { ch: ReturnType<typeof supabase.channel>; ready: boolean; q: Record<string, unknown>[]; idle?: number }>();
 function callSignal(peerId: string, payload: Record<string, unknown>) {
-  const ch = supabase.channel(`calls:${peerId}`);
-  ch.subscribe(st => {
-    if (st === 'SUBSCRIBED') {
-      void ch.send({ type: 'broadcast', event: 'call', payload }).finally(() => window.setTimeout(() => void supabase.removeChannel(ch), 1500));
-    }
-  });
+  let c = callChans.get(peerId);
+  if (!c) {
+    const ch = supabase.channel(`calls:${peerId}`);
+    c = { ch, ready: false, q: [] };
+    const cc = c;
+    ch.subscribe(st => {
+      if (st === 'SUBSCRIBED') { cc.ready = true; cc.q.splice(0).forEach(m => void ch.send({ type: 'broadcast', event: 'call', payload: m })); }
+      else if (st === 'CLOSED' || st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') { callChans.delete(peerId); void supabase.removeChannel(ch); }
+    });
+    callChans.set(peerId, c);
+  }
+  window.clearTimeout(c.idle);
+  c.idle = window.setTimeout(() => { const x = callChans.get(peerId); if (x) { callChans.delete(peerId); void supabase.removeChannel(x.ch); } }, 90000);
+  if (c.ready) void c.ch.send({ type: 'broadcast', event: 'call', payload });
+  else c.q.push(payload);
+}
+// The LiveKit library is downloaded once, in the background, so starting a call does not wait for it.
+let lkPromise: Promise<any> | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+const loadLivekit = () => (lkPromise ??= import(/* @vite-ignore */ LIVEKIT_CDN).catch(e => { lkPromise = null; throw e; }));
+// Telephone-style ringing (incoming ring + outgoing ringback), no audio files needed.
+function useRing(mode: 'in' | 'out' | null) {
+  useEffect(() => {
+    if (!mode) return;
+    let ctx: AudioContext | null = null;
+    try { ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)(); } catch { return; }
+    const c = ctx;
+    const beep = () => {
+      if (c.state === 'suspended') void c.resume();
+      const o = c.createOscillator(); const g = c.createGain();
+      o.type = 'sine'; o.frequency.value = mode === 'in' ? 880 : 425;
+      g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(mode === 'in' ? 0.25 : 0.12, c.currentTime + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.9);
+      o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.95);
+    };
+    beep();
+    const iv = window.setInterval(() => { beep(); if (mode === 'in') try { navigator.vibrate?.([350, 200, 350]); } catch { /* ignore */ } }, mode === 'in' ? 1800 : 3200);
+    return () => { window.clearInterval(iv); try { navigator.vibrate?.(0); } catch { /* ignore */ } void c.close().catch(() => undefined); };
+  }, [mode]);
 }
 
 function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) {
@@ -9701,6 +10039,15 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
   const [secs, setSecs] = useState(0);
+  const [mini, setMini] = useState(false);
+  const [facing, setFacing] = useState<'user' | 'environment'>('user');
+  const [sharing, setSharing] = useState(false);
+  const [quality, setQuality] = useState<'excellent' | 'good' | 'poor' | 'lost' | 'unknown'>('unknown');
+  const [reconnecting, setReconnecting] = useState(false);
+  const [remoteCamOff, setRemoteCamOff] = useState(false);
+  const lkRef = useRef<{ Track: any; RoomEvent: any } | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  useEffect(() => { const h = window.setTimeout(() => void loadLivekit().catch(() => undefined), 2500); return () => window.clearTimeout(h); }, []);
+  useRing(call && call.phase === 'ringing' ? (call.dir === 'in' ? 'in' : 'out') : null);
 
   const cleanup = () => {
     window.clearTimeout(ringTimer.current);
@@ -9708,7 +10055,8 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
     roomRef.current = null;
     audioEls.current.forEach(e => e.remove());
     audioEls.current = [];
-    setCall(null); setMuted(false); setCamOff(false); setSecs(0);
+    if (remoteEl.current) remoteEl.current.replaceChildren();
+    setCall(null); setMuted(false); setCamOff(false); setSecs(0); setMini(false); setFacing('user'); setSharing(false); setQuality('unknown'); setReconnecting(false); setRemoteCamOff(false);
   };
   endRef.current = (notify: boolean) => {
     const c = callRef.current;
@@ -9717,40 +10065,60 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
     cleanup();
   };
 
+  const showLastRemote = () => {
+    const box = remoteEl.current; if (!box) return;
+    const kids = Array.from(box.children) as HTMLElement[];
+    kids.forEach((k, i) => { k.style.display = i === kids.length - 1 ? '' : 'none'; });
+  };
   const join = async (room: string, video: boolean) => {
-    // Ask for the microphone/camera first, right on the tap, so the browser prompt always appears and a refusal is reported clearly.
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('المتصفح لا يدعم المكالمات أو الصفحة ليست https');
-      const st = await navigator.mediaDevices.getUserMedia({ audio: true, video });
-      st.getTracks().forEach(t => t.stop());
-    } catch (e) {
-      const n = e instanceof DOMException ? e.name : '';
-      throw new Error(n === 'NotAllowedError' || n === 'SecurityError' ? 'تم رفض إذن الميكروفون/الكاميرا. فعّله من إعدادات الموقع في المتصفح.' : n === 'NotFoundError' ? 'لا يوجد ميكروفون/كاميرا في هذا الجهاز.' : (e instanceof Error ? e.message : String(e)));
-    }
-    const { data, error } = await supabase.functions.invoke('livekit-token', { body: { room } });
+    // The token request and the library download run at the same time (the library is usually already cached).
+    const tokenP = supabase.functions.invoke('livekit-token', { body: { room } });
+    const libP = loadLivekit().catch(() => { throw new Error('تعذّر تحميل مكتبة المكالمات (تأكد من الإنترنت)'); });
+    const [{ data, error }, lk] = await Promise.all([tokenP, libP]);
     const d = data as { token?: string; url?: string } | null;
     if (error || !d?.token || !d.url) {
       let why = error?.message || 'livekit-token failed';
       try { const body = await (error as unknown as { context?: Response })?.context?.json(); if (body?.error) why = String(body.error); } catch { /* keep the message */ }
       throw new Error('خادم المكالمات (livekit-token): ' + why);
     }
-    let lk: { Room: any; RoomEvent: any; Track: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
-    try { lk = await import(/* @vite-ignore */ LIVEKIT_CDN); } catch { throw new Error('تعذّر تحميل مكتبة المكالمات (تأكد من الإنترنت)'); }
     const { Room, RoomEvent, Track } = lk;
-    const r = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-    r.on(RoomEvent.TrackSubscribed, (track: LkTrack) => {
-      const el = track.attach();
-      if (track.kind === Track.Kind.Video) { el.className = 'w-full h-full object-cover'; remoteEl.current?.appendChild(el); }
-      else { el.style.display = 'none'; document.body.appendChild(el); audioEls.current.push(el); }
+    lkRef.current = { Track, RoomEvent };
+    // HD video (720p / 30fps, simulcast so a weak network drops quality instead of freezing) and clean voice (Opus + DTX + RED).
+    const r = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+      videoCaptureDefaults: { facingMode: 'user', resolution: { width: 1280, height: 720, frameRate: 30 } },
+      publishDefaults: { simulcast: true, videoEncoding: { maxBitrate: 1_800_000, maxFramerate: 30 }, dtx: true, red: true, audioPreset: { maxBitrate: 32_000 }, degradationPreference: 'balanced' },
     });
-    r.on(RoomEvent.TrackUnsubscribed, (track: LkTrack) => { track.detach().forEach(e => e.remove()); });
+    r.on(RoomEvent.TrackSubscribed, (track: LkTrack & { source?: string }) => {
+      const el = track.attach();
+      if (track.kind === Track.Kind.Video) {
+        el.className = `w-full h-full ${track.source === Track.Source.ScreenShare ? 'object-contain' : 'object-cover'}`;
+        remoteEl.current?.appendChild(el); showLastRemote(); setRemoteCamOff(false);
+      } else { el.style.display = 'none'; document.body.appendChild(el); audioEls.current.push(el); void (el as HTMLMediaElement).play?.().catch(() => undefined); }
+    });
+    r.on(RoomEvent.TrackUnsubscribed, (track: LkTrack) => { track.detach().forEach(e => e.remove()); showLastRemote(); });
+    r.on(RoomEvent.TrackMuted, (pub: { kind: string }) => { if (pub.kind === Track.Kind.Video) setRemoteCamOff(true); });
+    r.on(RoomEvent.TrackUnmuted, (pub: { kind: string }) => { if (pub.kind === Track.Kind.Video) setRemoteCamOff(false); });
+    r.on(RoomEvent.ConnectionQualityChanged, (q: string, part: { isLocal?: boolean }) => { if (part?.isLocal) setQuality(q as 'excellent' | 'good' | 'poor' | 'lost' | 'unknown'); });
+    r.on(RoomEvent.Reconnecting, () => setReconnecting(true));
+    r.on(RoomEvent.Reconnected, () => setReconnecting(false));
+    r.on(RoomEvent.Disconnected, () => { if (callRef.current && callRef.current.phase === 'live') endRef.current(false); });
     r.on(RoomEvent.ParticipantConnected, () => { window.clearTimeout(ringTimer.current); setCall(c => (c ? { ...c, phase: 'live' } : c)); });
     r.on(RoomEvent.ParticipantDisconnected, () => endRef.current(false));
     await r.connect(d.url, d.token);
     roomRef.current = r;
-    await r.localParticipant.setMicrophoneEnabled(true);
+    try {
+      await Promise.all([
+        r.localParticipant.setMicrophoneEnabled(true),
+        video ? r.localParticipant.setCameraEnabled(true) : Promise.resolve(),
+      ]);
+    } catch (e) {
+      const n = e instanceof DOMException ? e.name : '';
+      throw new Error(n === 'NotAllowedError' || n === 'SecurityError' ? 'تم رفض إذن الميكروفون/الكاميرا. فعّله من إعدادات الموقع في المتصفح.' : n === 'NotFoundError' ? 'لا يوجد ميكروفون/كاميرا على هذا الجهاز.' : 'تعذّر تشغيل الميكروفون/الكاميرا');
+    }
     if (video) {
-      await r.localParticipant.setCameraEnabled(true);
       const pub = r.localParticipant.getTrackPublication(Track.Source.Camera);
       if (pub?.videoTrack && localEl.current) pub.videoTrack.attach(localEl.current);
     }
@@ -9763,16 +10131,16 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
     if (!peer) return;
     const room = `call-${crypto.randomUUID()}`;
     setCall({ peer, video, dir: 'out', phase: 'ringing', room });
+    // Ring the other person right away (no waiting for our own connection), including a push for a closed app.
+    callSignal(peer.id, { t: 'invite', from: currentUser.id, video, room });
+    void supabase.functions.invoke('call-push', { body: { action: 'invite', to: peer.id, room, video } });
+    ringTimer.current = window.setTimeout(() => endRef.current(true), 45000);
     try {
       await join(room, video);
-      callSignal(peer.id, { t: 'invite', from: currentUser.id, video, room });
-      // Also ring the other phone through a push notification (with Answer / Decline) in case their app is closed.
-      void supabase.functions.invoke('call-push', { body: { action: 'invite', to: peer.id, room, video } });
-      ringTimer.current = window.setTimeout(() => endRef.current(true), 45000);
     } catch (e) {
       console.error(e);
       window.alert('تعذّر بدء المكالمة\n' + (e instanceof Error ? e.message : ''));
-      cleanup();
+      endRef.current(true);
     }
   };
 
@@ -9868,32 +10236,71 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
   if (!call) return null;
   const live = call.phase === 'live';
   const incoming = call.dir === 'in' && call.phase === 'ringing';
-  const status = live ? formatDuration(secs) : incoming ? (call.video ? 'مكالمة فيديو واردة...' : 'مكالمة صوتية واردة...') : call.phase === 'connecting' ? 'جارٍ التوصيل...' : 'جارٍ الاتصال...';
+  const status = reconnecting ? 'جارٍ إعادة الاتصال...' : live ? formatDuration(secs) : incoming ? (call.video ? 'مكالمة فيديو واردة...' : 'مكالمة صوتية واردة...') : call.phase === 'connecting' ? 'جارٍ التوصيل...' : 'جارٍ الاتصال...';
   const btn = 'w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-transform';
+  const lp = () => roomRef.current?.localParticipant;
+  const flipCamera = async () => {
+    const next = facing === 'user' ? 'environment' : 'user';
+    try {
+      const pub = lp()?.getTrackPublication(lkRef.current?.Track.Source.Camera);
+      await pub?.videoTrack?.restartTrack({ facingMode: next, resolution: { width: 1280, height: 720, frameRate: 30 } });
+      setFacing(next);
+      if (pub?.videoTrack && localEl.current) pub.videoTrack.attach(localEl.current);
+    } catch (e) { console.error(e); }
+  };
+  const toggleShare = async () => {
+    try { await lp()?.setScreenShareEnabled(!sharing); setSharing(!sharing); } catch { setSharing(false); }
+  };
+  const canShare = typeof navigator !== 'undefined' && !!navigator.mediaDevices && 'getDisplayMedia' in navigator.mediaDevices;
+  const bars = quality === 'excellent' ? 3 : quality === 'good' ? 2 : quality === 'poor' ? 1 : quality === 'lost' ? 0 : -1;
+  const sig = bars >= 0 && live && (
+    <span className="inline-flex items-end gap-[2px] h-3.5" aria-label="جودة الاتصال">
+      {[1, 2, 3].map(i => <span key={i} style={{ height: `${i * 4 + 2}px` }} className={`w-[3px] rounded-sm ${i <= bars ? (bars === 1 ? 'bg-amber-400' : 'bg-emerald-400') : 'bg-white/25'}`} />)}
+    </span>
+  );
   return createPortal(
-    <div dir={DIR} className="kan-theme-text fixed inset-0 z-[300] bg-gray-950 flex flex-col text-white">
-      {call.video && <div ref={remoteEl} className="absolute inset-0 bg-black" />}
-      {call.video && <video ref={localEl} muted playsInline autoPlay className="absolute top-4 end-4 z-10 w-24 h-36 rounded-xl object-cover bg-gray-800 shadow-lg [transform:scaleX(-1)]" />}
-      <div className={`relative z-10 flex-1 flex flex-col items-center justify-center gap-3 ${call.video && live ? 'justify-start pt-6 bg-gradient-to-b from-black/60 to-transparent flex-none h-28' : ''}`}>
-        {!(call.video && live) && <div className="scale-150 mb-6"><Avatar userId={call.peer.id} src={call.peer.avatar} name={call.peer.displayName} size="md" /></div>}
-        <div className="text-xl font-bold">{call.peer.displayName}</div>
-        <div className="text-sm text-gray-300">{status}</div>
-      </div>
-      {call.video && live && <div className="flex-1" />}
-      <div className="relative z-10 flex items-center justify-center gap-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6">
-        {incoming ? (
-          <>
-            <button onClick={() => endRef.current(true)} className={`${btn} bg-red-500`} aria-label="رفض"><HangUpIcon size={26} color="#fff" /></button>
-            <button onClick={() => void accept()} className={`${btn} bg-green-500`} aria-label="رد"><CallIcon size={26} color="#fff" /></button>
-          </>
-        ) : (
-          <>
-            <button onClick={() => { const r = roomRef.current; if (!r) return; void r.localParticipant.setMicrophoneEnabled(muted); setMuted(!muted); }} className={`${btn} ${muted ? 'bg-white text-gray-900' : 'bg-white/15'}`} aria-label="كتم"><MicOff size={24} color={muted ? '#111' : '#fff'} /></button>
-            {call.video && <button onClick={() => { const r = roomRef.current; if (!r) return; void r.localParticipant.setCameraEnabled(camOff); setCamOff(!camOff); }} className={`${btn} ${camOff ? 'bg-white' : 'bg-white/15'}`} aria-label="الكاميرا"><VideoOff size={24} color={camOff ? '#111' : '#fff'} /></button>}
-            <button onClick={() => endRef.current(true)} className={`${btn} bg-red-500`} aria-label="إنهاء"><HangUpIcon size={26} color="#fff" /></button>
-          </>
-        )}
-      </div>
+    <div dir={DIR} className={mini
+      ? 'kan-theme-text fixed top-[max(0.75rem,env(safe-area-inset-top))] end-3 z-[300] w-36 rounded-2xl overflow-hidden bg-gray-950 shadow-2xl ring-1 ring-white/20 flex flex-col text-white'
+      : 'kan-theme-text fixed inset-0 z-[300] bg-gray-950 flex flex-col text-white'}>
+      {call.video && <div ref={remoteEl} className={`absolute inset-0 bg-black ${remoteCamOff ? 'opacity-0' : ''}`} />}
+      {call.video && !mini && <video ref={localEl} muted playsInline autoPlay className={`absolute top-4 end-4 z-10 w-24 h-36 rounded-xl object-cover bg-gray-800 shadow-lg ${facing === 'user' && !sharing ? '[transform:scaleX(-1)]' : ''}`} />}
+      {call.video && mini && <video ref={localEl} muted playsInline autoPlay className="hidden" />}
+      {mini ? (
+        <button onClick={() => setMini(false)} className="relative z-10 flex items-center gap-2 p-2.5 text-start bg-black/40 backdrop-blur" aria-label="تكبير المكالمة">
+          <Avatar userId={call.peer.id} src={call.peer.avatar} name={call.peer.displayName} size="sm" />
+          <span className="min-w-0 flex-1"><span className="block text-xs font-bold truncate">{call.peer.displayName}</span><span className="block text-[11px] text-gray-300">{status}</span></span>
+          <Maximize2 size={14} className="shrink-0" />
+        </button>
+      ) : (
+        <>
+          <div className="relative z-10 flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+            <button onClick={() => setMini(true)} className="w-10 h-10 rounded-full bg-black/35 backdrop-blur flex items-center justify-center active:scale-90" aria-label="تصغير"><Minimize2 size={18} color="#fff" /></button>
+            <div className="flex items-center gap-2 text-xs text-gray-200">{sig}{reconnecting && <span className="px-2 py-0.5 rounded-full bg-amber-500/80 text-black font-semibold">ضعف في الشبكة</span>}</div>
+          </div>
+          <div className={`relative z-10 flex-1 flex flex-col items-center justify-center gap-3 ${call.video && live && !remoteCamOff ? 'justify-start pt-2 bg-gradient-to-b from-black/60 to-transparent flex-none h-24' : ''}`}>
+            {!(call.video && live && !remoteCamOff) && <div className="scale-150 mb-6"><Avatar userId={call.peer.id} src={call.peer.avatar} name={call.peer.displayName} size="md" /></div>}
+            <div className="text-xl font-bold">{call.peer.displayName}</div>
+            <div className="text-sm text-gray-300">{status}{remoteCamOff && live ? ' · الكاميرا مقفولة' : ''}</div>
+          </div>
+          {call.video && live && !remoteCamOff && <div className="flex-1" />}
+          <div className="relative z-10 flex items-center justify-center gap-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6 flex-wrap px-4">
+            {incoming ? (
+              <>
+                <button onClick={() => endRef.current(true)} className={`${btn} bg-red-500`} aria-label="رفض"><HangUpIcon size={26} color="#fff" /></button>
+                <button onClick={() => void accept()} className={`${btn} bg-green-500`} aria-label="رد"><CallIcon size={26} color="#fff" /></button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => { const r = roomRef.current; if (!r) return; void r.localParticipant.setMicrophoneEnabled(muted); setMuted(!muted); }} className={`${btn} ${muted ? 'bg-white' : 'bg-white/15'}`} aria-label="كتم">{muted ? <MicOff size={24} color="#111" /> : <Mic size={24} color="#fff" />}</button>
+                {call.video && <button onClick={() => { const r = roomRef.current; if (!r) return; void r.localParticipant.setCameraEnabled(camOff); setCamOff(!camOff); }} className={`${btn} ${camOff ? 'bg-white' : 'bg-white/15'}`} aria-label="الكاميرا"><VideoOff size={24} color={camOff ? '#111' : '#fff'} /></button>}
+                {call.video && !camOff && <button onClick={() => void flipCamera()} className={`${btn} bg-white/15`} aria-label="قلب الكاميرا"><SwitchCamera size={24} color="#fff" /></button>}
+                {canShare && live && <button onClick={() => void toggleShare()} className={`${btn} ${sharing ? 'bg-white' : 'bg-white/15'}`} aria-label="مشاركة الشاشة"><ScreenShare size={24} color={sharing ? '#111' : '#fff'} /></button>}
+                <button onClick={() => endRef.current(true)} className={`${btn} bg-red-500`} aria-label="إنهاء"><HangUpIcon size={26} color="#fff" /></button>
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>,
     document.body,
   );
@@ -10085,7 +10492,7 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const loadingRef = useRef(false);
   useBlocks();
   const okPost = makePostFilter(currentUser, users);
-  const videos = useStableOrder(posts.filter(p => p.isVideo && p.media?.type === 'video' && okPost(p)));
+  const videos = useStableOrder(posts.filter(p => p.isVideo && p.media?.type === 'video' && okPost(p)), currentUser.id);
   const [vf, setVf] = useState<'all' | 'subs' | 'saved' | 'lib'>('all');
   const [sort, setSort] = useState<'new' | 'top'>('new');
   const [channel, setChannel] = useState<string | null>(null);
@@ -10843,6 +11250,7 @@ function ExpandableText({ text, className, lines = 5, light = false }: { text: s
           {!open && over && <button onClick={e => { e.stopPropagation(); setOpen(true); }} className={`mt-0.5 text-sm font-semibold ${moreCls}`}>… عرض المزيد</button>}
         </>
       )}
+      <TranslateButton text={text} className={light ? '' : ''} />
     </div>
   );
 }
@@ -12479,8 +12887,16 @@ function bumpInterests(uid: string, text: string, amount = 2) {
     const decayed = old ? old.w * Math.pow(0.5, (now - old.t) / (3 * 864e5)) : 0;
     cur[k] = { w: Math.min(decayed + amount, 20), t: now };
   }
-  const top = Object.entries(cur).sort((a, b) => b[1].w - a[1].w).slice(0, 40);
+  const top = Object.entries(cur).sort((a, b) => b[1].w - a[1].w).slice(0, 60);
   try { localStorage.setItem(interestKey(uid), JSON.stringify(Object.fromEntries(top))); } catch { /* ignore */ }
+}
+// Hobbies picked at sign-up: a steady baseline that does not fade (searches / likes add on top and do fade).
+const hobbyKey = (uid: string) => `kan_hobbies_${uid}`;
+function readHobbies(uid: string): string[] {
+  try { const r = JSON.parse(localStorage.getItem(hobbyKey(uid)) ?? 'null') as { kw?: string[] } | null; return Array.isArray(r?.kw) ? r!.kw!.filter(k => typeof k === 'string') : []; } catch { return []; }
+}
+function saveHobbies(uid: string, ids: string[], kw: string[]) {
+  try { localStorage.setItem(hobbyKey(uid), JSON.stringify({ ids, kw: Array.from(new Set(kw.map(k => k.toLowerCase().trim()).filter(k => k.length >= 2))) })); } catch { /* ignore */ }
 }
 // Takes posts newest-first and lifts the ones that match the person's interests; everything else keeps its order.
 // Until the ranking algorithms exist, every list of posts is shown in a random order that stays the same during the session.
@@ -12492,7 +12908,7 @@ const orderKey = (id: string) => { let h = 2166136261; const s = ORDER_SEED + id
 const randomOrder = <T extends { id: string }>(list: T[]): T[] => [...list].sort((a, b) => orderKey(a.id) - orderKey(b.id));
 // Random order that never moves under your finger: posts already dealt keep their place, posts that load later
 // are added at the END, and only a refresh deals a new order. A post you publish yourself goes to the top.
-function useStableOrder<T extends { id: string; timestamp?: number }>(list: T[]): T[] {
+function useStableOrder<T extends { id: string; timestamp?: number }>(list: T[], uid?: string): T[] {
   const st = useRef<{ epoch: number; ids: string[]; born: number }>({ epoch: ORDER_EPOCH, ids: [], born: Date.now() });
   if (st.current.epoch !== ORDER_EPOCH) st.current = { epoch: ORDER_EPOCH, ids: [], born: Date.now() };
   const known = new Set(st.current.ids);
@@ -12501,28 +12917,68 @@ function useStableOrder<T extends { id: string; timestamp?: number }>(list: T[])
     const first = st.current.ids.length === 0;
     const mine = first ? [] : fresh.filter(p => (p.timestamp ?? 0) > st.current.born);
     const mineIds = new Set(mine.map(p => p.id));
-    const rest = randomOrder(fresh.filter(p => !mineIds.has(p.id)));
+    const shuffled = randomOrder(fresh.filter(p => !mineIds.has(p.id)));
+    const rest = uid ? (rankByInterests(shuffled as unknown as Post[], uid) as unknown as T[]) : shuffled;
     st.current.ids = [...mine.map(p => p.id), ...st.current.ids, ...rest.map(p => p.id)];
   }
   const byId = new Map(list.map(p => [p.id, p] as const));
   return st.current.ids.flatMap(id => { const p = byId.get(id); return p ? [p] : []; });
 }
-void rankByInterests; // kept for the ranking algorithms that come later
-function rankByInterests(list: Post[], uid: string): Post[] {
+// Who the person really engages with (likes, comments, replies): a slow-fading weight per author.
+const affKey = (uid: string) => `kan_aff_${uid}`;
+function readAffinity(uid: string): Record<string, { w: number; t: number }> {
+  try { const r = JSON.parse(localStorage.getItem(affKey(uid)) ?? '{}'); return r && typeof r === 'object' ? r : {}; } catch { return {}; }
+}
+function bumpAffinity(uid: string, authorId: string, amount = 2) {
+  if (!authorId || authorId === uid) return;
+  const now = Date.now();
+  const cur = readAffinity(uid);
+  const old = cur[authorId];
+  const decayed = old ? old.w * Math.pow(0.5, (now - old.t) / (7 * 864e5)) : 0;
+  cur[authorId] = { w: Math.min(decayed + amount, 15), t: now };
+  const top = Object.entries(cur).sort((a, b) => b[1].w - a[1].w).slice(0, 80);
+  try { localStorage.setItem(affKey(uid), JSON.stringify(Object.fromEntries(top))); } catch { /* ignore */ }
+}
+// Content that tends to upset people: pushed far down when the person asked to be shielded at sign-up.
+const KAN_DISTRESS = /جثة|جثث|مقتل|قتيل|دماء|ذبح|انتحار|اغتصاب|تعذيب|مجزرة|مشاهد صادمة|حادث مروع|gore|massacre|suicide|torture|corpse|bloody|brutal|graphic violence/i;
+// Understands the person: hobbies + searches/likes (interests), who they engage with, the mood they picked, and their language.
+// Then it keeps the feed varied (no long run from one author) and calm (distressing posts sink) when they asked for that.
+function rankByInterests<T extends { text: string; title?: string; media?: { name?: string }; userId?: string }>(list: T[], uid: string): T[] {
   const hour = Math.floor(Date.now() / 36e5) * 36e5;
-  const entries = Object.entries(readInterests(uid))
-    .map(([k, v]) => [k, v.w * Math.pow(0.5, (hour - v.t) / (3 * 864e5))] as const)
-    .filter(([, w]) => w >= 0.3);
-  if (entries.length === 0) return list;
-  return list
+  const score = new Map<string, number>();
+  for (const k of readHobbies(uid)) score.set(k, 2);
+  const vibe = readVibe(uid);
+  for (const v of VIBES) if (vibe.ids.includes(v.id)) for (const k of v.kw) score.set(k.toLowerCase(), (score.get(k.toLowerCase()) ?? 0) + 1);
+  for (const [k, v] of Object.entries(readInterests(uid))) score.set(k, (score.get(k) ?? 0) + v.w * Math.pow(0.5, (hour - v.t) / (3 * 864e5)));
+  const entries = Array.from(score.entries()).filter(([, w]) => w >= 0.3);
+  const aff = readAffinity(uid);
+  if (entries.length === 0 && Object.keys(aff).length === 0 && !vibe.shield) return list;
+  const arabicUser = LANG === 'ar';
+  const scored = list
     .map((p, i) => {
       const hay = `${p.text} ${p.title ?? ''} ${p.media?.name ?? ''}`.toLowerCase();
       let b = 0;
       for (const [k, w] of entries) if (hay.includes(k)) b += w;
-      return { p, s: -i + Math.min(b, 12) * 4 };
+      let sc = -i + Math.min(b, 12) * 4;
+      const a = p.userId ? aff[p.userId] : undefined;
+      if (a) sc += Math.min(a.w * Math.pow(0.5, (hour - a.t) / (7 * 864e5)), 10) * 3;
+      const ar = kanArabicCount(hay), la = kanLatinCount(hay);
+      if (ar + la >= 4) sc += (ar > la) === arabicUser ? 6 : -4; // text in the person's own language first
+      if (vibe.shield && KAN_DISTRESS.test(hay)) sc -= 80;
+      return { p, s: sc };
     })
     .sort((a, b) => b.s - a.s)
     .map(x => x.p);
+  // Variety: never show the same author twice in a row when someone else is close by.
+  const out: T[] = [];
+  const rest = [...scored];
+  while (rest.length) {
+    const last = out[out.length - 1]?.userId;
+    let k = 0;
+    if (last && rest[0].userId === last) { const f = rest.findIndex((x, idx) => idx < 6 && x.userId !== last); if (f > 0) k = f; }
+    out.push(rest.splice(k, 1)[0]);
+  }
+  return out;
 }
 
 function SearchAI({ q, me, onPick }: { q: string; me: User; onPick: (w: string) => void }) {
@@ -12978,6 +13434,146 @@ function UserProfile({ userId, currentUser, users, posts, setUsers, setPosts, on
 
 // ============ Settings Tab ============
 // ============ Install the site as an app ============
+// ============ Playback settings: autoplay on Home + offline reels ============
+const KAN_AUTOPLAY_KEY = 'kan_autoplay_home';
+const KAN_OFFLINE_KEY = 'kan_offline_reels';
+const kanFlag = (k: string) => { try { return localStorage.getItem(k) === '1'; } catch { return false; } };
+const kanSetFlag = (k: string, on: boolean) => { try { localStorage.setItem(k, on ? '1' : '0'); } catch { /* ignore */ } };
+const OFFLINE_CACHE = 'kan-offline-reels';
+const OFFLINE_MAX = 60;
+const offBase = 'https://kan-offline.local';
+type OfflinePack = { posts: Post[]; authors: User[] };
+async function offlineSync(uid: string, posts: Post[], users: User[], loadPage: (o: FetchPostsOptions) => Promise<Post[]>, onProgress: (done: number, total: number) => void): Promise<number> {
+  if (!('caches' in window)) throw new Error('no cache');
+  const isReelPost = (p: Post) => p.media?.type === 'video' && !p.isVideo;
+  let pool = posts.filter(isReelPost);
+  for (let k = 0; k < 6 && pool.length < OFFLINE_MAX; k++) {
+    const oldest = [...pool].sort((a, b) => b.timestamp - a.timestamp)[pool.length - 1];
+    const page = await loadPage({ kind: 'reels', before: oldest?.cursor, limit: 20 }).catch(() => [] as Post[]);
+    const fresh = page.filter(isReelPost).filter(p => !pool.some(x => x.id === p.id));
+    if (fresh.length === 0) break;
+    pool = [...pool, ...fresh];
+  }
+  const pick = pool.sort((a, b) => b.timestamp - a.timestamp).slice(0, OFFLINE_MAX);
+  const cache = await caches.open(OFFLINE_CACHE);
+  let done = 0;
+  onProgress(0, pick.length);
+  const queue = [...pick];
+  const worker = async () => {
+    for (let p = queue.shift(); p; p = queue.shift()) {
+      try {
+        const vk = `${offBase}/v/${p.id}`;
+        if (!(await cache.match(vk))) { const r = await fetch(p.media!.url); if (r.ok) await cache.put(vk, r); }
+        if (p.coverUrl) { const ck = `${offBase}/c/${p.id}`; if (!(await cache.match(ck))) { const r = await fetch(p.coverUrl); if (r.ok) await cache.put(ck, r); } }
+      } catch { /* skip this one */ }
+      done++; onProgress(done, pick.length);
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  const keep = new Set(pick.map(p => p.id));
+  for (const req of await cache.keys()) { const m = /\/(?:v|c)\/(.+)$/.exec(req.url); if (m && !keep.has(m[1])) await cache.delete(req); }
+  const authorIds = new Set(pick.map(p => p.userId));
+  const pack: OfflinePack = { posts: pick.map(p => ({ ...p, comments: [] })), authors: users.filter(u => authorIds.has(u.id)) };
+  await cache.put(`${offBase}/meta/${uid}`, new Response(JSON.stringify(pack), { headers: { 'content-type': 'application/json' } }));
+  try { localStorage.setItem('kan_offline_n_' + uid, String(pick.length)); localStorage.setItem('kan_offline_t_' + uid, String(Date.now())); } catch { /* ignore */ }
+  return pick.length;
+}
+async function offlineLoad(uid: string): Promise<OfflinePack | null> {
+  if (!('caches' in window)) return null;
+  const cache = await caches.open(OFFLINE_CACHE);
+  const meta = await cache.match(`${offBase}/meta/${uid}`);
+  if (!meta) return null;
+  const pack = (await meta.json()) as OfflinePack;
+  const posts: Post[] = [];
+  for (const p of pack.posts) {
+    const v = await cache.match(`${offBase}/v/${p.id}`);
+    if (!v || !p.media) continue;
+    const c = p.coverUrl ? await cache.match(`${offBase}/c/${p.id}`) : undefined;
+    posts.push({ ...p, media: { ...p.media, url: URL.createObjectURL(await v.blob()) }, coverUrl: c ? URL.createObjectURL(await c.blob()) : undefined });
+  }
+  return { posts, authors: pack.authors };
+}
+// Lives in the app root: downloads up to 60 reels when the setting is on (and you are online), and shows them when you are offline.
+function OfflineReelsSync({ uid, posts, users, setPosts, setUsers, loadPage }: { uid: string; posts: Post[]; users: User[]; setPosts: React.Dispatch<React.SetStateAction<Post[]>>; setUsers: React.Dispatch<React.SetStateAction<User[]>>; loadPage: (o: FetchPostsOptions) => Promise<Post[]> }) {
+  const latest = useRef({ posts, users, loadPage });
+  latest.current = { posts, users, loadPage };
+  const busy = useRef(false);
+  const run = async () => {
+    if (busy.current || !navigator.onLine || !kanFlag(KAN_OFFLINE_KEY)) return;
+    busy.current = true;
+    try {
+      const n = await offlineSync(uid, latest.current.posts, latest.current.users, latest.current.loadPage, (d, t) => window.dispatchEvent(new CustomEvent('kan-offline-progress', { detail: { d, t } })));
+      window.dispatchEvent(new CustomEvent('kan-offline-progress', { detail: { d: n, t: n, fin: true } }));
+    } catch (e) { console.error(e); window.dispatchEvent(new CustomEvent('kan-offline-progress', { detail: { err: true } })); }
+    finally { busy.current = false; }
+  };
+  const show = async () => {
+    if (!kanFlag(KAN_OFFLINE_KEY)) return;
+    try {
+      const pack = await offlineLoad(uid);
+      if (!pack || pack.posts.length === 0) return;
+      setUsers(prev => [...prev, ...pack.authors.filter(a => !prev.some(u => u.id === a.id))]);
+      setPosts(prev => mergePosts(prev, pack.posts));
+    } catch (e) { console.error(e); }
+  };
+  useEffect(() => {
+    if (!navigator.onLine) void show();
+    const off = () => { void show(); };
+    const on = () => { window.setTimeout(() => void run(), 4000); };
+    const manual = () => { void run(); };
+    window.addEventListener('offline', off); window.addEventListener('online', on); window.addEventListener('kan-offline-sync', manual);
+    // Refresh the saved reels in the background once in a while (not on every start).
+    const last = Number(localStorage.getItem('kan_offline_t_' + uid) || 0);
+    const timer = Date.now() - last > 6 * 3600e3 ? window.setTimeout(() => void run(), 20000) : undefined;
+    return () => { window.removeEventListener('offline', off); window.removeEventListener('online', on); window.removeEventListener('kan-offline-sync', manual); window.clearTimeout(timer); };
+  }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+function Switch({ on, onChange, label }: { on: boolean; onChange: () => void; label: string }) {
+  return (
+    <button role="switch" aria-checked={on} aria-label={label} onClick={onChange} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors ${on ? 'bg-violet-600' : 'bg-gray-700'}`}>
+      <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white transition-all ${on ? 'start-[22px]' : 'start-0.5'}`} />
+    </button>
+  );
+}
+function PlaybackSettings({ uid }: { uid: string }) {
+  const [auto, setAuto] = useState(() => kanFlag(KAN_AUTOPLAY_KEY));
+  const [off, setOff] = useState(() => kanFlag(KAN_OFFLINE_KEY));
+  const [prog, setProg] = useState<{ d: number; t: number; fin?: boolean; err?: boolean } | null>(null);
+  const saved = Number(localStorage.getItem('kan_offline_n_' + uid) || 0);
+  useEffect(() => {
+    const h = (e: Event) => setProg((e as CustomEvent<{ d: number; t: number; fin?: boolean; err?: boolean }>).detail);
+    window.addEventListener('kan-offline-progress', h);
+    return () => window.removeEventListener('kan-offline-progress', h);
+  }, []);
+  const ar = LANG === 'ar';
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-white">{ar ? 'التشغيل التلقائي' : 'Autoplay'}</div>
+          <p className="text-xs text-gray-400 mt-0.5">{ar ? 'الفيديوهات تشتغل لوحدها وانت بتقلّب في الرئيسية (من غير صوت).' : 'Videos play by themselves as you scroll the Home feed (muted).'}</p>
+        </div>
+        <Switch on={auto} label="autoplay" onChange={() => { const v = !auto; setAuto(v); kanSetFlag(KAN_AUTOPLAY_KEY, v); }} />
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-white">{ar ? 'تحميل 60 ريل للمشاهدة بدون إنترنت' : 'Save 60 reels for offline'}</div>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {prog && !prog.fin && !prog.err ? `${ar ? 'جارٍ التحميل' : 'Downloading'} ${prog.d}/${prog.t}…` : prog?.err ? (ar ? 'تعذّر التحميل، جرّب تاني' : 'Download failed, try again') : saved > 0 && off ? (ar ? `${saved} ريل محفوظ — بيتعرضوا جوا التطبيق لما مفيش نت` : `${saved} reels saved — shown in the app when you are offline`) : (ar ? 'بيستهلك مساحة وباقة نت. مقفول افتراضياً.' : 'Uses storage and data. Off by default.')}
+          </p>
+        </div>
+        <Switch on={off} label="offline reels" onChange={async () => {
+          const v = !off; setOff(v); kanSetFlag(KAN_OFFLINE_KEY, v);
+          if (v) window.dispatchEvent(new Event('kan-offline-sync'));
+          else { setProg(null); try { await caches.delete(OFFLINE_CACHE); localStorage.removeItem('kan_offline_n_' + uid); } catch { /* ignore */ } }
+        }} />
+      </div>
+    </div>
+  );
+}
+
 function InstallCard() {
   const { installed, canPrompt, ios } = useInstallState();
   const [busy, setBusy] = useState(false);
@@ -13455,6 +14051,7 @@ function SettingsTab({ currentUser, setUsers }: {
         </motion.button>
       </div>
       <InstallCard />
+      <PlaybackSettings uid={currentUser.id} />
       <NotificationSettings />
       <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => { void (async () => { await detachPush(); await supabase.auth.signOut(); })(); }} className="w-full py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 font-medium flex items-center justify-center gap-2">
         <LogOut size={18} /> {t('تسجيل الخروج')}
@@ -14387,7 +14984,6 @@ const STORE_ITEMS: [string, string, string][] = [
  ['1f1f9_1f1f7', 'flags', 'علم تركيا turkey flag'],
  ['1f3f4_200d_2620_fe0f', 'flags', 'علم قراصنة pirate flag'],
  ['1f3c1', 'flags', 'علم سباق checkered flag'],
- ['1f3f3_fe0f_200d_1f308', 'flags', 'علم قوس قزح rainbow flag'],
  ['1f34e', 'food', 'تفاحة apple'],
  ['1f34c', 'food', 'موز banana'],
  ['1f353', 'food', 'فراولة strawberry'],
@@ -15152,6 +15748,7 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
   const moreRef = useRef<HTMLDivElement>(null);
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const local = STORE_ITEMS.filter(([cp, c, k]) => {
+    if (KAN_HIDDEN_EMOJI.test(storeChar({ id: `noto-${cp}` } as StoreSticker)) || /pride|lgbt|rainbow flag|israel|اسرائيل|إسرائيل/i.test(k)) return false;
     if (cat !== 'all' && !words.length && c !== cat) return false;
     if (!words.length) return true;
     const typed = [...q.trim()].map(ch => ch.codePointAt(0)?.toString(16)).join('_');
