@@ -6942,8 +6942,8 @@ export default function App() {
 
   // Register the service worker and re-attach notifications to whoever is signed in.
   useEffect(() => {
-    if (!currentUserId || !pushSupported()) return;
-    void (async () => {
+    if (!currentUserId || !pushSupported()) return undefined;
+    const attach = async () => {
       try {
         const reg = await getServiceWorker();
         if (reg && Notification.permission === 'granted') {
@@ -6953,7 +6953,17 @@ export default function App() {
       } catch (e) {
         console.error(e);
       }
-    })();
+    };
+    void attach();
+    // The service worker asks for a fresh subscription when the browser renews it; also re-check when the app comes back to the front.
+    const onMsg = (e: MessageEvent) => { if (e.data?.kan === 'resubscribe') void attach(); };
+    const onVis = () => { if (document.visibilityState === 'visible') void attach(); };
+    navigator.serviceWorker.addEventListener('message', onMsg);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', onMsg);
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, [currentUserId]);
 
   // Every profile / post you open goes on one stack, so Back (phone or arrow) returns to exactly where you were.
@@ -7182,9 +7192,21 @@ export default function App() {
     } catch { /* ignore */ }
   }, [unreadCount]);
   useEffect(() => {
-    const ask = () => askNotifyPermission();
-    window.addEventListener('click', ask, { once: true }); // iPhone only accepts the permission prompt from a real tap
-    return () => window.removeEventListener('click', ask);
+    // Notification permission: asked on a real tap (iPhone/Android need one) and re-asked on later taps until the person answers.
+    const evs = ['click', 'touchend', 'keydown'] as const;
+    let busy = false;
+    const remove = () => evs.forEach(e => window.removeEventListener(e, ask));
+    function ask() {
+      try {
+        if (!('Notification' in window) || Notification.permission !== 'default') { remove(); return; }
+        if (busy) return;
+        busy = true;
+        setTimeout(() => { busy = false; }, 4000);
+        askNotifyPermission();
+      } catch { remove(); }
+    }
+    evs.forEach(e => window.addEventListener(e, ask, { passive: true }));
+    return remove;
   }, []);
 
   if (!isConfigured) {
@@ -9531,6 +9553,7 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
   endRef.current = (notify: boolean) => {
     const c = callRef.current;
     if (c && notify) callSignal(c.peer.id, { t: c.dir === 'in' && c.phase === 'ringing' ? 'decline' : 'end', from: currentUser.id });
+    if (c && notify && c.dir === 'out' && c.phase === 'ringing') void supabase.functions.invoke('call-push', { body: { action: 'cancel', to: c.peer.id } });
     cleanup();
   };
 
@@ -9583,6 +9606,8 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
     try {
       await join(room, video);
       callSignal(peer.id, { t: 'invite', from: currentUser.id, video, room });
+      // Also ring the other phone through a push notification (with Answer / Decline) in case their app is closed.
+      void supabase.functions.invoke('call-push', { body: { action: 'invite', to: peer.id, room, video } });
       ringTimer.current = window.setTimeout(() => endRef.current(true), 45000);
     } catch (e) {
       console.error(e);
@@ -9599,6 +9624,54 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
     try { await join(c.room, c.video); }
     catch (e) { console.error(e); window.alert('تعذّر الانضمام للمكالمة\n' + (e instanceof Error ? e.message : '')); endRef.current(true); }
   };
+
+  // A call opened from a notification (Answer button or tap): from the link when the app was closed, from a message when it was open.
+  const pendingRef = useRef<{ room: string; from: string; video: boolean; answer: boolean } | null>(null);
+  const autoRef = useRef('');
+  const openIncoming = (room: string, from: string, video: boolean, answer: boolean) => {
+    const cur = callRef.current;
+    if (cur) { if (cur.room === room && answer && cur.dir === 'in' && cur.phase === 'ringing') void accept(); return; }
+    const peer = usersRef.current.find(u => u.id === from);
+    if (!peer) { pendingRef.current = { room, from, video, answer }; return; }
+    if (answer) autoRef.current = room;
+    setCall({ peer, video, dir: 'in', phase: 'ringing', room });
+    ringTimer.current = window.setTimeout(() => endRef.current(false), 45000);
+  };
+  const openRef = useRef(openIncoming);
+  openRef.current = openIncoming;
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const room = q.get('kan_call');
+      if (!room) return;
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+      if (/^call-[0-9a-f-]{36}$/.test(room)) openRef.current(room, q.get('from') || '', q.get('video') === '1', q.get('answer') === '1');
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined;
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as { kan?: string; room?: string; from?: string; video?: boolean; answer?: boolean } | undefined;
+      if (d?.kan === 'call-open' && d.room && d.from) openRef.current(d.room, d.from, !!d.video, !!d.answer);
+    };
+    navigator.serviceWorker.addEventListener('message', onMsg);
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg);
+  }, []);
+  useEffect(() => {
+    const p = pendingRef.current;
+    if (p && users.some(u => u.id === p.from)) { pendingRef.current = null; openRef.current(p.room, p.from, p.video, p.answer); }
+  }, [users]);
+  useEffect(() => {
+    if (autoRef.current && call && call.dir === 'in' && call.phase === 'ringing' && call.room === autoRef.current) { autoRef.current = ''; void accept(); }
+  }, [call]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // Once the call screen is up, the ringing notification is no longer needed.
+    if (!call || !('serviceWorker' in navigator)) return;
+    void navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL as string)
+      .then(r => r?.getNotifications())
+      .then(ns => ns?.filter(n => n.tag.startsWith('call-')).forEach(n => n.close()))
+      .catch(() => undefined);
+  }, [call?.phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onStart = (e: Event) => { const d = (e as CustomEvent<{ peerId: string; video: boolean }>).detail; void startOut(d.peerId, d.video); };
@@ -9617,7 +9690,7 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
         if (cur) { callSignal(peer.id, { t: 'busy', from: currentUser.id }); return; }
         setCall({ peer, video: !!m.video, dir: 'in', phase: 'ringing', room: m.room });
         ringTimer.current = window.setTimeout(() => endRef.current(false), 45000);
-        if (document.visibilityState === 'hidden') systemNotify(peer.displayName, m.video ? 'مكالمة فيديو واردة' : 'مكالمة صوتية واردة', `call-${peer.id}`, () => undefined, peer.avatar);
+        if (document.visibilityState === 'hidden' && !(pushSupported() && Notification.permission === 'granted')) systemNotify(peer.displayName, m.video ? 'مكالمة فيديو واردة' : 'مكالمة صوتية واردة', `call-${peer.id}`, () => undefined, peer.avatar);
       } else if (cur && cur.peer.id === m.from && (m.t === 'end' || m.t === 'decline' || m.t === 'busy')) {
         endRef.current(false);
       }
@@ -16371,12 +16444,12 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           );
         })}
         {peerRecording && (
-          <div className="flex justify-start">
-            <div className="bg-gray-800 rounded-2xl px-4 py-3 flex items-center gap-2 text-red-400 text-sm">
-              <Mic size={16} className="animate-pulse" /> يسجل رسالة صوتية...
-            </div>
-          </div>
-        )}
+                <div className="sticky bottom-1 z-10 flex justify-start">
+                  <div className="bg-red-500 text-white rounded-full ps-3 pe-4 py-2 flex items-center gap-2 text-sm font-bold shadow-lg">
+                    <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" /><Mic size={16} /> يسجل رسالة صوتية...
+                  </div>
+                </div>
+              )}
         {peerTyping && !peerRecording && (
           <div className="flex justify-start">
             <div className="bg-gray-800 rounded-2xl px-4 py-3 flex items-center gap-1">
