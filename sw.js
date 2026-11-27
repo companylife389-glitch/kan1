@@ -34,7 +34,7 @@ self.addEventListener('push', (event) => {
         renotify: !quiet,
         silent: !!quiet,
         vibrate: quiet ? undefined : (isCall ? [600, 250, 600, 250, 600, 250, 600] : [200, 100, 200]),
-        requireInteraction: !!isCall,
+        requireInteraction: !inFront, // stays on screen until opened or dismissed; Android shows these as a pop-down banner
         actions: isCall ? [{ action: 'answer', title: '\u0631\u062f' }, { action: 'decline', title: '\u0631\u0641\u0636' }] : undefined,
         timestamp: Date.now(),
         icon,

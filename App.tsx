@@ -817,7 +817,7 @@ async function getServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!('serviceWorker' in navigator)) return null;
   const base = import.meta.env.BASE_URL as string;
   const existing = await navigator.serviceWorker.getRegistration(base);
-  if (existing) return existing;
+  if (existing) { void existing.update().catch(() => undefined); return existing; } // always pick up the newest sw.js
   return await navigator.serviceWorker.register(`${base}sw.js`, { scope: base });
 }
 
@@ -15904,19 +15904,32 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
     if (peerHere.current) presumed.current.add(id);
     { const gm = parseGame(body); if (!gm || gm.k === 'inv') playSound('send'); }
     void (async () => {
+      let dbPath: string | null = path;
       try {
         if (opts.file && path) {
           const upFile = opts.mediaType === 'image' && opts.file instanceof File && !isStickerName(opts.fileName) ? await shrinkPhoto(opts.file) : opts.file;
-          const { error: upErr } = await uploadWithProgress(CHAT_MEDIA_BUCKET, path, upFile, upFile.type || 'application/octet-stream', '3600', pct => { if (opts.mediaType !== 'voice' && !isStickerName(opts.fileName)) trackUp(id, pct); });
+          const MB = 1024 * 1024;
+          let p: string = path;
+          // A shrunk phone photo is small: it stays on Supabase Storage instead of making a trip to Backblaze.
+          if (isB2(p) && upFile.size <= B2_MIN_MB * MB) p = p.slice(3);
+          const doUp = (to: string) => uploadWithProgress(CHAT_MEDIA_BUCKET, to, upFile, upFile.type || 'application/octet-stream', '3600', pct => { if (opts.mediaType !== 'voice' && !isStickerName(opts.fileName)) trackUp(id, pct); });
+          let { error: upErr } = await doUp(p);
+          // If Backblaze fails, fall back to Supabase Storage (it accepts files up to 50 MB).
+          if (upErr && isB2(p) && upFile.size <= 49 * MB) { p = p.slice(3); ({ error: upErr } = await doUp(p)); }
           trackUp(id, null);
           if (upErr) throw upErr;
+          if (p !== path) {
+            dbPath = p;
+            const real = p;
+            setConversations(prev => prev.map(c => (c.id !== convId ? c : { ...c, messages: c.messages.map(m => (m.id === id && m.media ? { ...m, media: { ...m.media, path: real } } : m)) })));
+          }
         }
         const { error: insErr } = await supabase.from('messages').insert({
           id,
           conversation_id: convId,
           sender_id: currentUser.id,
           text: body,
-          media_path: path,
+          media_path: dbPath,
           media_type: opts.file ? opts.mediaType ?? null : null,
           media_duration: opts.mediaType === 'voice' ? Math.round(opts.duration ?? 0) : null,
           media_name: opts.file && opts.fileName ? opts.fileName.slice(0, 200) : null,
@@ -15927,7 +15940,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       } catch (e) {
         console.error(e);
         trackUp(id, null);
-        if (path) void kanRemove(CHAT_MEDIA_BUCKET, [path]);
+        if (dbPath) void kanRemove(CHAT_MEDIA_BUCKET, [dbPath]);
         setConversations(prev => prev.map(c => (c.id === convId ? { ...c, messages: c.messages.filter(m => m.id !== id) } : c)));
         setError('تعذّر إرسال الرسالة، حاول مرة أخرى');
       }
