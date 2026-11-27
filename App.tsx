@@ -3882,58 +3882,75 @@ const STORY_BGS = ['linear-gradient(135deg,#6d28d9,#c026d3,#06b6d4)', 'linear-gr
 // fx layers on top of the CSS filter: t = flat tint [colour, blend, opacity], v = vignette, g = linear gradient [from, to, blend, opacity, angle],
 // lk = light leak [colour, opacity, corner], gr = film grain, fd = faded blacks, bl = soft glow.
 type StoryFx = { v?: number; t?: [string, string, number]; g?: [string, string, string, number, number]; lk?: [string, number, 'tr' | 'tl' | 'br' | 'bl']; gr?: number; fd?: number; bl?: number };
+// Realistic, current looks (Instagram's city filters, the classic IG set re-tuned subtler, real film stocks and cinematic grades).
+// Kept gentle on purpose: skin stays natural, whites stay white, nothing looks like a cheap colour wash.
 const STORY_FILTERS: { n: string; f: string; fx?: StoryFx }[] = [
   { n: 'عادي', f: 'none' },
-  { n: 'Clarendon', f: 'contrast(1.18) saturate(1.3) brightness(1.03)', fx: { g:['#071a3a','#bfe3ff','soft-light',.3,180] } },
-  { n: 'Juno', f: 'contrast(1.1) saturate(1.4) brightness(1.04) sepia(.06)', fx: { t:['#ffd98a','soft-light',.2],lk:['#7fffd4',.1,'bl'] } },
-  { n: 'Lark', f: 'brightness(1.1) contrast(.95) saturate(1.2)', fx: { t:['#a8d8ff','soft-light',.16],bl:.2 } },
-  { n: 'Ludwig', f: 'contrast(1.06) saturate(1.1) brightness(1.03) sepia(.08)', fx: { t:['#ffe6c8','soft-light',.22],v:.15 } },
-  { n: 'Gingham', f: 'brightness(1.05) hue-rotate(-6deg) contrast(.9) saturate(.88)', fx: { t:['#e6e6fa','soft-light',.3],fd:.06 } },
-  { n: 'Valencia', f: 'contrast(1.08) brightness(1.08) sepia(.1) saturate(1.1)', fx: { t:['#ffcf9a','soft-light',.3],fd:.05 } },
-  { n: 'X-Pro II', f: 'contrast(1.3) saturate(1.3) sepia(.1)', fx: { v:.45,t:['#e6c27a','overlay',.16] } },
-  { n: 'Aden', f: 'hue-rotate(-18deg) contrast(.9) saturate(.88) brightness(1.15)', fx: { t:['#ff9ab5','soft-light',.22],v:.1 } },
-  { n: 'Perpetua', f: 'contrast(1.1) brightness(1.08) saturate(1.1)', fx: { g:['#0f6e9e','#ffb3c8','soft-light',.38,160] } },
-  { n: 'Reyes', f: 'sepia(.22) brightness(1.1) contrast(.85) saturate(.75)', fx: { fd:.1 } },
-  { n: 'Slumber', f: 'saturate(.7) brightness(1.05) contrast(1.02)', fx: { t:['#7d6bb3','soft-light',.22],bl:.2 } },
-  { n: 'Crema', f: 'sepia(.25) contrast(1.1) brightness(1.08) saturate(.9)', fx: { t:['#ffd9b0','soft-light',.24] } },
-  { n: 'Moon', f: 'grayscale(1) contrast(1.1) brightness(1.1)', fx: { t:['#dfe7ff','soft-light',.14],v:.25 } },
-  { n: 'Inkwell', f: 'grayscale(1) contrast(1.2) brightness(1.08)', fx: { v:.15 } },
-  { n: 'Amaro', f: 'hue-rotate(-10deg) contrast(.92) brightness(1.1) saturate(1.45)', fx: { v:.2,lk:['#ffe8a8',.28,'tr'] } },
-  { n: 'Mayfair', f: 'contrast(1.1) saturate(1.1) brightness(1.04)', fx: { t:['#ff9ec8','soft-light',.2],v:.3 } },
-  { n: 'Rise', f: 'brightness(1.05) sepia(.2) contrast(.92) saturate(.92)', fx: { bl:.35,t:['#ffd8a0','soft-light',.26] } },
-  { n: 'Hudson', f: 'brightness(1.18) contrast(.92) saturate(1.1)', fx: { t:['#9ccaff','soft-light',.26],v:.25 } },
-  { n: 'Sierra', f: 'sepia(.2) contrast(1.05) brightness(.97) saturate(1.1)', fx: { fd:.1,t:['#b0a0ff','soft-light',.12] } },
-  { n: 'Willow', f: 'grayscale(.5) contrast(.95) brightness(.95)', fx: { t:['#d4a9af','soft-light',.3],fd:.1 } },
-  { n: 'Lo-Fi', f: 'saturate(1.25) contrast(1.3) brightness(.98)', fx: { v:.5 } },
-  { n: 'Earlybird', f: 'contrast(.9) sepia(.22) brightness(1.04)', fx: { t:['#d0ba8e','overlay',.3],v:.4 } },
-  { n: 'Brannan', f: 'sepia(.3) contrast(1.25) saturate(1.1)', fx: { t:['#a0a050','soft-light',.2] } },
-  { n: 'Nashville', f: 'sepia(.2) contrast(1.2) brightness(1.05) saturate(1.2)', fx: { t:['#f7b2c2','soft-light',.26],g:['#20243f','#ffb88c','soft-light',.2,180] } },
-  { n: 'Walden', f: 'brightness(1.08) sepia(.2) saturate(1.3) hue-rotate(-6deg)', fx: { lk:['#ffe060',.22,'tr'],t:['#6fb0ff','soft-light',.12] } },
-  { n: 'Toaster', f: 'contrast(1.25) brightness(.97) saturate(1.1)', fx: { t:['#ff9a40','overlay',.3],v:.5 } },
-  { n: 'Kelvin', f: 'saturate(1.6) contrast(1.1) sepia(.12) brightness(1.02)', fx: { t:['#ff8a00','overlay',.3] } },
-  { n: '1977', f: 'contrast(1.1) brightness(1.1) saturate(1.3)', fx: { t:['#f3106c','soft-light',.3] } },
-  { n: 'Hefe', f: 'contrast(1.2) saturate(1.3) sepia(.1)', fx: { v:.4,lk:['#ffd070',.25,'tl'] } },
-  { n: 'Sutro', f: 'sepia(.3) contrast(1.1) saturate(.8) brightness(.95)', fx: { v:.55,t:['#5a3a6a','soft-light',.2] } },
-  { n: 'Maven', f: 'sepia(.25) saturate(1.5) contrast(.95) brightness(.97)', fx: { t:['#e8d56a','soft-light',.2] } },
-  { n: 'Portra', f: 'contrast(.96) saturate(1.08) brightness(1.06) sepia(.1)', fx: { t:['#ffd2b0','soft-light',.22],gr:.04,fd:.06 } },
-  { n: 'Fuji', f: 'contrast(1.08) saturate(1.18) brightness(1.02) hue-rotate(4deg)', fx: { t:['#7fd6a8','soft-light',.12],gr:.05 } },
-  { n: 'Teal & Orange', f: 'contrast(1.15) saturate(1.2)', fx: { g:['#0f4a5a','#ff9a4a','soft-light',.38,180],v:.2 } },
-  { n: 'Golden Hour', f: 'brightness(1.06) saturate(1.3) contrast(1.05) sepia(.12)', fx: { lk:['#ffb347',.3,'tr'],t:['#ffc277','soft-light',.22],bl:.25 } },
-  { n: 'Matte', f: 'contrast(.9) saturate(.9) brightness(1.06)', fx: { fd:.14 } },
-  { n: 'Vivid', f: 'contrast(1.12) saturate(1.55) brightness(1.02)' },
-  { n: 'Noir', f: 'grayscale(1) contrast(1.4) brightness(.92)', fx: { v:.5,gr:.05 } },
-  { n: 'Sunset', f: 'saturate(1.35) contrast(1.08) brightness(1.03)', fx: { g:['#3a0a4a','#ff8a5a','soft-light',.4,180],lk:['#ffb070',.2,'tr'] } },
+  // Instagram city filters
+  { n: 'Paris', f: 'brightness(1.05) contrast(.95) saturate(.95)', fx: { t:['#ffd6e0','soft-light',.16],fd:.04,bl:.12 } },
+  { n: 'Los Angeles', f: 'brightness(1.05) contrast(1.04) saturate(1.18)', fx: { t:['#ffc98a','soft-light',.16],lk:['#ffb35c',.14,'tr'] } },
+  { n: 'Oslo', f: 'brightness(1.04) contrast(.94) saturate(.82)', fx: { t:['#b9d4ff','soft-light',.18],fd:.07 } },
+  { n: 'Lagos', f: 'brightness(1.04) contrast(1.08) saturate(1.12)', fx: { t:['#ffb36b','soft-light',.14],v:.12 } },
+  { n: 'Melbourne', f: 'brightness(1.03) contrast(.93) saturate(.92) sepia(.06)', fx: { t:['#ffe2c2','soft-light',.16],fd:.08 } },
+  { n: 'Jakarta', f: 'brightness(1.02) contrast(1.12) saturate(1.1)', fx: { t:['#ffcf9e','soft-light',.12],v:.16 } },
+  { n: 'Abu Dhabi', f: 'brightness(1.04) contrast(1.03) saturate(1.08) sepia(.08)', fx: { t:['#ffcf7a','soft-light',.18],lk:['#ffc46b',.12,'tr'] } },
+  { n: 'Buenos Aires', f: 'brightness(1.04) contrast(.92) saturate(.9) sepia(.1)', fx: { t:['#f6c9a8','soft-light',.16],fd:.09 } },
+  { n: 'New York', f: 'brightness(1.01) contrast(1.1) saturate(.86)', fx: { t:['#a9c3e8','soft-light',.14],v:.14 } },
+  { n: 'Jaipur', f: 'brightness(1.03) contrast(1.04) saturate(1.14)', fx: { t:['#ff9fc0','soft-light',.14],lk:['#ffb380',.1,'bl'] } },
+  { n: 'Cairo', f: 'brightness(1.04) contrast(1.02) saturate(1.02) sepia(.14)', fx: { t:['#f2c48d','soft-light',.18],fd:.05 } },
+  { n: 'Tokyo', f: 'brightness(1.04) contrast(1.04) saturate(.94)', fx: { g:['#1d3b4f','#d9f1ff','soft-light',.2,180] } },
+  { n: 'Rio de Janeiro', f: 'brightness(1.04) contrast(1.05) saturate(1.22)', fx: { g:['#1d6f8a','#ffb37a','soft-light',.22,160] } },
+  // Classic Instagram, re-tuned
+  { n: 'Clarendon', f: 'brightness(1.02) contrast(1.12) saturate(1.18)', fx: { g:['#0b2240','#d8ecff','soft-light',.18,180] } },
+  { n: 'Gingham', f: 'brightness(1.05) contrast(.9) saturate(.9)', fx: { t:['#ece8ff','soft-light',.18],fd:.07 } },
+  { n: 'Juno', f: 'brightness(1.03) contrast(1.06) saturate(1.2)', fx: { t:['#ffe0a3','soft-light',.12] } },
+  { n: 'Lark', f: 'brightness(1.07) contrast(.96) saturate(1.06)', fx: { t:['#cfe6ff','soft-light',.12] } },
+  { n: 'Ludwig', f: 'brightness(1.04) contrast(1.04) saturate(.94)', fx: { t:['#ffeedd','soft-light',.14],v:.1 } },
+  { n: 'Aden', f: 'brightness(1.08) contrast(.92) saturate(.86) hue-rotate(-8deg)', fx: { t:['#ffc4d6','soft-light',.14],fd:.05 } },
+  { n: 'Valencia', f: 'brightness(1.05) contrast(1.04) saturate(1.04) sepia(.08)', fx: { t:['#ffd7ad','soft-light',.18] } },
+  { n: 'Crema', f: 'brightness(1.04) contrast(.96) saturate(.88) sepia(.12)', fx: { t:['#ffe3c4','soft-light',.14],fd:.05 } },
+  { n: 'Reyes', f: 'brightness(1.08) contrast(.86) saturate(.78) sepia(.14)', fx: { fd:.09 } },
+  { n: 'Slumber', f: 'brightness(1.03) contrast(.96) saturate(.78)', fx: { t:['#c7b8e6','soft-light',.16],fd:.06 } },
+  { n: 'Moon', f: 'grayscale(1) brightness(1.08) contrast(1.06)', fx: { fd:.06,v:.14 } },
+  { n: 'Perpetua', f: 'brightness(1.04) contrast(1.02) saturate(1.04)', fx: { g:['#2f7a8f','#ffe3c9','soft-light',.2,160] } },
+  // Real film stocks
+  { n: 'Portra 400', f: 'brightness(1.04) contrast(.95) saturate(1.02) sepia(.06)', fx: { t:['#ffd9bd','soft-light',.16],gr:.035,fd:.05 } },
+  { n: 'Fuji 400H', f: 'brightness(1.05) contrast(.94) saturate(.92) hue-rotate(6deg)', fx: { t:['#cdeedd','soft-light',.16],gr:.035,fd:.05 } },
+  { n: 'Kodak Gold', f: 'brightness(1.03) contrast(1.04) saturate(1.12) sepia(.1)', fx: { t:['#ffd27a','soft-light',.18],gr:.04 } },
+  { n: 'Ektar 100', f: 'brightness(1.02) contrast(1.1) saturate(1.28)', fx: { t:['#ffb98a','soft-light',.1],gr:.025 } },
+  { n: 'CineStill 800T', f: 'brightness(1.02) contrast(1.06) saturate(1.04) hue-rotate(-6deg)', fx: { g:['#14365a','#ffb0a0','soft-light',.24,180],gr:.05,bl:.14 } },
+  { n: 'Disposable', f: 'brightness(1.06) contrast(1.12) saturate(1.1)', fx: { t:['#ffe08a','soft-light',.12],v:.24,gr:.06 } },
+  { n: 'Polaroid', f: 'brightness(1.06) contrast(.9) saturate(.88) sepia(.08)', fx: { t:['#e7f0d4','soft-light',.18],fd:.1,v:.12 } },
+  { n: 'Ilford HP5', f: 'grayscale(1) contrast(1.16) brightness(1.03)', fx: { gr:.06,v:.12 } },
+  { n: 'Tri-X', f: 'grayscale(1) contrast(1.32) brightness(.98)', fx: { gr:.07,v:.2 } },
+  // Cinematic & trending
+  { n: 'Teal & Orange', f: 'contrast(1.08) saturate(1.1)', fx: { g:['#0f4655','#ffa560','soft-light',.26,180],v:.12 } },
+  { n: 'Moody', f: 'brightness(.96) contrast(1.08) saturate(.78)', fx: { t:['#3d5566','soft-light',.18],v:.22,fd:.05 } },
+  { n: 'Dune', f: 'brightness(1.02) contrast(1.06) saturate(.92) sepia(.2)', fx: { t:['#e0a96d','soft-light',.18],v:.12 } },
+  { n: 'Neon Nights', f: 'brightness(1.02) contrast(1.1) saturate(1.2)', fx: { g:['#2a1a6e','#ff4fa3','soft-light',.24,135],bl:.12 } },
+  { n: 'Golden Hour', f: 'brightness(1.05) contrast(1.02) saturate(1.14) sepia(.08)', fx: { lk:['#ffb347',.2,'tr'],t:['#ffcf8f','soft-light',.14],bl:.12 } },
+  { n: 'Blue Hour', f: 'brightness(1.02) contrast(1.02) saturate(.92)', fx: { g:['#1c2f66','#b9c9ff','soft-light',.24,180] } },
+  { n: 'Soft Glow', f: 'brightness(1.06) contrast(.94) saturate(1.02)', fx: { bl:.22,t:['#ffe9e0','soft-light',.12] } },
+  { n: 'Clean', f: 'brightness(1.06) contrast(1.02) saturate(1.04)', fx: { t:['#f2f7ff','soft-light',.12] } },
+  { n: 'Y2K Flash', f: 'brightness(1.1) contrast(1.16) saturate(1.06)', fx: { v:.28,gr:.03,t:['#e6f0ff','soft-light',.1] } },
+  { n: 'Matte', f: 'brightness(1.04) contrast(.9) saturate(.9)', fx: { fd:.11 } },
+  { n: 'Vivid', f: 'brightness(1.02) contrast(1.08) saturate(1.32)' },
+  { n: 'Silver', f: 'grayscale(1) brightness(1.06) contrast(.96)', fx: { fd:.08,t:['#e8eeff','soft-light',.1] } },
+  { n: 'Noir', f: 'grayscale(1) contrast(1.38) brightness(.94)', fx: { v:.34,gr:.04 } },
 ];
-// Picker order + categories. Newer filters are always appended at the END of STORY_FILTERS so stored extra.filter indices stay valid.
+// Picker order + categories (new filters go at the END of STORY_FILTERS so stored extra.filter indices stay valid).
 const fIdx = (names: string[]) => names.map(n => STORY_FILTERS.findIndex(f => f.n === n)).filter(i => i >= 0);
 const STORY_FILTER_ORDER: number[] = STORY_FILTERS.map((_, i) => i);
 const STORY_FILTER_CATS: { id: string; l: string; list: number[] }[] = [
   { id: 'all', l: 'الكل', list: STORY_FILTER_ORDER },
-  { id: 'top', l: 'الأشهر', list: [0, ...fIdx(['Clarendon', 'Juno', 'Lark', 'Ludwig', 'Gingham', 'Valencia', 'X-Pro II', 'Aden', 'Mayfair', 'Amaro', 'Rise', 'Hudson'])] },
-  { id: 'warm', l: 'دافئ', list: [0, ...fIdx(['Juno', 'Valencia', 'Crema', 'Rise', 'Earlybird', 'Walden', 'Kelvin', 'Toaster', 'Golden Hour', 'Sunset', 'Portra', 'Hefe'])] },
-  { id: 'cool', l: 'بارد', list: [0, ...fIdx(['Clarendon', 'Lark', 'Hudson', 'Slumber', 'Fuji', 'Teal & Orange', 'Perpetua', 'Aden'])] },
-  { id: 'film', l: 'فيلم', list: [0, ...fIdx(['Portra', 'Fuji', 'Reyes', 'Sierra', 'Brannan', 'Nashville', '1977', 'Maven', 'Sutro', 'Matte'])] },
-  { id: 'bw', l: 'أبيض وأسود', list: [0, ...fIdx(['Moon', 'Inkwell', 'Willow', 'Noir'])] },
+  { id: 'top', l: 'الأشهر', list: [0, ...fIdx(['Paris', 'Clarendon', 'Juno', 'Los Angeles', 'Oslo', 'Lark', 'Golden Hour', 'Portra 400', 'Soft Glow', 'Gingham', 'Teal & Orange', 'Moon'])] },
+  { id: 'city', l: 'مدن', list: [0, ...fIdx(['Paris', 'Los Angeles', 'Oslo', 'Lagos', 'Melbourne', 'Jakarta', 'Abu Dhabi', 'Buenos Aires', 'New York', 'Jaipur', 'Cairo', 'Tokyo', 'Rio de Janeiro'])] },
+  { id: 'face', l: 'بورتريه', list: [0, ...fIdx(['Paris', 'Soft Glow', 'Clean', 'Portra 400', 'Fuji 400H', 'Aden', 'Gingham', 'Melbourne', 'Crema', 'Lark'])] },
+  { id: 'warm', l: 'دافئ', list: [0, ...fIdx(['Los Angeles', 'Abu Dhabi', 'Cairo', 'Lagos', 'Valencia', 'Juno', 'Kodak Gold', 'Golden Hour', 'Dune', 'Buenos Aires'])] },
+  { id: 'cool', l: 'بارد', list: [0, ...fIdx(['Oslo', 'New York', 'Tokyo', 'Clarendon', 'Lark', 'Blue Hour', 'Fuji 400H', 'Moody', 'Slumber'])] },
+  { id: 'film', l: 'فيلم', list: [0, ...fIdx(['Portra 400', 'Fuji 400H', 'Kodak Gold', 'Ektar 100', 'CineStill 800T', 'Disposable', 'Polaroid', 'Reyes', 'Matte'])] },
+  { id: 'cine', l: 'سينمائي', list: [0, ...fIdx(['Teal & Orange', 'Moody', 'Dune', 'Neon Nights', 'CineStill 800T', 'Blue Hour', 'Y2K Flash', 'Vivid', 'Rio de Janeiro'])] },
+  { id: 'bw', l: 'أبيض وأسود', list: [0, ...fIdx(['Moon', 'Silver', 'Ilford HP5', 'Tri-X', 'Noir'])] },
 ];
 const GRAIN_URL = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 1.1 -.1'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")";
 function FilterFx({ i, k = 1 }: { i: number; k?: number }) {
@@ -4934,7 +4951,7 @@ function StoryComposer({ file, currentUser, users, onClose, onDone, sharedPostId
       </div>
       </div>
       {cfOpen && <CloseFriendsModal meId={currentUser.id} onClose={() => setCfOpen(false)} />}
-      {storeOpen && <KixStore onClose={() => setStoreOpen(false)} onPick={async st => { try { const blob = await (await fetch(st.gif)).blob(); const f = new File([blob], 'kix-sticker.gif', { type: 'image/gif' }); addItem('i', URL.createObjectURL(f), f); } catch { addItem('i', st.gif); } setStoreOpen(false); }} />}
+      {storeOpen && <KixStore onClose={() => setStoreOpen(false)} onPick={async st => { const blob = await loadStoreBlob(st); if (blob) { const f = new File([blob], `kix-sticker.${stkExt(blob, 'image')}`, { type: blob.type }); addItem('i', URL.createObjectURL(f), f); } else addItem('i', st.webp); setStoreOpen(false); }} />}
       {err && <div className="absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500/90 text-white text-xs">{err}</div>}
     </div>,
     document.body,
@@ -4977,15 +4994,30 @@ async function normalizePickedMedia(f: File): Promise<File> {
   } catch { return f; }
 }
 
+// True for animated WebP / APNG (re-encoding them on a canvas would freeze them on the first frame).
+async function isAnimatedImage(f: Blob): Promise<boolean> {
+  try {
+    if (f.type === 'image/gif') return true;
+    if (f.type !== 'image/webp' && f.type !== 'image/png' && f.type !== 'image/apng') return false;
+    const head = new TextDecoder('latin1').decode(new Uint8Array(await f.slice(0, 4096).arrayBuffer()));
+    return f.type === 'image/webp' ? head.includes('ANIM') || head.includes('ANMF') : head.includes('acTL');
+  } catch { return false; }
+}
+// Pictures that can be see-through (PNG / WebP stickers) stay see-through: JPEG has no transparency, so turning a sticker
+// into JPEG painted its empty background BLACK. Those go to WebP (or stay as they are), and animated ones are never touched.
 async function shrinkImageFile(f: File): Promise<File> {
   try {
     if (!f.type.startsWith('image/') || f.type === 'image/gif' || f.size < 300000) return f;
+    if (await isAnimatedImage(f)) return f;
+    const alpha = f.type === 'image/png' || f.type === 'image/webp';
     const bmp = await createImageBitmap(f);
     const k = Math.min(1, 1440 / Math.max(bmp.width, bmp.height));
     const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
     c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
-    const blob: Blob | null = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.86));
-    return blob && blob.size < f.size ? new File([blob], f.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }) : f;
+    const mime = alpha ? 'image/webp' : 'image/jpeg';
+    const blob: Blob | null = await new Promise(r => c.toBlob(r, mime, 0.86));
+    if (!blob || blob.size >= f.size || blob.type !== mime) return f; // e.g. Safari can't write WebP: keep the original PNG
+    return new File([blob], f.name.replace(/\.[^.]+$/, '') + (alpha ? '.webp' : '.jpg'), { type: mime });
   } catch { return f; }
 }
 
@@ -5833,6 +5865,7 @@ function CoinBurst({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
 async function shrinkPhoto(file: File): Promise<File> {
   if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 600 * 1024) return file;
   try {
+    if (await isAnimatedImage(file)) return file;
     const bmp = await createImageBitmap(file);
     const k = Math.min(1, 1920 / Math.max(bmp.width, bmp.height));
     const c = document.createElement('canvas');
@@ -5840,7 +5873,7 @@ async function shrinkPhoto(file: File): Promise<File> {
     c.height = Math.round(bmp.height * k);
     c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
     bmp.close();
-    const type = file.type === 'image/png' ? 'image/webp' : 'image/jpeg';
+    const type = file.type === 'image/png' || file.type === 'image/webp' ? 'image/webp' : 'image/jpeg'; // never JPEG for see-through pictures
     const blob = await new Promise<Blob | null>(res => c.toBlob(res, type, 0.85));
     if (!blob || blob.size >= file.size || blob.type !== type) return file;
     return new File([blob], file.name.replace(/\.\w+$/, '') + (type === 'image/webp' ? '.webp' : '.jpg'), { type });
@@ -10236,8 +10269,10 @@ const STUDIO_CF: { n: string; css: string; tint?: [string, number]; sp?: [string
     ...(x?.v ? { v: x.v } : {}), ...(x?.bl ? { bl: x.bl } : {}), ...(x?.gr ? { gr: x.gr } : {}), ...(x?.lk ? { lk: x.lk[0] } : {}),
   };
 });
-const STUDIO_FX = ['بدون', '🕶️ نظارة', '👑 تاج', '🐶 كلب', '🥸 شنب', '😍 قلوب', '🌟 نيون', '🐱 قطة', '🐰 أرنب', '🤓 نظارة دائرية', '😈 شيطان', '😇 هالة', '🌼 تاج ورد', '🎩 قبعة', '🎓 تخرج', '😊 خدود', '💋 أحمر شفاه', '🎀 ظل عيون', '⭐ نجوم', '❄️ ثلج', '🔥 نار', '🎭 قناع', '🧔 لحية', '🎅 بابا نويل', '🙄 عيون كبيرة', '🤡 أنف مهرج', '🎬 نظارة 3D', '🎧 سماعات', '💎 ألماسة', '🌈 قوس قزح', '😢 دموع', '🐲 تنين', '✨ تجميل ذكي', '👀 عيون ضخمة', '😁 ابتسامة ضخمة', '🔮 وجه مجسّم', '🪞 مرآة', '📺 غلتش', '🧊 هولوجرام', '🥇 وجه ذهبي', '🎨 كارتون', '🦋 فراشات', '🤪 وجه ضخم', '🎈 رأس كبير', '😵 وجه ممطوط', '🫓 وجه مفلطح', '👄 فم عملاق', '🐽 أنف ضخم', '👸 ملكة', '🥽 سايبر', '🌈 دموع ملونة', '💫 هالة نيون', '🧛 دراكولا', '🤖 روبوت', '🦄 يونيكورن', '🎉 حفلة', '👁️ عين ثالثة', '🌸 أنمي', '💄 جلام', '🌷 بلاش كوري', '✨ هايلايتر', '🍑 خوخ', '🌙 سموكي', '❤️ ريد ليب', '💜 نيون وجه', '🌈 وجه ملوّن', '🧿 جلاس سكين', '🖤 غوثيك', '🤎 نمش', '🍓 توت', '🌅 جولدن آور', '🐻 دبدوب', '🦊 ثعلب', '🐼 باندا', '🏴‍☠️ قرصان', '🧙 ساحر', '🤠 كاوبوي', '🐝 نحلة', '🐸 ضفدع', '🐷 خنزير', '🧢 كاب'];
-const STUDIO_FX_ORDER: number[] = [0, ...Array.from({ length: 10 }, (_, k) => 71 + k), ...Array.from({ length: 70 }, (_, k) => k + 1)]; // new lenses first
+const STUDIO_FX = ['بدون', '🕶️ نظارة', '👑 تاج', '🐶 كلب', '🥸 شنب', '😍 قلوب', '🌟 نيون', '🐱 قطة', '🐰 أرنب', '🤓 نظارة دائرية', '😈 شيطان', '😇 هالة', '🌼 تاج ورد', '🎩 قبعة', '🎓 تخرج', '😊 خدود', '💋 أحمر شفاه', '🎀 ظل عيون', '⭐ نجوم', '❄️ ثلج', '🔥 نار', '🎭 قناع', '🧔 لحية', '🎅 بابا نويل', '🙄 عيون كبيرة', '🤡 أنف مهرج', '🎬 نظارة 3D', '🎧 سماعات', '💎 ألماسة', '🌈 قوس قزح', '😢 دموع', '🐲 تنين', '✨ تجميل ذكي', '👀 عيون ضخمة', '😁 ابتسامة ضخمة', '🔮 وجه مجسّم', '🪞 مرآة', '📺 غلتش', '🧊 هولوجرام', '🥇 وجه ذهبي', '🎨 كارتون', '🦋 فراشات', '🤪 وجه ضخم', '🎈 رأس كبير', '😵 وجه ممطوط', '🫓 وجه مفلطح', '👄 فم عملاق', '🐽 أنف ضخم', '👸 ملكة', '🥽 سايبر', '🌈 دموع ملونة', '💫 هالة نيون', '🧛 دراكولا', '🤖 روبوت', '🦄 يونيكورن', '🎉 حفلة', '👁️ عين ثالثة', '🌸 أنمي', '💄 جلام', '🌷 بلاش كوري', '✨ هايلايتر', '🍑 خوخ', '🌙 سموكي', '❤️ ريد ليب', '💜 نيون وجه', '🌈 وجه ملوّن', '🧿 جلاس سكين', '🖤 غوثيك', '🤎 نمش', '🍓 توت', '🌅 جولدن آور', '🐻 دبدوب', '🦊 ثعلب', '🐼 باندا', '🏴‍☠️ قرصان', '🧙 ساحر', '🤠 كاوبوي', '🐝 نحلة', '🐸 ضفدع', '🐷 خنزير', '🧢 كاب', '🌸 تاج ورد ناعم', '🐨 كوالا', '🐯 نمر', '🐭 فار', '🦁 أسد', '✨ نمش ذهبي', '🎀 فيونكة', '👓 نظارة شفافة', '😎 نظارة قلوب', '🌟 نجوم بتلف', '💠 تاج كريستال', '🐶 جرو', '👼 ملاك'];
+// The oldest, plain-emoji lenses are hidden from the picker (their code stays so the numbering never shifts). Newest first.
+const STUDIO_FX_OLD = new Set([2, 4, 5, 12, 13, 14, 16, 18, 19, 20, 25, 28, 30, 31]);
+const STUDIO_FX_ORDER: number[] = [0, ...Array.from({ length: 13 }, (_, k) => 81 + k), ...Array.from({ length: 10 }, (_, k) => 71 + k), ...Array.from({ length: 70 }, (_, k) => k + 1).filter(i => !STUDIO_FX_OLD.has(i))];
 
 const FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
 type StudioTrack = { url: string; name: string; start: number; end: number; file?: File };
@@ -10658,6 +10693,155 @@ function drawFaceFx(ctx: CanvasRenderingContext2D, fx: number, lm: FaceLm, g: Fa
       rot(top, () => { ctx.fillStyle = '#f9a8c9'; for (const sg of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sg * eye * 0.4, fh * 0.05); ctx.lineTo(sg * eye * 0.95, 0); ctx.lineTo(sg * eye * 0.75, -fh * 0.25); ctx.closePath(); ctx.fill(); } });
       rot(nose, () => { ctx.fillStyle = '#f472b6'; ell(0, eye * 0.08, eye * 0.3, eye * 0.22); ctx.fillStyle = '#9d174d'; ell(-eye * 0.1, eye * 0.08, eye * 0.055, eye * 0.085); ell(eye * 0.1, eye * 0.08, eye * 0.055, eye * 0.085); });
       break;
+    case 81: { // soft flower crown
+      const cols = ['#ffb3c7', '#ffd6e0', '#fff1a8', '#c8b6ff', '#ffc29e', '#ffffff'];
+      rot(top, () => {
+        for (let k = -4; k <= 4; k++) { const x = k * eye * 0.27, y = fh * 0.03 + k * k * fh * 0.008; ctx.fillStyle = k % 2 ? '#4d9e5a' : '#6cbf73'; ell(x + eye * 0.13, y + eye * 0.08, eye * 0.15, eye * 0.06, 0.6); }
+        for (let k = -4; k <= 4; k++) {
+          const x = k * eye * 0.27, y = fh * 0.03 + k * k * fh * 0.008, r = eye * (k % 2 ? 0.12 : 0.15), sp = now / 4000 + k;
+          ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.18)'; ctx.shadowBlur = 6;
+          for (let q = 0; q < 5; q++) { const a = sp + (q * Math.PI * 2) / 5; ctx.fillStyle = cols[(k + 4) % cols.length]; ell(x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.7, r * 0.62, r * 0.42, a); }
+          ctx.restore(); ctx.fillStyle = '#ffcf4a'; ell(x, y, r * 0.32, r * 0.32);
+        }
+      });
+      break;
+    }
+    case 82: // koala
+      rot(top, () => { for (const sg of [-1, 1]) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 8; ctx.fillStyle = '#9aa0a6'; ell(sg * eye * 0.88, fh * 0.12, eye * 0.34, eye * 0.32); ctx.restore(); ctx.fillStyle = '#eceff1'; ell(sg * eye * 0.88, fh * 0.13, eye * 0.2, eye * 0.19); } });
+      rot(nose, () => { const gr = ctx.createLinearGradient(0, -eye * 0.16, 0, eye * 0.18); gr.addColorStop(0, '#4a4a52'); gr.addColorStop(1, '#1d1d22'); ctx.fillStyle = gr; ell(0, eye * 0.01, eye * 0.13, eye * 0.17); ctx.fillStyle = 'rgba(255,255,255,.35)'; ell(-eye * 0.04, -eye * 0.07, eye * 0.03, eye * 0.05); });
+      break;
+    case 83: { // tiger
+      rot(top, () => {
+        for (const sg of [-1, 1]) { ctx.fillStyle = '#e8891a'; ell(sg * eye * 0.8, fh * 0.07, eye * 0.25, eye * 0.24); ctx.fillStyle = '#1f1308'; ell(sg * eye * 0.8, fh * 0.06, eye * 0.17, eye * 0.16); ctx.fillStyle = '#fff3e0'; ell(sg * eye * 0.8, fh * 0.08, eye * 0.1, eye * 0.1); }
+        ctx.strokeStyle = 'rgba(25,15,8,.85)'; ctx.lineCap = 'round';
+        for (let k = -1; k <= 1; k++) { ctx.lineWidth = eye * (k ? 0.04 : 0.055); ctx.beginPath(); ctx.moveTo(k * eye * 0.16, fh * 0.07); ctx.quadraticCurveTo(k * eye * 0.2, fh * 0.13, k * eye * 0.12, fh * (k ? 0.17 : 0.2)); ctx.stroke(); }
+      });
+      rot(nose, () => {
+        ctx.strokeStyle = 'rgba(25,15,8,.8)'; ctx.lineCap = 'round';
+        for (const sg of [-1, 1]) for (let k = 0; k < 3; k++) { ctx.lineWidth = eye * (0.045 - k * 0.008); ctx.beginPath(); ctx.moveTo(sg * eye * 1.0, -eye * 0.12 + k * eye * 0.15); ctx.quadraticCurveTo(sg * eye * 0.85, -eye * 0.08 + k * eye * 0.15, sg * eye * (0.68 + k * 0.04), -eye * 0.02 + k * eye * 0.14); ctx.stroke(); }
+        ctx.fillStyle = '#f9a8c0'; ctx.beginPath(); ctx.moveTo(-eye * 0.15, -eye * 0.04); ctx.lineTo(eye * 0.15, -eye * 0.04); ctx.lineTo(0, eye * 0.1); ctx.closePath(); ctx.fill();
+      });
+      break;
+    }
+    case 84: // mouse
+      rot(top, () => { for (const sg of [-1, 1]) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 8; ctx.fillStyle = '#a3a8b3'; ell(sg * eye * 0.92, -fh * 0.02, eye * 0.42, eye * 0.42); ctx.restore(); ctx.fillStyle = '#f9b4cf'; ell(sg * eye * 0.92, -fh * 0.01, eye * 0.27, eye * 0.27); } });
+      rot(nose, () => { ctx.fillStyle = '#f472b6'; ell(0, eye * 0.02, eye * 0.07, eye * 0.055); ctx.strokeStyle = 'rgba(40,40,48,.75)'; ctx.lineWidth = Math.max(1.5, eye * 0.015); for (const sg of [-1, 1]) for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(sg * eye * 0.12, eye * 0.06); ctx.lineTo(sg * eye * 0.6, eye * 0.04 + k * eye * 0.09); ctx.stroke(); } });
+      break;
+    case 85: { // lion mane
+      const cx = mid(top, chin), rx = eye * 1.22, ry = fh * 0.66;
+      ctx.save(); ctx.translate(cx.x, cx.y); ctx.rotate(roll);
+      for (let ring = 0; ring < 2; ring++) for (let k = 0; k < 26; k++) {
+        const a = (k / 26) * Math.PI * 2 + ring * 0.12 + Math.sin(now / 500 + k) * 0.02;
+        const x = Math.cos(a) * rx * (1 + ring * 0.12), y = Math.sin(a) * ry * (1 + ring * 0.1);
+        ctx.fillStyle = ring ? '#a8551a' : (k % 2 ? '#d98a2b' : '#c46f1c'); ell(x, y, eye * 0.3, eye * 0.2, a);
+      }
+      ctx.restore();
+      rot(nose, () => { ctx.fillStyle = 'rgba(255,236,200,.75)'; ell(0, eye * 0.14, eye * 0.32, eye * 0.2); ctx.fillStyle = '#3b2416'; ctx.beginPath(); ctx.moveTo(-eye * 0.11, -eye * 0.02); ctx.lineTo(eye * 0.11, -eye * 0.02); ctx.lineTo(0, eye * 0.09); ctx.closePath(); ctx.fill(); });
+      break;
+    }
+    case 86: { // gold freckles that twinkle
+      const base = [P(205), P(425), P(50), P(280), P(6)];
+      ctx.save(); ctx.shadowColor = '#ffd36b'; ctx.shadowBlur = 8;
+      for (let k = 0; k < 28; k++) {
+        const b = base[k % base.length];
+        const x = b.x + ((((k * 37) % 100) - 50) / 100) * eye * 0.34, y = b.y + ((((k * 53) % 100) - 50) / 100) * eye * 0.22;
+        const r = eye * (0.016 + 0.01 * (0.5 + 0.5 * Math.sin(now / 220 + k * 1.7)));
+        ctx.fillStyle = k % 3 ? '#ffd36b' : '#fff4c2'; ell(x, y, r, r);
+      }
+      ctx.restore();
+      break;
+    }
+    case 87: // big pink bow
+      rot(top, () => {
+        const y = -fh * 0.06, sw = 1 + 0.03 * Math.sin(now / 300);
+        ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 10;
+        for (const sg of [-1, 1]) {
+          const gr = ctx.createLinearGradient(0, y - eye * 0.35, sg * eye * 0.8, y + eye * 0.2); gr.addColorStop(0, '#ff7eb6'); gr.addColorStop(1, '#e0447f'); ctx.fillStyle = gr;
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(sg * eye * 0.3 * sw, y - eye * 0.42, sg * eye * 0.8 * sw, y - eye * 0.28, sg * eye * 0.74 * sw, y + eye * 0.04); ctx.bezierCurveTo(sg * eye * 0.66 * sw, y + eye * 0.32, sg * eye * 0.3 * sw, y + eye * 0.2, 0, y); ctx.fill();
+          ctx.fillStyle = '#d63a74'; ctx.beginPath(); ctx.moveTo(sg * eye * 0.05, y + eye * 0.05); ctx.lineTo(sg * eye * 0.3, y + eye * 0.45); ctx.lineTo(sg * eye * 0.18, y + eye * 0.42); ctx.lineTo(sg * eye * 0.12, y + eye * 0.5); ctx.closePath(); ctx.fill();
+        }
+        ctx.fillStyle = '#c42f68'; rr(-eye * 0.11, y - eye * 0.1, eye * 0.22, eye * 0.2, eye * 0.07);
+        ctx.restore(); ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = eye * 0.025; ctx.beginPath(); ctx.moveTo(-eye * 0.55, y - eye * 0.12); ctx.quadraticCurveTo(-eye * 0.35, y - eye * 0.26, -eye * 0.18, y - eye * 0.12); ctx.stroke();
+      });
+      break;
+    case 88: // clear modern glasses
+      rot(em, () => {
+        const w = sep * 0.86, h = sep * 0.62, sr = (x: number, y: number, ww: number, hh: number, r: number) => { ctx.beginPath(); const cc = ctx as unknown as { roundRect?: (...a: number[]) => void }; if (cc.roundRect) cc.roundRect(x, y, ww, hh, r); else ctx.rect(x, y, ww, hh); };
+        for (const sg of [-1, 1]) {
+          const x = sg * sep * 0.5 - w / 2;
+          sr(x, -h / 2, w, h, h * 0.35); ctx.fillStyle = 'rgba(210,235,255,.12)'; ctx.fill(); ctx.strokeStyle = 'rgba(30,30,36,.92)'; ctx.lineWidth = Math.max(2, eye * 0.035); ctx.stroke();
+          ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = Math.max(1.5, eye * 0.02); ctx.beginPath(); ctx.moveTo(x + w * 0.2, -h * 0.3); ctx.lineTo(x + w * 0.42, -h * 0.3); ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(30,30,36,.92)'; ctx.lineWidth = Math.max(2, eye * 0.03); ctx.beginPath(); ctx.moveTo(-sep * 0.5 + w / 2, -h * 0.12); ctx.quadraticCurveTo(0, -h * 0.32, sep * 0.5 - w / 2, -h * 0.12); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-sep * 0.5 - w / 2, -h * 0.25); ctx.lineTo(-sep * 1.05, -h * 0.2); ctx.moveTo(sep * 0.5 + w / 2, -h * 0.25); ctx.lineTo(sep * 1.05, -h * 0.2); ctx.stroke();
+      });
+      break;
+    case 89: // heart sunglasses
+      rot(em, () => {
+        const sz = sep * 0.6;
+        for (const sg of [-1, 1]) {
+          const cx = sg * sep * 0.52, cy = 0;
+          const gr = ctx.createLinearGradient(0, cy - sz, 0, cy + sz * 0.4); gr.addColorStop(0, 'rgba(255,60,120,.92)'); gr.addColorStop(1, 'rgba(120,0,50,.92)');
+          ctx.beginPath(); ctx.moveTo(cx, cy + sz * 0.42); ctx.bezierCurveTo(cx - sz * 0.95, cy - sz * 0.12, cx - sz * 0.5, cy - sz * 0.9, cx, cy - sz * 0.38); ctx.bezierCurveTo(cx + sz * 0.5, cy - sz * 0.9, cx + sz * 0.95, cy - sz * 0.12, cx, cy + sz * 0.42); ctx.closePath();
+          ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = '#ff9cc2'; ctx.lineWidth = Math.max(2, eye * 0.025); ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,.45)'; ell(cx - sz * 0.28, cy - sz * 0.38, sz * 0.12, sz * 0.06, -0.5);
+        }
+        ctx.strokeStyle = '#ff9cc2'; ctx.lineWidth = Math.max(2, eye * 0.03); ctx.beginPath(); ctx.moveTo(-sep * 0.2, -sz * 0.3); ctx.quadraticCurveTo(0, -sz * 0.45, sep * 0.2, -sz * 0.3); ctx.stroke();
+      });
+      break;
+    case 90: { // stars orbiting the head
+      const ctr = { x: top.x, y: top.y - fh * 0.08 };
+      const items: { x: number; y: number; z: number }[] = [];
+      for (let k = 0; k < 6; k++) { const a = now / 900 + (k * Math.PI * 2) / 6; items.push({ x: Math.cos(a) * eye * 1.15, y: Math.sin(a) * fh * 0.12, z: Math.sin(a) }); }
+      items.sort((u, v) => u.z - v.z);
+      rot(ctr, () => {
+        for (const it of items) {
+          const r = eye * (0.15 + 0.05 * it.z);
+          ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(now / 600); ctx.globalAlpha = 0.65 + 0.35 * (it.z + 1) / 2; ctx.shadowColor = '#ffe27a'; ctx.shadowBlur = 12;
+          const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, '#fffbe0'); gr.addColorStop(1, '#ffc93c'); ctx.fillStyle = gr;
+          ctx.beginPath(); for (let q = 0; q < 10; q++) { const rr2 = q % 2 ? r * 0.45 : r; const a = (q * Math.PI) / 5 - Math.PI / 2; if (q) ctx.lineTo(Math.cos(a) * rr2, Math.sin(a) * rr2); else ctx.moveTo(Math.cos(a) * rr2, Math.sin(a) * rr2); } ctx.closePath(); ctx.fill(); ctx.restore();
+        }
+      });
+      break;
+    }
+    case 91: // crystal tiara
+      rot(top, () => {
+        const by = fh * 0.05;
+        ctx.save(); ctx.shadowColor = 'rgba(180,220,255,.9)'; ctx.shadowBlur = 14;
+        ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = eye * 0.05; ctx.beginPath(); ctx.moveTo(-eye * 0.9, by + fh * 0.03); ctx.quadraticCurveTo(0, by - fh * 0.04, eye * 0.9, by + fh * 0.03); ctx.stroke();
+        for (let k = -3; k <= 3; k++) {
+          const x = k * eye * 0.24, hgt = fh * (0.09 + 0.12 * (1 - Math.abs(k) / 3)), w = eye * 0.11, y0 = by - fh * 0.01 + k * k * fh * 0.004;
+          const gr = ctx.createLinearGradient(x, y0 - hgt, x, y0); gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, '#a5d8ff'); ctx.fillStyle = gr;
+          ctx.beginPath(); ctx.moveTo(x - w, y0); ctx.lineTo(x, y0 - hgt); ctx.lineTo(x + w, y0); ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+        ctx.fillStyle = '#ff6fb1'; ell(0, by - fh * 0.03, eye * 0.06, eye * 0.08);
+        for (let k = 0; k < 3; k++) { const a = now / 400 + k * 2.1; ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.5 * Math.sin(a)})`; ell(Math.cos(k * 2.3) * eye * 0.6, by - fh * (0.08 + 0.04 * k), eye * 0.025, eye * 0.025); }
+      });
+      break;
+    case 92: // puppy
+      rot(top, () => {
+        for (const sg of [-1, 1]) {
+          const flap = Math.sin(now / 260 + sg) * eye * 0.03;
+          ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 8; ctx.fillStyle = '#9a6a3a';
+          ctx.beginPath(); ctx.moveTo(sg * eye * 0.5, fh * 0.03); ctx.bezierCurveTo(sg * eye * 1.15, -fh * 0.03, sg * eye * 1.28 + flap, fh * 0.34, sg * eye * 0.98 + flap, fh * 0.46); ctx.bezierCurveTo(sg * eye * 0.82, fh * 0.42, sg * eye * 0.68, fh * 0.2, sg * eye * 0.5, fh * 0.03); ctx.fill(); ctx.restore();
+          ctx.fillStyle = 'rgba(70,40,18,.5)'; ctx.beginPath(); ctx.moveTo(sg * eye * 0.66, fh * 0.08); ctx.bezierCurveTo(sg * eye * 1.0, fh * 0.08, sg * eye * 1.1 + flap, fh * 0.32, sg * eye * 0.97 + flap, fh * 0.4); ctx.bezierCurveTo(sg * eye * 0.85, fh * 0.3, sg * eye * 0.75, fh * 0.18, sg * eye * 0.66, fh * 0.08); ctx.fill();
+        }
+      });
+      rot(nose, () => { const gr = ctx.createRadialGradient(-eye * 0.03, -eye * 0.02, 0, 0, 0, eye * 0.14); gr.addColorStop(0, '#4a4a4a'); gr.addColorStop(1, '#111'); ctx.fillStyle = gr; ell(0, eye * 0.02, eye * 0.14, eye * 0.095); ctx.fillStyle = 'rgba(255,255,255,.45)'; ell(-eye * 0.04, -eye * 0.02, eye * 0.035, eye * 0.02); });
+      if (open) rot(lipL, () => { ctx.fillStyle = '#fb7185'; rr(-eye * 0.13, -eye * 0.02, eye * 0.26, fh * 0.22 * (1 + 0.08 * Math.sin(now / 110)), eye * 0.13); ctx.strokeStyle = 'rgba(190,40,70,.6)'; ctx.lineWidth = eye * 0.02; ctx.beginPath(); ctx.moveTo(0, eye * 0.02); ctx.lineTo(0, fh * 0.15); ctx.stroke(); });
+      break;
+    case 93: { // angel: glowing halo + soft wings
+      rot(top, () => { ctx.save(); ctx.shadowColor = '#ffe9a0'; ctx.shadowBlur = 22; ctx.strokeStyle = '#ffe49a'; ctx.lineWidth = eye * 0.07; ctx.beginPath(); ctx.ellipse(0, -fh * 0.18 + Math.sin(now / 500) * fh * 0.015, eye * 0.62, fh * 0.07, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); });
+      for (const sg of [-1, 1]) {
+        const anc = sg < 0 ? (P(234).x < P(454).x ? P(234) : P(454)) : (P(234).x < P(454).x ? P(454) : P(234));
+        const flap = Math.sin(now / 320) * 0.12;
+        ctx.save(); ctx.translate(anc.x, anc.y - fh * 0.05); ctx.rotate(roll + sg * flap);
+        for (let k = 0; k < 6; k++) { ctx.save(); ctx.shadowColor = 'rgba(150,170,210,.6)'; ctx.shadowBlur = 8; ctx.fillStyle = k % 2 ? 'rgba(255,255,255,.95)' : 'rgba(240,245,255,.95)'; const a = -0.9 + k * 0.32; ell(sg * eye * (0.35 + k * 0.04) * Math.cos(a) + sg * eye * 0.15, eye * 0.5 * Math.sin(a), eye * (0.36 - k * 0.03), eye * 0.09, sg * a); ctx.restore(); }
+        ctx.restore();
+      }
+      break;
+    }
     case 80: // cap
       rot(top, () => { ctx.fillStyle = '#2563eb'; ctx.beginPath(); ctx.ellipse(0, fh * 0.03, eye * 0.95, fh * 0.3, 0, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#1d4ed8'; ell(eye * 0.55, fh * 0.05, eye * 0.7, fh * 0.06); ctx.fillStyle = '#fff'; ell(0, -fh * 0.1, eye * 0.07, eye * 0.07); });
       break;
@@ -12848,11 +13032,6 @@ function SaveStickerBtn({ url, onDone }: { url: string; onDone: () => void }) {
 }
 const stkExt = (b: Blob, kind: 'image' | 'video') => (b.type.split('/')[1] ?? (kind === 'video' ? 'webm' : 'webp')).split(';')[0];
 
-function drawContain(ctx: CanvasRenderingContext2D, src: CanvasImageSource, sw: number, sh: number, size: number) {
-  const k = Math.min(size / sw, size / sh);
-  const w = sw * k, h = sh * k;
-  ctx.drawImage(src, (size - w) / 2, (size - h) / 2, w, h);
-}
 
 // Picture -> 512px transparent WebP with rounded corners.
 function imageToSticker(file: File): Promise<Blob> {
@@ -12907,8 +13086,10 @@ async function videoToSticker(file: File, start: number, len: number): Promise<B
     await v.play();
     await new Promise<void>(res => {
       const tick = () => {
-        ctx.clearRect(0, 0, size, size);
-        drawContain(ctx, v, v.videoWidth, v.videoHeight, size);
+        // A recorded video has no transparency: letterbox bars would turn black, so the clip fills the square (centre crop).
+        const k = Math.max(size / (v.videoWidth || size), size / (v.videoHeight || size));
+        const w = (v.videoWidth || size) * k, h = (v.videoHeight || size) * k;
+        ctx.drawImage(v, (size - w) / 2, (size - h) / 2, w, h);
         if (v.ended || v.currentTime - t0 >= len) { res(); return; }
         requestAnimationFrame(tick);
       };
@@ -13498,6 +13679,269 @@ const STORE_ITEMS: [string, string, string][] = [
   ['1f1f4_1f1f2', 'flags', 'عمان oman'],
   ['1f1e7_1f1ed', 'flags', 'البحرين bahrain'],
   ['1f1fe_1f1ea', 'flags', 'اليمن yemen'],
+  ['1f611', 'faces', 'بلا تعبير expressionless'],
+  ['1f614', 'faces', 'حزين pensive'],
+  ['1f62a', 'faces', 'نعسان sleepy'],
+  ['1f635', 'faces', 'دوخة dizzy'],
+  ['1f615', 'faces', 'محتار confused'],
+  ['1f61f', 'faces', 'قلقان worried'],
+  ['1f641', 'faces', 'زعلان frown'],
+  ['1f626', 'faces', 'مخضوض frowning open mouth'],
+  ['1f628', 'faces', 'خايف fearful'],
+  ['1f630', 'faces', 'عرقان قلقان anxious sweat'],
+  ['1f616', 'faces', 'متضايق confounded'],
+  ['1f623', 'faces', 'مجهد persevere'],
+  ['1f613', 'faces', 'عرق sweat'],
+  ['1f63a', 'faces', 'قطة ضحك cat smile'],
+  ['1f639', 'faces', 'قطة دموع ضحك cat joy'],
+  ['1f63b', 'faces', 'قطة قلوب cat heart eyes'],
+  ['1f640', 'faces', 'قطة مخضوضة cat scream'],
+  ['1f648', 'faces', 'قرد مش شايف see no evil monkey'],
+  ['1f649', 'faces', 'قرد مش سامع hear no evil'],
+  ['1f64a', 'faces', 'قرد ساكت speak no evil'],
+  ['1fae4', 'faces', 'مش مقتنع diagonal mouth'],
+  ['1fae8', 'faces', 'بيترعش shaking'],
+  ['2764_fe0f_200d_1f525', 'hearts', 'قلب نار heart on fire'],
+  ['2764_fe0f_200d_1fa79', 'hearts', 'قلب متصلح mending heart'],
+  ['1f3ee', 'party', 'فانوس رمضان lantern ramadan'],
+  ['1f932', 'hands', 'دعاء palms up prayer'],
+  ['1f450', 'hands', 'إيدين open hands'],
+  ['1f90c', 'hands', 'بالراحة pinched fingers'],
+  ['270b', 'hands', 'كف stop hand'],
+  ['1faf6', 'hands', 'قلب بالإيد heart hands'],
+  ['1faf0', 'hands', 'قلب كوري finger heart'],
+  ['1faf5', 'hands', 'انت pointing you'],
+  ['270d_fe0f', 'hands', 'بكتب writing'],
+  ['1f393', 'clothes', 'تخرج graduation'],
+  ['1f3b5', 'symbols', 'موسيقى music note'],
+  ['1f31d', 'nature', 'قمر full moon face'],
+  ['1f342', 'nature', 'خريف fallen leaf'],
+  ['1f331', 'nature', 'نبتة seedling'],
+  ['1f42d', 'animals', 'فار mouse'],
+  ['1f438', 'animals', 'ضفدع frog'],
+  ['1f435', 'animals', 'قرد monkey'],
+  ['1f424', 'animals', 'كتكوت chick'],
+  ['1f40e', 'animals', 'حصان horse'],
+  ['1f36c', 'food', 'بونبوني candy'],
+  ['1f3dd_fe0f', 'travel', 'جزيرة island'],
+  ['231b', 'objects', 'ساعة رملية hourglass'],
+  ['1fa84', 'fun', 'عصاية سحرية magic wand'],
+  ['1fa69', 'fun', 'ديسكو mirror ball disco'],
+  ['1f57a', 'fun', 'رقص dancing man'],
+  ['1f483', 'fun', 'رقص dancer woman'],
+  ['1f977', 'fun', 'نينجا ninja'],
+  ['1f936', 'fun', 'ماما نويل mrs claus'],
+  ['1f47c', 'fun', 'ملاك angel baby'],
+  ['1f47e', 'fun', 'لعبة فضاء space invader'],
+  ['1f384', 'party', 'شجرة كريسماس christmas tree'],
+  ['1f1f2_1f1f7', 'flags', 'موريتانيا mauritania'],
+  ['1f1f8_1f1f4', 'flags', 'الصومال somalia'],
+  ['1f1e9_1f1ef', 'flags', 'جيبوتي djibouti'],
+  ['1f1f0_1f1f2', 'flags', 'جزر القمر comoros'],
+  ['1f1ee_1f1f7', 'flags', 'إيران iran'],
+  ['1f1f5_1f1f0', 'flags', 'باكستان pakistan'],
+  ['1f1ee_1f1f3', 'flags', 'الهند india'],
+  ['1f1ee_1f1e9', 'flags', 'إندونيسيا indonesia'],
+  ['1f1f2_1f1fe', 'flags', 'ماليزيا malaysia'],
+  ['1f1ef_1f1f5', 'flags', 'اليابان japan'],
+  ['1f1f0_1f1f7', 'flags', 'كوريا korea'],
+  ['1f1e8_1f1f3', 'flags', 'الصين china'],
+  ['1f1f3_1f1f1', 'flags', 'هولندا netherlands'],
+  ['1f1e7_1f1ea', 'flags', 'بلجيكا belgium'],
+  ['1f1e8_1f1ed', 'flags', 'سويسرا switzerland'],
+  ['1f1f8_1f1ea', 'flags', 'السويد sweden'],
+  ['1f1f3_1f1f4', 'flags', 'النرويج norway'],
+  ['1f1e9_1f1f0', 'flags', 'الدنمارك denmark'],
+  ['1f1f7_1f1fa', 'flags', 'روسيا russia'],
+  ['1f1fa_1f1e6', 'flags', 'أوكرانيا ukraine'],
+  ['1f1ec_1f1f7', 'flags', 'اليونان greece'],
+  ['1f1e8_1f1e6', 'flags', 'كندا canada'],
+  ['1f1f2_1f1fd', 'flags', 'المكسيك mexico'],
+  ['1f1e8_1f1f4', 'flags', 'كولومبيا colombia'],
+  ['1f1f3_1f1ec', 'flags', 'نيجيريا nigeria'],
+  ['1f1f8_1f1f3', 'flags', 'السنغال senegal'],
+  ['1f1e8_1f1f2', 'flags', 'الكاميرون cameroon'],
+  ['1f1ec_1f1ed', 'flags', 'غانا ghana'],
+  ['1f1ff_1f1e6', 'flags', 'جنوب أفريقيا south africa'],
+  ['1f1e6_1f1fa', 'flags', 'أستراليا australia'],
+  ['1f617', 'faces', 'بوسة kissing'],
+  ['1f619', 'faces', 'بوسة مبتسم kissing smiling'],
+  ['1f61a', 'faces', 'بوسة عيون مقفولة kissing closed eyes'],
+  ['1f61d', 'faces', 'لسان عيون مقفولة squint tongue'],
+  ['1f636_200d_1f32b_fe0f', 'faces', 'في السحاب face in clouds'],
+  ['1f62e_200d_1f4a8', 'faces', 'بينفخ exhale'],
+  ['1f635_200d_1f4ab', 'faces', 'عيون لولبية spiral eyes'],
+  ['1f643', 'faces', 'مقلوب upside down'],
+  ['263a_fe0f', 'faces', 'مبتسم smiling relaxed'],
+  ['1f479', 'faces', 'غول ogre'],
+  ['1f47a', 'faces', 'عفريت goblin'],
+  ['1f9cc', 'fun', 'ترول troll'],
+  ['1f63c', 'faces', 'قطة خبيثة cat smirk'],
+  ['1f63d', 'faces', 'قطة بوسة cat kiss'],
+  ['1f63f', 'faces', 'قطة بتعيط cat cry'],
+  ['1f63e', 'faces', 'قطة زعلانة cat pout'],
+  ['1f476', 'fun', 'بيبي baby'],
+  ['1f9d2', 'fun', 'طفل child'],
+  ['1f466', 'fun', 'ولد boy'],
+  ['1f467', 'fun', 'بنت girl'],
+  ['1f9d1', 'fun', 'شخص person'],
+  ['1f474', 'fun', 'جدو old man'],
+  ['1f475', 'fun', 'تيتة old woman'],
+  ['1f46e', 'fun', 'ظابط police'],
+  ['1f477', 'fun', 'عامل construction'],
+  ['1f482', 'fun', 'حارس guard'],
+  ['1f9d1_200d_1f373', 'fun', 'شيف cook chef'],
+  ['1f9d1_200d_1f393', 'fun', 'طالب student'],
+  ['1f9d1_200d_1f3eb', 'fun', 'مدرس teacher'],
+  ['1f9d1_200d_2695_fe0f', 'fun', 'دكتور doctor'],
+  ['1f9d1_200d_1f4bb', 'fun', 'مبرمج programmer coder'],
+  ['1f9d1_200d_1f3a4', 'fun', 'مغني singer'],
+  ['1f9d1_200d_1f680', 'fun', 'رائد فضاء astronaut'],
+  ['1f9d1_200d_1f692', 'fun', 'مطافي firefighter'],
+  ['1f478', 'fun', 'أميرة princess'],
+  ['1f934', 'fun', 'أمير prince'],
+  ['1f9d5', 'fun', 'محجبة hijab woman'],
+  ['1f470', 'fun', 'عروسة bride'],
+  ['1f935', 'fun', 'عريس groom'],
+  ['1f930', 'fun', 'حامل pregnant'],
+  ['1f46a', 'fun', 'عيلة family'],
+  ['1f46b', 'fun', 'ثنائي couple'],
+  ['1f645', 'fun', 'لا no gesture'],
+  ['1f646', 'fun', 'تمام ok gesture'],
+  ['1f6b6', 'sports', 'مشي walking'],
+  ['1f9d8', 'sports', 'يوجا yoga'],
+  ['1f94b', 'sports', 'كاراتيه martial arts'],
+  ['1f3f8', 'sports', 'ريشة badminton'],
+  ['26be', 'sports', 'بيسبول baseball'],
+  ['265f_fe0f', 'sports', 'شطرنج chess'],
+  ['1f35a', 'food', 'رز rice'],
+  ['1f35b', 'food', 'كاري curry'],
+  ['1f9c6', 'food', 'فلافل falafel'],
+  ['1f372', 'food', 'شوربة stew'],
+  ['1f95e', 'food', 'بان كيك pancakes'],
+  ['1f9c7', 'food', 'وافل waffle'],
+  ['1f950', 'food', 'كرواسون croissant'],
+  ['1f956', 'food', 'عيش baguette'],
+  ['1f968', 'food', 'بريتزل pretzel'],
+  ['1f969', 'food', 'ستيك steak'],
+  ['1f364', 'food', 'جمبري shrimp'],
+  ['1f9c1', 'food', 'كب كيك cupcake'],
+  ['1f967', 'food', 'فطيرة pie'],
+  ['1f36e', 'food', 'كاسترد custard'],
+  ['1f9c9', 'food', 'متة mate'],
+  ['1f378', 'food', 'كوكتيل cocktail'],
+  ['1f348', 'food', 'شمام melon'],
+  ['1f95d', 'food', 'كيوي kiwi'],
+  ['1f966', 'food', 'بروكلي broccoli'],
+  ['1f344', 'food', 'مشروم mushroom'],
+  ['1f330', 'food', 'أبو فروة chestnut'],
+  ['1f9c2', 'food', 'ملح salt'],
+  ['1f37d_fe0f', 'food', 'أكل plate'],
+  ['1f3e1', 'travel', 'بيت جنينة home garden'],
+  ['1f3eb', 'travel', 'مدرسة school'],
+  ['1f3e5', 'travel', 'مستشفى hospital'],
+  ['1f691', 'travel', 'إسعاف ambulance'],
+  ['1f692', 'travel', 'مطافي fire engine'],
+  ['1f693', 'travel', 'بوليس police car'],
+  ['1f9ed', 'travel', 'بوصلة compass'],
+  ['1f4fb', 'objects', 'راديو radio'],
+  ['1f4de', 'objects', 'تليفون telephone'],
+  ['1f50c', 'objects', 'فيشة plug'],
+  ['1f4bf', 'objects', 'سي دي cd'],
+  ['1f5a5_fe0f', 'objects', 'كمبيوتر desktop'],
+  ['2328_fe0f', 'objects', 'كيبورد keyboard'],
+  ['1f5b1_fe0f', 'objects', 'ماوس mouse'],
+  ['1f513', 'objects', 'مفتوح unlock'],
+  ['1f9f2', 'objects', 'مغناطيس magnet'],
+  ['1f48a', 'objects', 'دوا pill'],
+  ['1f489', 'objects', 'حقنة syringe'],
+  ['1fa7a', 'objects', 'سماعة دكتور stethoscope'],
+  ['1f9f9', 'objects', 'مقشة broom'],
+  ['2709_fe0f', 'objects', 'جواب envelope'],
+  ['1f4ca', 'objects', 'رسم بياني chart'],
+  ['1f4c8', 'objects', 'صعود chart up'],
+  ['1f4c9', 'objects', 'نزول chart down'],
+  ['1f4ce', 'objects', 'مشبك paperclip'],
+  ['2702_fe0f', 'objects', 'مقص scissors'],
+  ['1f58a_fe0f', 'objects', 'قلم جاف pen'],
+  ['1f58c_fe0f', 'objects', 'فرشاة paintbrush'],
+  ['1f9f5', 'objects', 'خيط thread'],
+  ['1f9f6', 'objects', 'صوف yarn'],
+  ['1f6cb_fe0f', 'objects', 'كنبة couch'],
+  ['1f6bf', 'objects', 'دش shower'],
+  ['1f56f_fe0f', 'objects', 'شمعة candle'],
+  ['1fa94', 'objects', 'لمبة زيت diya lamp'],
+  ['2611_fe0f', 'symbols', 'صح علبة check box'],
+  ['1f192', 'symbols', 'كول cool button'],
+  ['1f193', 'symbols', 'مجاني free'],
+  ['1f51c', 'symbols', 'قريبا soon'],
+  ['26a0_fe0f', 'symbols', 'تحذير warning'],
+  ['2648', 'symbols', 'الحمل aries'],
+  ['2649', 'symbols', 'الثور taurus'],
+  ['264a', 'symbols', 'الجوزاء gemini'],
+  ['264b', 'symbols', 'السرطان cancer'],
+  ['264c', 'symbols', 'الأسد leo'],
+  ['264d', 'symbols', 'العذراء virgo'],
+  ['264e', 'symbols', 'الميزان libra'],
+  ['264f', 'symbols', 'العقرب scorpio'],
+  ['2650', 'symbols', 'القوس sagittarius'],
+  ['2651', 'symbols', 'الجدي capricorn'],
+  ['2652', 'symbols', 'الدلو aquarius'],
+  ['2653', 'symbols', 'الحوت pisces'],
+  ['262e_fe0f', 'symbols', 'سلام peace'],
+  ['262f_fe0f', 'symbols', 'ين يانج yin yang'],
+  ['267e_fe0f', 'symbols', 'لانهاية infinity'],
+  ['2734_fe0f', 'symbols', 'نجمة ثمانية eight star'],
+  ['1f300', 'symbols', 'دوامة cyclone'],
+  ['1f4f4', 'symbols', 'موبايل مقفول phone off'],
+  ['1f4f6', 'symbols', 'شبكة signal'],
+  ['1f6dc', 'symbols', 'واي فاي wireless'],
+  ['1f3b0', 'fun', 'سلوتس slot machine'],
+  ['1fa80', 'fun', 'يويو yoyo'],
+  ['1fa81', 'fun', 'طيارة ورق kite'],
+  ['1f3a0', 'fun', 'حصان ملاهي carousel horse'],
+  ['1f3b7', 'objects', 'ساكسفون saxophone'],
+  ['1f3ba', 'objects', 'ترومبيت trumpet'],
+  ['1f3bb', 'objects', 'كمنجة violin'],
+  ['1fa95', 'objects', 'بانجو banjo'],
+  ['1fa98', 'objects', 'طبلة طويلة long drum'],
+  ['1f4ef', 'objects', 'بوق postal horn'],
+  ['1f30c', 'nature', 'درب التبانة milky way'],
+  ['1f311', 'nature', 'محاق new moon'],
+  ['1f315', 'nature', 'بدر full moon'],
+  ['1f31b', 'nature', 'هلال وش quarter moon face'],
+  ['2604_fe0f', 'nature', 'مذنب comet'],
+  ['1fa90', 'nature', 'زحل planet saturn'],
+  ['1f30e', 'nature', 'أرض أمريكا earth americas'],
+  ['26c5', 'nature', 'شمس وسحاب sun behind cloud'],
+  ['1f326_fe0f', 'nature', 'مطر وشمس sun rain'],
+  ['1f329_fe0f', 'nature', 'برق lightning cloud'],
+  ['1f328_fe0f', 'nature', 'تلج نازل snow cloud'],
+  ['1f32b_fe0f', 'nature', 'شبورة fog'],
+  ['2614', 'nature', 'شمسية مطر umbrella rain'],
+  ['1f940', 'nature', 'وردة دبلانة wilted rose'],
+  ['1fab7', 'nature', 'لوتس lotus'],
+  ['1f333', 'nature', 'شجرة tree'],
+  ['1fab4', 'nature', 'زرعة potted plant'],
+  ['1f41a', 'nature', 'صدفة shell'],
+  ['1faa8', 'nature', 'حجر rock'],
+  ['1f408', 'animals', 'قطة ماشية cat walking'],
+  ['1f415', 'animals', 'كلب ماشي dog walking'],
+  ['1f429', 'animals', 'كانيش poodle'],
+  ['1f98f', 'animals', 'خرتيت rhino'],
+  ['1f99b', 'animals', 'فرس النهر hippo'],
+  ['1f420', 'animals', 'سمكة استوائية tropical fish'],
+  ['1f421', 'animals', 'سمكة منفوخة blowfish'],
+  ['1f99e', 'animals', 'استاكوزا lobster'],
+  ['1f991', 'animals', 'سبيط squid'],
+  ['1fabc', 'animals', 'قنديل jellyfish'],
+  ['1f409', 'animals', 'تنين dragon'],
+  ['1f41b', 'animals', 'دودة bug'],
+  ['1f41c', 'animals', 'نملة ant'],
+  ['1f99f', 'animals', 'ناموسة mosquito'],
+  ['1f997', 'animals', 'صرصار cricket'],
+  ['1f413', 'animals', 'ديك rooster'],
+  ['1f983', 'animals', 'ديك رومي turkey'],
 ];
 const notoSticker = (cp: string): StoreSticker => ({ id: 'noto-' + cp, gif: `${NOTO_BASE}/${cp}/512.gif`, webp: `${NOTO_BASE}/${cp}/512.webp`, thumb: `${NOTO_BASE}/${cp}/512.webp`, still: `${NOTO_BASE}/${cp}/emoji.svg` });
 const GIF_QUICK: [string, string][] = [['😂', 'funny'], ['❤️', 'love'], ['💃', 'dance'], ['😮', 'wow'], ['😢', 'sad'], ['👏', 'clap'], ['🔥', 'fire'], ['😎', 'cool']];
@@ -13515,10 +13959,28 @@ const svgToPngBlob = async (url: string, size = 512): Promise<Blob | null> => {
   try {
     const img = new Image();
     img.crossOrigin = 'anonymous';
+    img.width = size; img.height = size;
     await new Promise<void>((ok, bad) => { img.onload = () => ok(); img.onerror = () => bad(new Error('img')); img.src = url; });
     const c = document.createElement('canvas');
     c.width = size; c.height = size;
-    c.getContext('2d')?.drawImage(img, 0, 0, size, size);
+    const g = c.getContext('2d'); if (!g) return null;
+    g.clearRect(0, 0, size, size);
+    g.drawImage(img, 0, 0, size, size);
+    const b = await new Promise<Blob | null>(res => c.toBlob(x => res(x), 'image/png'));
+    return b && b.size > 600 ? b : null; // an empty canvas is not a sticker
+  } catch { return null; }
+};
+// Last resort for a store sticker whose Google file is missing: draw the emoji itself on a TRANSPARENT canvas (never a black box).
+const storeChar = (st: StoreSticker) => (st.id.startsWith('noto-') ? st.id.slice(5).split('_').map(h => String.fromCodePoint(parseInt(h, 16))).join('') : '');
+const emojiToPngBlob = async (ch: string, size = 512): Promise<Blob | null> => {
+  try {
+    if (!ch) return null;
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    const g = c.getContext('2d'); if (!g) return null;
+    g.clearRect(0, 0, size, size);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `${Math.round(size * 0.78)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    g.fillText(ch, size / 2, size * 0.54);
     return await new Promise<Blob | null>(res => c.toBlob(b => res(b), 'image/png'));
   } catch { return null; }
 };
@@ -13530,7 +13992,8 @@ const loadStoreBlob = (st: StoreSticker): Promise<Blob | null> => {
     p = (async () => {
       const first = await fetchImageBlob(st.kind === 'gif' ? st.gif : st.webp);
       if (first) return first;
-      return st.still ? svgToPngBlob(st.still) : null; // flags etc. that have no animated file: use the still picture
+      const still = st.still ? await svgToPngBlob(st.still) : null; // flags etc. that have no animated file: use the still picture
+      return still ?? emojiToPngBlob(storeChar(st));
     })();
     stickerCache.set(key, p);
     void p.then(b => { if (!b) stickerCache.delete(key); });
@@ -13554,6 +14017,8 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
   // Smooth grid: static (light) pictures, the animation only plays under your finger / mouse, and the list loads page by page.
   const [hot, setHot] = useState('');
   const [noStill, setNoStill] = useState<Set<string>>(() => new Set());
+  const [noAnim, setNoAnim] = useState<Set<string>>(() => new Set());
+  const [animOk, setAnimOk] = useState<Set<string>>(() => new Set());
   const [count, setCount] = useState(40);
   const scrollRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -13563,7 +14028,7 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
     if (!words.length) return true;
     const typed = [...q.trim()].map(ch => ch.codePointAt(0)?.toString(16)).join('_');
     return words.every(w => k.includes(w)) || cp.startsWith(typed) || (typed.length > 0 && cp.replace('_fe0f', '') === typed.replace('_fe0f', '').replace(/^fe0f_?/, ''));
-  }).map(([cp]) => ({ ...notoSticker(cp), kind })).filter((x, i, a) => !bad.has(x.id) && a.findIndex(y => y.id === x.id) === i);
+  }).map(([cp]) => ({ ...notoSticker(cp), kind })).filter((x, i, a) => a.findIndex(y => y.id === x.id) === i);
   useEffect(() => {
     setNet([]);
     if (!GIPHY_KEY) return;
@@ -13582,7 +14047,8 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
     return () => { window.clearTimeout(tm); ctl.abort(); };
   }, [q, kind]);
   const gifOnline = kind === 'gif' && !!GIPHY_KEY;
-  const all = gifOnline && net.length ? net : [...local, ...net];
+  const okNet = net.filter(x => !bad.has(x.id));
+  const all = gifOnline && okNet.length ? okNet : [...local, ...okNet];
   useEffect(() => { setCount(40); scrollRef.current?.scrollTo({ top: 0 }); }, [q, kind, cat]);
   const visible = all.slice(0, count);
   useEffect(() => {
@@ -13616,7 +14082,19 @@ function KixStore({ onPick, onClose, inline = false, startKind = 'sticker' }: { 
         {!all.length && !busy && <p className="text-center text-white/60 text-xs py-10">مفيش نتائج، جرّب كلمة تانية</p>}
         {kind === 'gif' && !GIPHY_KEY && <p className="text-center text-white/50 text-[11px] pb-2">دي GIF متحركة جاهزة. للبحث في ملايين الـ GIF أضف VITE_GIPHY_KEY.</p>}
         <div className={`grid gap-2 ${gifOnline ? 'grid-cols-3' : 'grid-cols-4 min-[420px]:grid-cols-5'}`}>
-          {visible.map(st => { const still = !gifOnline && !!st.still && hot !== st.id && !noStill.has(st.id); return <button key={st.id} onClick={() => void choose(st)} onPointerEnter={e => { if (e.pointerType === 'mouse') { setHot(st.id); void loadStoreBlob(st); } }} onPointerLeave={e => { if (e.pointerType === 'mouse') setHot(h => (h === st.id ? '' : h)); }} onPointerDown={() => { setHot(st.id); void loadStoreBlob(st); }} className={`relative aspect-square rounded-2xl bg-white/5 ${gifOnline ? 'p-0.5 overflow-hidden' : 'p-1.5'} active:scale-90 transition-transform ${pickBusy === st.id ? 'opacity-50' : ''}`}><img src={still ? st.still : st.thumb} alt="" loading="lazy" decoding="async" draggable={false} onError={() => { if (still) setNoStill(s => new Set(s).add(st.id)); else setBad(b => new Set(b).add(st.id)); }} className={`w-full h-full ${gifOnline ? 'object-cover rounded-xl' : 'object-contain'}`} /></button>; })}
+          {visible.map(st => {
+            // Each cell keeps its place: still picture underneath, the animation fades in on top only once it has really loaded.
+            // A file that fails never removes the sticker (that made the grid jump and stickers "run away" from your finger).
+            const own = !gifOnline && !!st.still;
+            const showStill = own && !noStill.has(st.id);
+            const wantAnim = !own || (hot === st.id && !noAnim.has(st.id));
+            const glyph = own && noStill.has(st.id) && (noAnim.has(st.id) || hot !== st.id);
+            return <button key={st.id} onClick={() => void choose(st)} onPointerEnter={e => { if (e.pointerType === 'mouse') { setHot(st.id); void loadStoreBlob(st); } }} onPointerLeave={e => { if (e.pointerType === 'mouse') setHot(h => (h === st.id ? '' : h)); }} onPointerDown={() => { setHot(st.id); void loadStoreBlob(st); }} className={`relative aspect-square rounded-2xl bg-white/5 ${gifOnline ? 'p-0.5 overflow-hidden' : 'p-1.5'} active:scale-90 transition-transform ${pickBusy === st.id ? 'opacity-50' : ''}`}>
+              {showStill && <img src={st.still} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setNoStill(x => new Set(x).add(st.id))} className={`w-full h-full object-contain transition-opacity duration-150 ${wantAnim && animOk.has(st.id) ? 'opacity-0' : ''}`} />}
+              {glyph && <span className="w-full h-full flex items-center justify-center text-[34px] leading-none select-none">{storeChar(st)}</span>}
+              {wantAnim && <img src={st.thumb} alt="" loading="lazy" decoding="async" draggable={false} onLoad={() => setAnimOk(x => (x.has(st.id) ? x : new Set(x).add(st.id)))} onError={() => { if (own) setNoAnim(x => new Set(x).add(st.id)); else setBad(x => new Set(x).add(st.id)); }} className={`${own ? 'absolute inset-1.5 w-[calc(100%-0.75rem)] h-[calc(100%-0.75rem)] object-contain' : `w-full h-full ${gifOnline ? 'object-cover rounded-xl' : 'object-contain'}`} transition-opacity duration-150 ${own && !animOk.has(st.id) ? 'opacity-0' : ''}`} />}
+            </button>;
+          })}
         </div>
         {visible.length < all.length && <div ref={moreRef} className="h-10" />}
         {busy && <p className="text-center text-white/50 text-[11px] py-3">جارٍ تحميل المزيد...</p>}
