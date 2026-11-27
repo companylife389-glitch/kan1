@@ -2634,7 +2634,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
     },
   );
 
-  const { fab, onScroll, onUserScroll, jumpDown } = useChatStick(scrollRef, group.messages, currentUser.id, group.id);
+  const { fab, onScroll, onUserScroll, jumpDown } = useChatStick(scrollRef, group.messages, currentUser.id, group.id, group.messages.length > limit ? () => setLimit(l => l + 40) : undefined);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { first, rest } = takeFiles(e, !!media, setError);
@@ -2761,6 +2761,37 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
     window.setTimeout(() => setHighlightId(null), 1400);
   };
 
+  // ---- chess in groups: an open invite, the first member to accept plays the inviter; the others watch ----
+  const [showGames, setShowGames] = useState(false);
+  const [openGid, setOpenGid] = useState<string | null>(null);
+  const games = useMemo(() => collectGames(group.messages, currentUser.id, '', true), [group.messages, currentUser.id]);
+  const openGame = games.find(x => x.g === openGid) ?? null;
+  const sendGame = (d: GameMsg) => { void send({ text: gameText(d) }); };
+  const gPrev = useRef<Map<string, string> | null>(null);
+  const [gTick, setGTick] = useState(0);
+  useEffect(() => {
+    const waiting = () => games.some(g => g.accepted === true && g.winner === null && g.at > Date.now());
+    if (!waiting()) return;
+    const h = window.setInterval(() => { setGTick(t => t + 1); if (!waiting()) window.clearInterval(h); }, 1000);
+    return () => window.clearInterval(h);
+  }, [games]);
+  useEffect(() => {
+    const now = Date.now();
+    const cur = new Map<string, string>();
+    for (const g of games) cur.set(g.g, g.accepted === null ? 'p' : g.accepted === false ? 'x' : g.winner !== null ? 'd' : g.at > now ? 'w' : 'r');
+    const prev = gPrev.current; gPrev.current = cur;
+    if (!prev) return;
+    for (const g of games) {
+      if (g.inviter !== currentUser.id && g.invitee !== currentUser.id) continue;
+      const was = prev.get(g.g);
+      if (cur.get(g.g) === 'r' && (was === 'p' || was === 'w')) { setOpenGid(o => o ?? g.g); break; }
+    }
+  }, [games, gTick, currentUser.id]);
+  const gameOpp = (g: { inviter: string; invitee: string }): User => {
+    const id = g.inviter === currentUser.id ? g.invitee : g.inviter;
+    return person(id) ?? ({ ...currentUser, id: id || 'anyone', displayName: id ? 'لاعب' : 'أي عضو' } as User);
+  };
+
   const seenBy = (m: GroupMessage) => m.readBy.filter(id => id !== m.senderId && memberIds.includes(id));
 
   return (
@@ -2802,10 +2833,11 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
         )}
         <div ref={scrollRef} onScroll={onScroll} onWheel={onUserScroll} onTouchMove={onUserScroll} className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" onClick={() => { setActiveMsgId(null); setReactingTo(null); }}>
           {group.messages.length === 0 && <p className="text-center text-gray-500 text-sm py-12">ابدأ المحادثة في المجموعة 👋</p>}
-          {group.messages.length > limit && <button onClick={() => setLimit(l => l + 60)} className="mx-auto block my-2 px-4 py-1.5 rounded-full bg-white/10 text-xs text-white">عرض رسائل أقدم</button>}
+          {group.messages.length > limit && <div className="h-px" aria-hidden />}
           {group.messages.map((m, i) => {
             if (parseVote(m.text)) return null;
             if (i < group.messages.length - limit) return null;
+            { const gm = parseGame(m.text); if (gm && gm.k !== 'inv') return null; }
             if (m.isSystem) {
               return <div key={m.id} className="text-center"><span className="inline-block px-3 py-1 rounded-full bg-gray-800/80 text-[11px] text-gray-400">{person(m.senderId)?.displayName ?? 'مستخدم'} {m.text}</span></div>;
             }
@@ -2848,7 +2880,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                     )}
                     {!isStickerName(m.media?.name) && m.media?.type === 'image' && (
                       <div className="mb-2 relative">
-                        <img src={m.media.url} alt="" onClick={e => { e.stopPropagation(); setViewer({ src: m.media!.url, name: m.media!.name }); }} className="rounded-xl max-w-full max-h-56 object-cover cursor-zoom-in" />
+                        <ChatImg src={m.media.url} onClick={e => { e.stopPropagation(); setViewer({ src: m.media!.url, name: m.media!.name }); }} className="rounded-xl max-w-full max-h-56 object-cover cursor-zoom-in" />
                       </div>
                     )}
                     {!isStickerName(m.media?.name) && m.media?.type === 'video' && (
@@ -2869,7 +2901,12 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                         <Download size={16} className="shrink-0" />
                       </button>
                     )}
-                    {m.text && (parseLocMsg(m.text) ? <ChatLocation loc={parseLocMsg(m.text)!} /> : parsePoll(m.text) ? <ChatPoll id={m.id} text={m.text} all={group.messages} meId={currentUser.id} onVote={i => void send({ text: VOTE_TAG + JSON.stringify({ p: m.id, i }) })} /> : <p className="whitespace-pre-wrap" dir="auto"><Linkified text={m.text} /></p>)}
+                    {m.text && (parseGame(m.text)?.k === 'inv' ? (() => {
+                      const gi = games.find(x => x.g === parseGame(m.text)?.g); if (!gi) return null;
+                      const player = gi.inviter === currentUser.id || gi.invitee === currentUser.id;
+                      if (gi.accepted && !player) return <div className="rounded-2xl bg-[#2b2f3a] ring-1 ring-white/15 px-3.5 py-2.5 text-white text-xs min-w-[13rem]">♞ شطرنج: {person(gi.inviter)?.displayName ?? 'لاعب'} ضد {person(gi.invitee)?.displayName ?? 'لاعب'}{gi.winner ? (gi.winner === 'draw' ? ' · تعادل' : ` · فاز ${person(gi.winner)?.displayName ?? 'لاعب'}`) : ' · جارية الآن'}</div>;
+                      return <GameInviteCard open game={gi} games={games} meId={currentUser.id} other={gameOpp(gi)} onAccept={() => sendGame({ k: 'acc', g: gi.g })} onDecline={() => undefined} onOpen={() => setOpenGid(gi.g)} />;
+                    })() : parseLocMsg(m.text) ? <ChatLocation loc={parseLocMsg(m.text)!} /> : parsePoll(m.text) ? <ChatPoll id={m.id} text={m.text} all={group.messages} meId={currentUser.id} onVote={i => void send({ text: VOTE_TAG + JSON.stringify({ p: m.id, i }) })} /> : <p className="whitespace-pre-wrap" dir="auto"><Linkified text={m.text} /></p>)}
                   </div>
                   <span className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
                     {formatTime(m.timestamp)}{m.editedAt ? ' · معدّلة' : ''}
@@ -2958,6 +2995,8 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
             )}
             <AnimatePresence>
               {pollOpen && <PollComposer onClose={() => setPollOpen(false)} onSend={(q, o) => { setPollOpen(false); void send({ text: POLL_TAG + JSON.stringify({ q, o }) }); }} />}
+              {showGames && <GamePicker onClose={() => setShowGames(false)} onInvite={(at, tc) => { sendGame({ k: 'inv', g: crypto.randomUUID(), at, tc }); setShowGames(false); }} />}
+              {openGame && (openGame.inviter === currentUser.id || openGame.invitee === currentUser.id) && <ChessGame game={openGame} games={games} meId={currentUser.id} me={currentUser} other={gameOpp(openGame)} onMove={mv => sendGame({ k: 'mv', g: openGame.g, n: openGame.moves.length, m: mv })} onResign={() => sendGame({ k: 'res', g: openGame.g })} onDraw={k => sendGame({ k, g: openGame.g })} onTimeout={() => sendGame({ k: 'to', g: openGame.g })} onJoin={() => sendGame({ k: 'jn', g: openGame.g })} onNew={() => { sendGame({ k: 'inv', g: crypto.randomUUID(), at: Date.now(), tc: openGame.tc }); setOpenGid(null); }} onClose={() => setOpenGid(null)} chat={[]} onChat={t => void send({ text: t })} />}
             </AnimatePresence>
             {queue.length > 0 && <QueueChip count={queue.length} onClear={() => setQueue([])} />}
             {Object.keys(ups).length > 0 && <UploadBar ups={ups} />}
@@ -2991,7 +3030,7 @@ function GroupChatView({ currentUser, group, users, setGroups, reload, onBack }:
                 </motion.button>
               )}
             </div>
-          <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onClose={() => setToolsOpen(false)} onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }} />}</AnimatePresence>
+          <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onClose={() => setToolsOpen(false)} onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }} onGames={() => { setShowGames(true); setToolsOpen(false); }} />}</AnimatePresence>
           {locSheet && <LocationShareSheet onClose={() => setLocSheet(false)} onSend={l => { setLocSheet(false); void send({ text: locMsgText(l) }); }} />}
           {emojiOpen && <EmojiPicker docked onPick={em => setText(t => t + em)} onClose={() => setEmojiOpen(false)} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `${st.gif ? 'kix-gif' : 'kan-sticker'}.${stkExt(st.blob, st.kind)}` }); }} />}
           </div>
@@ -5821,15 +5860,25 @@ function captureVideoFrame(file: File): Promise<Blob | null> {
 
 // The visible area of the screen (shrinks when the on-screen keyboard is open).
 function useVisualViewport() {
-  const read = () => ({ height: window.visualViewport?.height ?? window.innerHeight, top: window.visualViewport?.offsetTop ?? 0 });
+  const read = () => ({ height: Math.round(window.visualViewport?.height ?? window.innerHeight), top: Math.round(window.visualViewport?.offsetTop ?? 0) });
   const [vp, setVp] = useState(read);
   useEffect(() => {
-    const update = () => setVp(read());
+    let raf = 0;
+    // One state update per frame at most, and none when nothing really moved: the keyboard animation stays at the screen's refresh rate.
+    const update = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        const n = read();
+        setVp(p => (p.height === n.height && p.top === n.top ? p : n));
+      });
+    };
     const vv = window.visualViewport;
     vv?.addEventListener('resize', update);
     vv?.addEventListener('scroll', update);
     window.addEventListener('resize', update);
     return () => {
+      if (raf) window.cancelAnimationFrame(raf);
       vv?.removeEventListener('resize', update);
       vv?.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
@@ -5955,6 +6004,46 @@ function LocationShareSheet({ onSend, onClose }: { onSend: (l: GeoLoc) => void; 
   );
 }
 
+// Chat media that never stays a black box: a video without a decodable picture, or an image that failed to load, turns into a tappable card.
+function ChatVideo({ src, className = '', controls = true, muted, onMeta, onClick, name }: { src: string; className?: string; controls?: boolean; muted?: boolean; onMeta?: () => void; onClick?: (e: React.MouseEvent) => void; name?: string }) {
+  const [bad, setBad] = useState(false);
+  if (bad) {
+    return (
+      <button onClick={e => { e.stopPropagation(); void downloadFile(src, name || 'video.mp4'); }} className="flex items-center gap-2 px-3 py-3 rounded-xl bg-black/30 text-white text-sm w-full" aria-label="تحميل الفيديو">
+        <Download size={18} className="shrink-0" /><span className="truncate">تعذّر عرض الفيديو هنا — اضغط للتحميل</span>
+      </button>
+    );
+  }
+  return (
+    <video
+      src={`${src}#t=0.1`}
+      controls={controls}
+      muted={muted}
+      playsInline
+      preload="metadata"
+      onClick={onClick}
+      onError={() => setBad(true)}
+      onLoadedMetadata={e => {
+        const v = e.currentTarget;
+        if (v.videoWidth === 0 && v.duration > 0) { setBad(true); return; } // audio-only decode (e.g. HEVC on this device)
+        try { if (v.currentTime < 0.05) v.currentTime = Math.min(0.1, (v.duration || 0.2) / 2); } catch { /* ignore */ } // forces the first frame to paint
+        onMeta?.();
+      }}
+      className={className}
+    />
+  );
+}
+function ChatImg({ src, className = '', onLoad, onClick, alt = '' }: { src: string; className?: string; onLoad?: () => void; onClick?: (e: React.MouseEvent) => void; alt?: string }) {
+  const [tries, setTries] = useState(0);
+  const [bad, setBad] = useState(false);
+  if (bad) {
+    return (
+      <button onClick={e => { e.stopPropagation(); setBad(false); setTries(0); }} className={`flex items-center justify-center bg-black/30 text-gray-300 text-xs px-3 py-6 rounded-xl ${className}`}>اضغط لإعادة تحميل الصورة</button>
+    );
+  }
+  const u = tries > 0 ? `${src}${src.includes('?') ? '&' : '?'}r=${tries}` : src;
+  return <img src={u} alt={alt} decoding="async" onLoad={onLoad} onClick={onClick} onError={() => { if (tries < 2) window.setTimeout(() => setTries(t => t + 1), 600 * (tries + 1)); else setBad(true); }} className={className} />;
+}
 function ChatPlusPanel({ onPickFiles, onPoll, onLocation, onAi, onGames, onClose }: { onPickFiles: (accept: string) => void; onPoll: () => void; onLocation: () => void; onAi: () => void; onGames?: () => void; onClose?: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
@@ -13578,7 +13667,7 @@ function StickerMaker({ file, onClose, onSaved }: { file: File; onClose: () => v
 type ChatFab = { show: boolean; n: number };
 // Chat scrolling: stay on the latest message only while you are at the bottom. If you scrolled up, new messages
 // do not pull you down; a button with the unread count appears and takes you back to the last message.
-function useChatStick(scrollRef: { current: HTMLDivElement | null }, items: { senderId: string }[], meId: string, resetKey: string | undefined) {
+function useChatStick(scrollRef: { current: HTMLDivElement | null }, items: { senderId: string }[], meId: string, resetKey: string | undefined, loadOlder?: () => void) {
   const atBottom = useRef(true);
   const prevLen = useRef(0);
   const prevKey = useRef<string | undefined>('\u0000init');
@@ -13593,13 +13682,25 @@ function useChatStick(scrollRef: { current: HTMLDivElement | null }, items: { se
     window.setTimeout(toEnd, 150);
     window.setTimeout(toEnd, 600);
   };
+  const restore = useRef<{ h: number; t: number } | null>(null);
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
+    if (loadOlder && el.scrollTop < 240 && !restore.current && Date.now() > stickUntil.current) {
+      restore.current = { h: el.scrollHeight, t: el.scrollTop };
+      loadOlder();
+    }
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (dist < 80) { atBottom.current = true; setFab(f => (f.show || f.n ? { show: false, n: 0 } : f)); }
     else if (Date.now() > stickUntil.current) { atBottom.current = false; setFab(f => (f.show === dist > 200 ? f : { ...f, show: dist > 200 })); }
   };
+  // After older messages are rendered, keep the viewport on the same message (no jump).
+  useLayoutEffect(() => {
+    const r = restore.current, el = scrollRef.current;
+    if (!r || !el) return;
+    restore.current = null;
+    el.scrollTop = r.t + (el.scrollHeight - r.h);
+  });
   const onUserScroll = () => { stickUntil.current = 0; };
   const jumpDown = () => {
     const el = scrollRef.current;
@@ -13756,7 +13857,7 @@ type GameInfo = {
   startTs: number; lastTs: number; spent: { w: number; b: number }; ready: boolean; joinedBy: string[];
   resignedBy?: string; drawBy?: string; agreed?: boolean; timeout?: 'w' | 'b'; winner: string | null;
 };
-function collectGames(msgs: Message[], meId: string, otherId: string): GameInfo[] {
+function collectGames(msgs: { senderId: string; text?: string | null; timestamp: number }[], meId: string, otherId: string, open = false): GameInfo[] {
   const by = new Map<string, GameInfo>();
   const acc = new Map<string, number>();
   const mv = new Map<string, Map<number, { m: string; ts: number }>>();
@@ -13766,18 +13867,18 @@ function collectGames(msgs: Message[], meId: string, otherId: string): GameInfo[
     const d = parseGame(m.text);
     if (!d) continue;
     if (d.k === 'inv') {
-      if (!by.has(d.g)) by.set(d.g, { g: d.g, inviter: m.senderId, invitee: m.senderId === meId ? otherId : meId, at: d.at ?? m.timestamp, ts: m.timestamp, tc: Math.max(0, Math.min(60, d.tc ?? 0)), accepted: null, moves: [], st: chessStart(), status: 'play', startTs: 0, lastTs: 0, spent: { w: 0, b: 0 }, winner: null, ready: false, joinedBy: [] });
+      if (!by.has(d.g)) by.set(d.g, { g: d.g, inviter: m.senderId, invitee: open ? '' : m.senderId === meId ? otherId : meId, at: d.at ?? m.timestamp, ts: m.timestamp, tc: Math.max(0, Math.min(60, d.tc ?? 0)), accepted: null, moves: [], st: chessStart(), status: 'play', startTs: 0, lastTs: 0, spent: { w: 0, b: 0 }, winner: null, ready: false, joinedBy: [] });
       continue;
     }
     const gi = by.get(d.g);
     if (!gi) continue;
-    if (d.k === 'acc' && m.senderId !== gi.inviter && gi.accepted === null) { gi.accepted = true; acc.set(gi.g, m.timestamp); }
-    else if (d.k === 'dec' && m.senderId !== gi.inviter && gi.accepted === null) gi.accepted = false;
+    if (d.k === 'acc' && m.senderId !== gi.inviter && gi.accepted === null) { gi.accepted = true; if (open) gi.invitee = m.senderId; acc.set(gi.g, m.timestamp); }
+    else if (d.k === 'dec' && !open && m.senderId !== gi.inviter && gi.accepted === null) gi.accepted = false;
     else if (d.k === 'mv' && gi.accepted && typeof d.n === 'number' && d.m) {
       let mm = mv.get(d.g);
       if (!mm) { mm = new Map(); mv.set(d.g, mm); }
-      if (((m.senderId === gi.inviter) === (d.n % 2 === 0)) && !mm.has(d.n)) { mm.set(d.n, { m: d.m, ts: m.timestamp }); gi.drawBy = undefined; }
-    } else if (d.k === 'res' && gi.accepted && !gi.resignedBy) gi.resignedBy = m.senderId;
+      if ((m.senderId === gi.inviter || m.senderId === gi.invitee) && ((m.senderId === gi.inviter) === (d.n % 2 === 0)) && !mm.has(d.n)) { mm.set(d.n, { m: d.m, ts: m.timestamp }); gi.drawBy = undefined; }
+    } else if (d.k === 'res' && gi.accepted && !gi.resignedBy && (m.senderId === gi.inviter || m.senderId === gi.invitee)) gi.resignedBy = m.senderId;
     else if (d.k === 'dr' && gi.accepted) gi.drawBy = m.senderId;
     else if (d.k === 'dd' && gi.drawBy && gi.drawBy !== m.senderId) gi.drawBy = undefined;
     else if (d.k === 'da' && gi.drawBy && gi.drawBy !== m.senderId) gi.agreed = true;
@@ -13843,7 +13944,7 @@ function chessLost(b: CBoard, color: 'w' | 'b'): string[] {
   return out;
 }
 
-function GameInviteCard({ game, games, meId, other, onAccept, onDecline, onOpen }: { game: GameInfo; games: GameInfo[]; meId: string; other: User; onAccept: () => void; onDecline: () => void; onOpen: () => void }) {
+function GameInviteCard({ game, games, meId, other, onAccept, onDecline, onOpen, open = false }: { game: GameInfo; games: GameInfo[]; meId: string; other: User; onAccept: () => void; onDecline: () => void; onOpen: () => void; open?: boolean }) {
   const [now, setNow] = useState(Date.now());
   const waiting = game.accepted === true && game.at > now && game.winner === null;
   useEffect(() => {
@@ -13866,7 +13967,7 @@ function GameInviteCard({ game, games, meId, other, onAccept, onDecline, onOpen 
       <div className="mt-2.5">
         {game.accepted === null && (mine
           ? <div className="text-xs opacity-80 text-center">في انتظار رد {other.displayName}...</div>
-          : <div className="flex gap-2"><button onClick={onAccept} className="flex-1 py-2 rounded-full bg-emerald-500 text-white text-xs font-bold active:scale-95">قبول</button><button onClick={onDecline} className="flex-1 py-2 rounded-full bg-white/15 text-white text-xs font-bold active:scale-95">رفض</button></div>)}
+          : <div className="flex gap-2"><button onClick={onAccept} className="flex-1 py-2 rounded-full bg-emerald-500 text-white text-xs font-bold active:scale-95">قبول</button>{!open && <button onClick={onDecline} className="flex-1 py-2 rounded-full bg-white/15 text-white text-xs font-bold active:scale-95">رفض</button>}</div>)}
         {game.accepted === false && <div className="text-xs text-red-300 text-center">الدعوة اترفضت</div>}
         {game.accepted === true && !done && (waiting
           ? <div className="text-xs text-center"><span className="opacity-80">تبدأ بعد </span><b className="tabular-nums">{fmtCountdown(game.at - now)}</b></div>
@@ -14361,7 +14462,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       void supabase.from('messages').update({ read_at: new Date().toISOString() }).in('id', ids).neq('sender_id', currentUser.id).is('read_at', null).then(({ error }) => { if (error) console.error(error); });
     },
   );
-  const { atBottom, stickUntil, fab, scrollToBottom, keepAtBottom, onScroll, onUserScroll, jumpDown } = useChatStick(scrollRef, messages, currentUser.id, convId);
+  const { atBottom, stickUntil, fab, scrollToBottom, keepAtBottom, onScroll, onUserScroll, jumpDown } = useChatStick(scrollRef, messages, currentUser.id, convId, messages.length > limit ? () => setLimit(l => l + 40) : undefined);
   useEffect(() => {
     if (atBottom.current) keepAtBottom();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -14723,7 +14824,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
           </div>,
           document.body,
         )}
-        {messages.length > limit && <button onClick={() => setLimit(l => l + 60)} className="mx-auto block my-2 px-4 py-1.5 rounded-full bg-white/10 text-xs text-white">عرض رسائل أقدم</button>}
+        {messages.length > limit && <div className="h-px" aria-hidden />}
         {messages.map((msg, idx) => {
           if (parseVote(msg.text)) return null;
           if (idx < messages.length - limit) return null;
@@ -14781,8 +14882,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                         {items.map(it => (
                           <div key={it.id} className="relative aspect-square rounded-xl overflow-hidden bg-black/40">
                             {it.media!.type === 'image'
-                              ? <img src={it.media!.url} alt="" onLoad={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }} onClick={e => { e.stopPropagation(); setViewer({ src: it.media!.url, name: it.media!.name }); }} className="w-full h-full object-cover cursor-zoom-in" />
-                              : <video src={`${it.media!.url}#t=0.1`} controls playsInline preload="metadata" onClick={e => e.stopPropagation()} className="w-full h-full object-cover" />}
+                              ? <ChatImg src={it.media!.url} onLoad={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }} onClick={e => { e.stopPropagation(); setViewer({ src: it.media!.url, name: it.media!.name }); }} className="w-full h-full object-cover cursor-zoom-in" />
+                              : <ChatVideo src={it.media!.url} name={it.media!.name} onClick={e => e.stopPropagation()} className="w-full h-full object-cover" />}
                           </div>
                         ))}
                       </div>
@@ -14795,9 +14896,8 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   )}
                   {!albumMap.first.has(msg.id) && !isStickerName(msg.media?.name) && msg.media?.type === 'image' && (
                     <div className="mb-2 relative">
-                      <img
+                      <ChatImg
                         src={msg.media.url}
-                        alt=""
                         onLoad={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }}
                         onClick={e => { e.stopPropagation(); if (msg.sharedPostId) openPost(msg.sharedPostId, msg.sharedCommentId); else setViewer({ src: msg.media!.url, name: msg.media!.name }); }}
                         className={`rounded-xl max-w-full max-h-48 object-cover ${msg.sharedPostId ? 'cursor-pointer' : 'cursor-zoom-in'}`}
@@ -14819,12 +14919,10 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
                   )}
                   {!albumMap.first.has(msg.id) && !isStickerName(msg.media?.name) && msg.media?.type === 'video' && !msg.sharedPostId && (
                     <div className="mb-2" onClick={e => e.stopPropagation()}>
-                      <video
-                        src={`${msg.media.url}#t=0.1`}
-                        controls
-                        playsInline
-                        preload="metadata"
-                        onLoadedMetadata={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }}
+                      <ChatVideo
+                        src={msg.media.url}
+                        name={msg.media.name}
+                        onMeta={() => { if (Date.now() < stickUntil.current) scrollToBottom(); }}
                         className="rounded-xl max-w-full max-h-48 bg-black"
                       />
                     </div>
@@ -15046,7 +15144,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               </motion.button>
             )}
           </div>
-          <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onClose={() => setToolsOpen(false)} onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }}  />}</AnimatePresence>
+          <AnimatePresence initial={false}>{toolsOpen && <ChatPlusPanel onClose={() => setToolsOpen(false)} onPickFiles={acc => { if (fileRef.current) { fileRef.current.accept = acc; fileRef.current.click(); } setToolsOpen(false); }} onPoll={() => { setPollOpen(true); setToolsOpen(false); }} onLocation={() => { setLocSheet(true); setToolsOpen(false); }} onAi={() => { setAiOpen(true); setToolsOpen(false); }} onGames={() => { setShowGames(true); setToolsOpen(false); }} />}</AnimatePresence>
           {locSheet && <LocationShareSheet onClose={() => setLocSheet(false)} onSend={l => { setLocSheet(false); void send({ text: locMsgText(l) }); }} />}
           {emojiOpen && <EmojiPicker key={stickerStart ? 's' : 'e'} docked onPick={insertEmoji} onClose={() => setEmojiOpen(false)} startOnStickers={stickerStart} onSticker={st => { void send({ file: st.blob, mediaType: st.kind, fileName: `${st.gif ? 'kix-gif' : 'kan-sticker'}.${stkExt(st.blob, st.kind)}` }); }} />}
         </div>
