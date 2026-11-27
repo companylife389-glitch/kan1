@@ -9535,10 +9535,25 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
   };
 
   const join = async (room: string, video: boolean) => {
+    // Ask for the microphone/camera first, right on the tap, so the browser prompt always appears and a refusal is reported clearly.
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('المتصفح لا يدعم المكالمات أو الصفحة ليست https');
+      const st = await navigator.mediaDevices.getUserMedia({ audio: true, video });
+      st.getTracks().forEach(t => t.stop());
+    } catch (e) {
+      const n = e instanceof DOMException ? e.name : '';
+      throw new Error(n === 'NotAllowedError' || n === 'SecurityError' ? 'تم رفض إذن الميكروفون/الكاميرا. فعّله من إعدادات الموقع في المتصفح.' : n === 'NotFoundError' ? 'لا يوجد ميكروفون/كاميرا في هذا الجهاز.' : (e instanceof Error ? e.message : String(e)));
+    }
     const { data, error } = await supabase.functions.invoke('livekit-token', { body: { room } });
     const d = data as { token?: string; url?: string } | null;
-    if (error || !d?.token || !d.url) throw new Error(error?.message || 'livekit-token failed');
-    const { Room, RoomEvent, Track } = await import(/* @vite-ignore */ LIVEKIT_CDN);
+    if (error || !d?.token || !d.url) {
+      let why = error?.message || 'livekit-token failed';
+      try { const body = await (error as unknown as { context?: Response })?.context?.json(); if (body?.error) why = String(body.error); } catch { /* keep the message */ }
+      throw new Error('خادم المكالمات (livekit-token): ' + why);
+    }
+    let lk: { Room: any; RoomEvent: any; Track: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    try { lk = await import(/* @vite-ignore */ LIVEKIT_CDN); } catch { throw new Error('تعذّر تحميل مكتبة المكالمات (تأكد من الإنترنت)'); }
+    const { Room, RoomEvent, Track } = lk;
     const r = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     r.on(RoomEvent.TrackSubscribed, (track: LkTrack) => {
       const el = track.attach();
@@ -9571,7 +9586,7 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
       ringTimer.current = window.setTimeout(() => endRef.current(true), 45000);
     } catch (e) {
       console.error(e);
-      window.alert('تعذّر بدء المكالمة. تأكد من إذن الميكروفون/الكاميرا ومن إعداد الخادم.');
+      window.alert('تعذّر بدء المكالمة\n' + (e instanceof Error ? e.message : ''));
       cleanup();
     }
   };
@@ -9582,7 +9597,7 @@ function CallHost({ currentUser, users }: { currentUser: User; users: User[] }) 
     window.clearTimeout(ringTimer.current);
     setCall({ ...c, phase: 'connecting' });
     try { await join(c.room, c.video); }
-    catch (e) { console.error(e); window.alert('تعذّر الانضمام للمكالمة.'); endRef.current(true); }
+    catch (e) { console.error(e); window.alert('تعذّر الانضمام للمكالمة\n' + (e instanceof Error ? e.message : '')); endRef.current(true); }
   };
 
   useEffect(() => {
@@ -15613,6 +15628,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const inputRef = useRef<HTMLInputElement>(null);
   const [recording, setRecording] = useState(false);
   const [showBgPicker, setShowBgPicker] = useState(false);
+  const [showCallMenu, setShowCallMenu] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState('');
@@ -16093,11 +16109,21 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
         {showGames && <GamePicker onClose={() => setShowGames(false)} onInvite={(at, tc) => { sendGame({ k: 'inv', g: crypto.randomUUID(), at, tc }); setShowGames(false); }} />}
         {openGame && <ChessGame game={openGame} games={games} meId={currentUser.id} me={currentUser} other={chatUser} onMove={mv => sendGame({ k: 'mv', g: openGame.g, n: openGame.moves.length, m: mv })} onResign={() => sendGame({ k: 'res', g: openGame.g })} onDraw={k => sendGame({ k, g: openGame.g })} onTimeout={() => sendGame({ k: 'to', g: openGame.g })} onJoin={() => sendGame({ k: 'jn', g: openGame.g })} onNew={() => { sendGame({ k: 'inv', g: crypto.randomUUID(), at: Date.now(), tc: openGame.tc }); setOpenGid(null); }} onClose={() => setOpenGid(null)} chat={messages.filter(m => m.text && !parseGame(m.text) && !parseVote(m.text) && !parsePoll(m.text) && m.timestamp >= openGame.ts).slice(-4)} onChat={t => void send({ text: t })} />}
         <div className="relative flex items-center shrink-0">
-          <button onClick={() => startCall(chatUser.id, false)} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-white shrink-0" aria-label="مكالمة صوتية" title="مكالمة صوتية"><CallIcon size={20} color="#fff" /></button>
-          <button onClick={() => startCall(chatUser.id, true)} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-white shrink-0" aria-label="مكالمة فيديو" title="مكالمة فيديو"><Video size={20} color="#fff" /></button>
+          <div className="relative">
+            <button onClick={() => { setShowCallMenu(v => !v); setShowBgPicker(false); }} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-white shrink-0" aria-label="مكالمة" title="مكالمة"><CallIcon size={20} color="#fff" /></button>
+            {showCallMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowCallMenu(false)} />
+                <div className="kan-pop absolute top-full mt-2 end-0 z-50 w-44 bg-gray-900 border border-white/10 rounded-2xl p-1.5 shadow-xl">
+                  <button onClick={() => { setShowCallMenu(false); startCall(chatUser.id, false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 text-sm text-white"><CallIcon size={18} /> مكالمة صوتية</button>
+                  <button onClick={() => { setShowCallMenu(false); startCall(chatUser.id, true); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 text-sm text-white"><Video size={18} /> مكالمة فيديو</button>
+                </div>
+              </>
+            )}
+          </div>
           <div className="relative">
           <button
-            onClick={() => setShowBgPicker(!showBgPicker)}
+            onClick={() => { setShowBgPicker(!showBgPicker); setShowCallMenu(false); }}
             className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400"
             title="تغيير الخلفية"
           >
