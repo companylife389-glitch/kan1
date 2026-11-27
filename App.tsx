@@ -12,16 +12,26 @@ import {
   Gamepad2, Palette, Play, Pause, Download, FileText, Smile, Film, Plus, Volume2, VolumeX, RefreshCw, PlayCircle, Sparkles, Copy, CheckCheck, Maximize, Minimize, Menu, ChevronsLeft, ChevronsRight, Bell, BellOff, LayoutGrid, Pencil, Music, Flag, MoreHorizontal, Bookmark as BookmarkIcon, ChevronDown, Repeat, PictureInPicture2, BarChart3, HelpCircle, Clock, AtSign, Type as TypeIcon, Wand2,
   AlertTriangle, Info, AlarmClock, Library, ThumbsUp, Pin,
   Phone as CallIcon, PhoneOff as HangUpIcon, MicOff,
-  VideoOff,
+  VideoOff, Ban as BlockIcon, Lock as LockIcon,
 } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
 // ============ Language (Arabic is the default; English is added first for the main screens) ============
-type Lang = 'ar' | 'en';
-const getLang = (): Lang => { try { return localStorage.getItem('kan_lang') === 'en' ? 'en' : 'ar'; } catch { return 'ar'; } };
+type Lang = string;
+const LANGS: { id: string; name: string; rtl?: boolean }[] = [
+  { id: 'ar', name: 'العربية', rtl: true }, { id: 'en', name: 'English' }, { id: 'fr', name: 'Français' }, { id: 'es', name: 'Español' }, { id: 'de', name: 'Deutsch' },
+  { id: 'it', name: 'Italiano' }, { id: 'pt', name: 'Português' }, { id: 'ru', name: 'Русский' }, { id: 'tr', name: 'Türkçe' }, { id: 'fa', name: 'فارسی', rtl: true },
+  { id: 'ur', name: 'اردو', rtl: true }, { id: 'he', name: 'עברית', rtl: true }, { id: 'ps', name: 'پښتو', rtl: true }, { id: 'hi', name: 'हिन्दी' }, { id: 'bn', name: 'বাংলা' },
+  { id: 'ta', name: 'தமிழ்' }, { id: 'te', name: 'తెలుగు' }, { id: 'id', name: 'Bahasa Indonesia' }, { id: 'ms', name: 'Bahasa Melayu' }, { id: 'zh', name: '中文' },
+  { id: 'ja', name: '日本語' }, { id: 'ko', name: '한국어' }, { id: 'th', name: 'ไทย' }, { id: 'vi', name: 'Tiếng Việt' }, { id: 'nl', name: 'Nederlands' },
+  { id: 'pl', name: 'Polski' }, { id: 'uk', name: 'Українська' }, { id: 'ro', name: 'Română' }, { id: 'el', name: 'Ελληνικά' }, { id: 'cs', name: 'Čeština' },
+  { id: 'hu', name: 'Magyar' }, { id: 'sv', name: 'Svenska' }, { id: 'fi', name: 'Suomi' }, { id: 'da', name: 'Dansk' }, { id: 'no', name: 'Norsk' },
+  { id: 'bg', name: 'Български' }, { id: 'sr', name: 'Српски' }, { id: 'hr', name: 'Hrvatski' }, { id: 'sw', name: 'Kiswahili' }, { id: 'am', name: 'አማርኛ' }, { id: 'so', name: 'Soomaali' },
+];
+const getLang = (): Lang => { try { const v = localStorage.getItem('kan_lang') ?? 'ar'; return LANGS.some(l => l.id === v) ? v : 'ar'; } catch { return 'ar'; } };
 const LANG: Lang = getLang();
 const setLangStored = (l: Lang) => { try { localStorage.setItem('kan_lang', l); } catch { /* ignore */ } window.location.reload(); };
-if (typeof document !== 'undefined') { document.documentElement.lang = LANG; document.documentElement.dir = LANG === 'en' ? 'ltr' : 'rtl'; }
+if (typeof document !== 'undefined') { document.documentElement.lang = LANG; document.documentElement.dir = LANGS.find(l => l.id === LANG)?.rtl ? 'rtl' : 'ltr'; }
 const EN: Record<string, string> = {
   'جاري التحديث': 'Refreshing...',
   'الرئيسية': 'Home', 'ريلز': 'Reels', 'فيديوهات': 'Videos', 'حسابي': 'Profile', 'نشر': 'Post',
@@ -45,8 +55,46 @@ const EN: Record<string, string> = {
   'أعجب بمنشورك': 'liked your post', 'بدأ بمتابعتك': 'started following you', 'يكتب الآن...': 'typing...', 'ملصقات': 'Stickers', 'إرفاق': 'Attach', 'اسأل KIX': 'Ask KIX',
   'الإعجابات': 'Likes', 'التعليقات': 'Comments', 'المتابِعون': 'Followers', 'يتابع': 'Following', 'أضف تعليقاً...': 'Add a comment...', 'إعجاب': 'Like', 'محفوظ': 'Saved', 'تشغيل الصوت': 'Unmute', 'كتم الصوت': 'Mute', 'إيقاف مؤقت': 'Pause', 'تشغيل': 'Play', 'حفظ الملصق': 'Save sticker', 'تم الحفظ ✓': 'Saved ✓', 'تعذّر حفظ الملصق': "Couldn't save the sticker", 'هذه المحادثة فقط': 'This chat only', 'كل المحادثات': 'All chats', 'تطبيق الخلفية على': 'Apply background to', 'خلفية المحادثة': 'Chat background', 'رفع صورة': 'Upload image', 'افتراضي': 'Default', 'نيلي': 'Indigo', 'أخضر': 'Green', 'بنفسجي': 'Purple', 'قلب كريستال': 'Crystal heart', 'عملة ذهبية': 'Gold coin', 'ألماسة': 'Diamond'
 };
-const DIR = LANG === 'en' ? 'ltr' : 'rtl';
-const t = (ar: string): string => (LANG === 'en' ? EN[ar] ?? ar : ar);
+const IS_RTL = !!LANGS.find(l => l.id === LANG)?.rtl;
+const DIR = IS_RTL ? 'rtl' : 'ltr';
+// Core screens are translated natively; every other string falls back to English (then Arabic) until its pack is added.
+const CORE_KEYS = ['الرئيسية', 'ريلز', 'فيديوهات', 'حسابي', 'نشر', 'الإشعارات', 'الرسائل', 'بحث', 'الإعدادات', 'الكل', 'المتابَعون', 'قصتك', 'تسجيل الدخول', 'حساب جديد', 'اسم المستخدم', 'كلمة المرور', 'اكتب رسالة...', 'ماذا يدور في ذهنك؟', 'متابعة', 'راسل', 'مشاركة', 'حذف', 'تعديل', 'رد', 'حفظ', 'إلغاء', 'حفظ التغييرات', 'تسجيل الخروج', 'اللغة', 'الخصوصية'];
+const CORE_TR: Record<string, string[]> = {
+  fr: ['Accueil', 'Reels', 'Vidéos', 'Profil', 'Publier', 'Notifications', 'Messages', 'Rechercher', 'Paramètres', 'Tout', 'Abonnements', 'Votre story', 'Connexion', 'Créer un compte', "Nom d'utilisateur", 'Mot de passe', 'Écrire un message...', 'À quoi pensez-vous ?', "S'abonner", 'Message', 'Partager', 'Supprimer', 'Modifier', 'Répondre', 'Enregistrer', 'Annuler', 'Enregistrer les modifications', 'Se déconnecter', 'Langue', 'Confidentialité'],
+  es: ['Inicio', 'Reels', 'Videos', 'Perfil', 'Publicar', 'Notificaciones', 'Mensajes', 'Buscar', 'Ajustes', 'Todo', 'Siguiendo', 'Tu historia', 'Iniciar sesión', 'Crear cuenta', 'Nombre de usuario', 'Contraseña', 'Escribe un mensaje...', '¿Qué estás pensando?', 'Seguir', 'Mensaje', 'Compartir', 'Eliminar', 'Editar', 'Responder', 'Guardar', 'Cancelar', 'Guardar cambios', 'Cerrar sesión', 'Idioma', 'Privacidad'],
+  de: ['Startseite', 'Reels', 'Videos', 'Profil', 'Posten', 'Benachrichtigungen', 'Nachrichten', 'Suchen', 'Einstellungen', 'Alle', 'Gefolgt', 'Deine Story', 'Anmelden', 'Konto erstellen', 'Benutzername', 'Passwort', 'Nachricht schreiben...', 'Was denkst du gerade?', 'Folgen', 'Nachricht', 'Teilen', 'Löschen', 'Bearbeiten', 'Antworten', 'Speichern', 'Abbrechen', 'Änderungen speichern', 'Abmelden', 'Sprache', 'Datenschutz'],
+  it: ['Home', 'Reels', 'Video', 'Profilo', 'Pubblica', 'Notifiche', 'Messaggi', 'Cerca', 'Impostazioni', 'Tutti', 'Seguiti', 'La tua storia', 'Accedi', 'Crea account', 'Nome utente', 'Password', 'Scrivi un messaggio...', 'A cosa stai pensando?', 'Segui', 'Messaggio', 'Condividi', 'Elimina', 'Modifica', 'Rispondi', 'Salva', 'Annulla', 'Salva modifiche', 'Esci', 'Lingua', 'Privacy'],
+  pt: ['Início', 'Reels', 'Vídeos', 'Perfil', 'Publicar', 'Notificações', 'Mensagens', 'Pesquisar', 'Configurações', 'Tudo', 'Seguindo', 'Seu story', 'Entrar', 'Criar conta', 'Nome de usuário', 'Senha', 'Digite uma mensagem...', 'No que você está pensando?', 'Seguir', 'Mensagem', 'Compartilhar', 'Excluir', 'Editar', 'Responder', 'Salvar', 'Cancelar', 'Salvar alterações', 'Sair', 'Idioma', 'Privacidade'],
+  tr: ['Ana sayfa', 'Reels', 'Videolar', 'Profil', 'Paylaş', 'Bildirimler', 'Mesajlar', 'Ara', 'Ayarlar', 'Tümü', 'Takip edilenler', 'Hikâyen', 'Giriş yap', 'Hesap oluştur', 'Kullanıcı adı', 'Şifre', 'Mesaj yaz...', 'Aklında ne var?', 'Takip et', 'Mesaj gönder', 'Paylaş', 'Sil', 'Düzenle', 'Yanıtla', 'Kaydet', 'İptal', 'Değişiklikleri kaydet', 'Çıkış yap', 'Dil', 'Gizlilik'],
+  ru: ['Главная', 'Reels', 'Видео', 'Профиль', 'Опубликовать', 'Уведомления', 'Сообщения', 'Поиск', 'Настройки', 'Все', 'Подписки', 'Ваша история', 'Войти', 'Регистрация', 'Имя пользователя', 'Пароль', 'Напишите сообщение...', 'О чём вы думаете?', 'Подписаться', 'Написать', 'Поделиться', 'Удалить', 'Изменить', 'Ответить', 'Сохранить', 'Отмена', 'Сохранить изменения', 'Выйти', 'Язык', 'Конфиденциальность'],
+  id: ['Beranda', 'Reels', 'Video', 'Profil', 'Posting', 'Notifikasi', 'Pesan', 'Cari', 'Pengaturan', 'Semua', 'Mengikuti', 'Cerita Anda', 'Masuk', 'Daftar', 'Nama pengguna', 'Kata sandi', 'Ketik pesan...', 'Apa yang Anda pikirkan?', 'Ikuti', 'Kirim pesan', 'Bagikan', 'Hapus', 'Edit', 'Balas', 'Simpan', 'Batal', 'Simpan perubahan', 'Keluar', 'Bahasa', 'Privasi'],
+  hi: ['होम', 'रील्स', 'वीडियो', 'प्रोफ़ाइल', 'पोस्ट करें', 'सूचनाएँ', 'संदेश', 'खोजें', 'सेटिंग्स', 'सभी', 'फ़ॉलोइंग', 'आपकी स्टोरी', 'लॉग इन', 'साइन अप', 'उपयोगकर्ता नाम', 'पासवर्ड', 'संदेश लिखें...', 'आप क्या सोच रहे हैं?', 'फ़ॉलो करें', 'संदेश भेजें', 'शेयर करें', 'हटाएँ', 'संपादित करें', 'जवाब दें', 'सहेजें', 'रद्द करें', 'बदलाव सहेजें', 'लॉग आउट', 'भाषा', 'गोपनीयता'],
+  zh: ['首页', '短视频', '视频', '我的', '发布', '通知', '消息', '搜索', '设置', '全部', '关注', '你的快拍', '登录', '注册', '用户名', '密码', '输入消息...', '有什么新鲜事？', '关注', '发消息', '分享', '删除', '编辑', '回复', '保存', '取消', '保存更改', '退出登录', '语言', '隐私'],
+  ja: ['ホーム', 'リール', '動画', 'プロフィール', '投稿', '通知', 'メッセージ', '検索', '設定', 'すべて', 'フォロー中', 'あなたのストーリー', 'ログイン', '新規登録', 'ユーザー名', 'パスワード', 'メッセージを入力...', 'いまどうしてる？', 'フォロー', 'メッセージ', 'シェア', '削除', '編集', '返信', '保存', 'キャンセル', '変更を保存', 'ログアウト', '言語', 'プライバシー'],
+  ko: ['홈', '릴스', '동영상', '프로필', '게시', '알림', '메시지', '검색', '설정', '전체', '팔로잉', '내 스토리', '로그인', '회원가입', '사용자 이름', '비밀번호', '메시지 입력...', '무슨 생각을 하고 계세요?', '팔로우', '메시지', '공유', '삭제', '수정', '답글', '저장', '취소', '변경사항 저장', '로그아웃', '언어', '개인정보 보호'],
+};
+const PACKS: Record<string, Record<string, string>> = {};
+for (const [lg, vals] of Object.entries(CORE_TR)) PACKS[lg] = Object.fromEntries(CORE_KEYS.map((k, i) => [k, vals[i]]));
+Object.assign(EN, {
+  'الخصوصية': 'Privacy', 'حسابك عام أم خاص، من يراسلك، المحظورون، الأصدقاء المقربون': 'Public or private account, who can message you, blocked people, close friends',
+  'نوع الحساب': 'Account type', 'عام': 'Public', 'خاص': 'Private',
+  'أي شخص يستطيع رؤية منشوراتك ومتابعتك.': 'Anyone can see your posts and follow you.',
+  'المتابعون المقبولون فقط يرون منشوراتك، والمتابعة تحتاج موافقتك.': 'Only approved followers see your posts, and following needs your approval.',
+  'من يستطيع مراسلتي': 'Who can message me', 'من أتابعهم فقط': 'People I follow only', 'لا أحد': 'No one',
+  'طلبات المتابعة': 'Follow requests', 'قبول': 'Accept', 'رفض': 'Decline', 'لا توجد طلبات': 'No requests',
+  'الأصدقاء المقربون': 'Close friends', 'اختر من يرى قصصك المخصصة للأصدقاء المقربين': 'Choose who sees your close-friends stories',
+  'الحسابات المحظورة': 'Blocked accounts', 'لا توجد حسابات محظورة': 'No blocked accounts', 'إلغاء الحظر': 'Unblock', 'حظر': 'Block',
+  'ابحث باسم المستخدم لحظر شخص': 'Search a username to block someone',
+  'الحظر يمنع الشخص من مراسلتك ورؤية منشوراتك، وتختفي منشوراته عنك.': 'Blocking stops the person from messaging you and seeing your posts, and hides their posts from you.',
+  'لقد حظرت هذا الحساب. ألغِ الحظر لتتمكن من المراسلة.': "You blocked this account. Unblock it to be able to message.",
+  'لا يمكنك مراسلة هذا الحساب.': "You can't message this account.", 'هذا الحساب لا يستقبل رسائل منك.': "This account isn't accepting messages from you.",
+  'تعذّر حفظ إعداد الخصوصية. تأكد من تشغيل ملف SQL الخاص بالخصوصية.': "Couldn't save the privacy setting. Make sure the privacy SQL file was run.",
+  'تعذّر تنفيذ الحظر. تأكد من تشغيل ملف SQL الخاص بالخصوصية.': "Couldn't block. Make sure the privacy SQL file was run.",
+  'تم إرسال طلب المتابعة ✓': 'Follow request sent ✓', 'تعذّر إرسال طلب المتابعة': "Couldn't send the follow request",
+  'حظر هذا الحساب؟ لن يتمكن من مراسلتك ورؤية منشوراتك.': "Block this account? They won't be able to message you or see your posts.",
+  'إغلاق': 'Close', 'حظر / إلغاء الحظر': 'Block / Unblock',
+});
+const t = (ar: string): string => (LANG === 'ar' ? ar : PACKS[LANG]?.[ar] ?? EN[ar] ?? ar);
 // More English strings. The page text, placeholders and alerts are translated at runtime (see kanTr below).
 Object.assign(EN, {
   "(أنت)": "(You)", "· معدّلة": "· edited", "6 أحرف على الأقل": "At least 6 characters", "أدخل اسم المستخدم وكلمة المرور": "Enter your username and password",
@@ -121,7 +169,7 @@ const EN_RULES: [RegExp, (m: RegExpExecArray) => string][] = [
 const kanTr = (raw: string): string => {
   const k = raw.trim();
   if (!k || !/[\u0600-\u06FF]/.test(k)) return raw;
-  let out = EN[k];
+  let out = PACKS[LANG]?.[k] ?? EN[k];
   if (out === undefined) for (const [re, f] of EN_RULES) { const m = re.exec(k); if (m) { out = f(m); break; } }
   return out === undefined ? raw : raw.replace(k, out);
 };
@@ -132,12 +180,12 @@ let kanDlgQueue: KanDlg[] = [];
 const kanDlgSubs = new Set<() => void>();
 const kanDlgEmit = () => kanDlgSubs.forEach(f => f());
 const kanDlgPush = (kind: KanDlg['kind'], message: string, tone: KanDlg['tone']) =>
-  new Promise<boolean>(resolve => { kanDlgQueue = [...kanDlgQueue, { id: ++kanDlgSeq, kind, tone, message: LANG === 'en' ? kanTr(message) : message, resolve }]; kanDlgEmit(); });
+  new Promise<boolean>(resolve => { kanDlgQueue = [...kanDlgQueue, { id: ++kanDlgSeq, kind, tone, message: LANG !== 'ar' ? kanTr(message) : message, resolve }]; kanDlgEmit(); });
 const kanConfirm = (message: string, danger = true) => kanDlgPush('confirm', message, danger ? 'danger' : 'info');
 const kanAlert = (message: string) => kanDlgPush('alert', message, /تعذّر|تعذر|فشل|لا يمكن|خطأ|error|fail|couldn/i.test(message) ? 'error' : 'info');
 if (typeof window !== 'undefined') window.alert = (m?: unknown) => { void kanAlert(String(m ?? '')); };
 // English mode: anything still written in Arabic on screen (text, placeholders, titles, alerts) is translated as it appears.
-if (LANG === 'en' && typeof window !== 'undefined') {
+if (LANG !== 'ar' && typeof window !== 'undefined') {
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
   const fixNode = (n: Node) => {
     if (n.nodeType === 3) { const v = n.nodeValue ?? ''; const o = kanTr(v); if (o !== v) n.nodeValue = o; return; }
@@ -178,6 +226,8 @@ interface User {
   joinDate: string;
   followers: string[];
   following: string[];
+  isPrivate?: boolean;
+  whoCanMessage?: 'everyone' | 'followers' | 'nobody';
 }
 
 interface Comment {
@@ -411,12 +461,66 @@ function shrinkImage(dataUrl: string, max = 256): Promise<string> {
   });
 }
 
+// ============ Privacy: blocks, private accounts, fast message lane ============
+const kanBlocks = { mine: new Set<string>(), theirs: new Set<string>(), v: 0, subs: new Set<() => void>() };
+const kanBlocksEmit = () => { kanBlocks.v++; kanBlocks.subs.forEach(f => f()); };
+const useBlocks = () => useSyncExternalStore(cb => { kanBlocks.subs.add(cb); return () => { kanBlocks.subs.delete(cb); }; }, () => kanBlocks.v);
+const kanPrivateIds = new Set<string>();
+async function loadBlocks(me: string) {
+  const { data, error } = await supabase.from('blocks').select('blocker_id, blocked_id');
+  if (error) return; // privacy SQL not installed yet
+  kanBlocks.mine = new Set(); kanBlocks.theirs = new Set();
+  for (const r of (data ?? []) as { blocker_id: string; blocked_id: string }[]) {
+    if (r.blocker_id === me) kanBlocks.mine.add(r.blocked_id);
+    else if (r.blocked_id === me) kanBlocks.theirs.add(r.blocker_id);
+  }
+  kanBlocksEmit();
+}
+async function setBlocked(me: string, id: string, on: boolean) {
+  const prev = new Set(kanBlocks.mine);
+  if (on) kanBlocks.mine.add(id); else kanBlocks.mine.delete(id);
+  kanBlocksEmit();
+  const { error } = on
+    ? await supabase.from('blocks').insert({ blocker_id: me, blocked_id: id })
+    : await supabase.from('blocks').delete().eq('blocker_id', me).eq('blocked_id', id);
+  if (error) { console.error(error); kanBlocks.mine = prev; kanBlocksEmit(); window.alert('تعذّر تنفيذ الحظر. تأكد من تشغيل ملف SQL الخاص بالخصوصية.'); }
+}
+// Posts from blocked people (either way) and from private accounts I do not follow stay out of the feeds.
+function makePostFilter(me: User, users: User[]) {
+  const priv = new Set(users.filter(u => u.isPrivate).map(u => u.id));
+  return (p: { userId: string }) => p.userId === me.id || (!kanBlocks.mine.has(p.userId) && !kanBlocks.theirs.has(p.userId) && (!priv.has(p.userId) || me.following.includes(p.userId)));
+}
+// Fast lane: a text message also travels over a broadcast channel (tens of milliseconds); the database row confirms it a moment later.
+const fastLane = new Map<string, { ch: ReturnType<typeof supabase.channel>; ready: boolean; q: Record<string, unknown>[] }>();
+function fastSend(peerId: string, payload: Record<string, unknown>) {
+  let lane = fastLane.get(peerId);
+  if (!lane) {
+    const ch = supabase.channel(`inbox:${peerId}`);
+    const l = { ch, ready: false, q: [] as Record<string, unknown>[] };
+    ch.subscribe(st => {
+      if (st === 'SUBSCRIBED') { l.ready = true; l.q.splice(0).forEach(p => { void ch.send({ type: 'broadcast', event: 'msg', payload: p }); }); }
+      else if (st === 'CLOSED' || st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') { fastLane.delete(peerId); void supabase.removeChannel(ch); }
+    });
+    fastLane.set(peerId, l); lane = l;
+  }
+  if (lane.ready) void lane.ch.send({ type: 'broadcast', event: 'msg', payload }); else lane.q.push(payload);
+}
+
+async function fetchProfiles(): Promise<ProfRow[]> {
+  const base = 'id, username, display_name, avatar, bio, location, website, created_at';
+  const r = await supabase.from('profiles').select(`${base}, is_private, who_can_message`);
+  if (!r.error) return (r.data ?? []) as unknown as ProfRow[];
+  const r2 = await supabase.from('profiles').select(base); // privacy SQL not installed yet: the app still works
+  if (r2.error) throw r2.error;
+  return (r2.data ?? []) as unknown as ProfRow[];
+}
+type ProfRow = { id: string; username: string; display_name: string; avatar: string | null; bio: string | null; location: string | null; website: string | null; created_at: string; is_private?: boolean | null; who_can_message?: string | null };
+
 async function loadUsers(): Promise<User[]> {
-  const [profiles, follows] = await Promise.all([
-    supabase.from('profiles').select('id, username, display_name, avatar, bio, location, website, created_at'),
+  const [profileRows, follows] = await Promise.all([
+    fetchProfiles(),
     supabase.from('follows').select('follower_id, following_id'),
   ]);
-  if (profiles.error) throw profiles.error;
   if (follows.error) throw follows.error;
   const followers = new Map<string, string[]>();
   const following = new Map<string, string[]>();
@@ -424,7 +528,7 @@ async function loadUsers(): Promise<User[]> {
     followers.set(f.following_id, [...(followers.get(f.following_id) ?? []), f.follower_id]);
     following.set(f.follower_id, [...(following.get(f.follower_id) ?? []), f.following_id]);
   }
-  return (profiles.data ?? []).map(p => ({
+  const usersOut: User[] = profileRows.map(p => ({
     id: p.id,
     username: p.username,
     displayName: p.display_name,
@@ -435,7 +539,12 @@ async function loadUsers(): Promise<User[]> {
     joinDate: p.created_at,
     followers: followers.get(p.id) ?? [],
     following: following.get(p.id) ?? [],
+    isPrivate: !!p.is_private,
+    whoCanMessage: (p.who_can_message === 'followers' || p.who_can_message === 'nobody' ? p.who_can_message : 'everyone') as 'everyone' | 'followers' | 'nobody',
   }));
+  kanPrivateIds.clear();
+  for (const u of usersOut) if (u.isPrivate) kanPrivateIds.add(u.id);
+  return usersOut;
 }
 
 const POST_MEDIA_BUCKET = 'post-media';
@@ -1489,9 +1598,20 @@ function pauseAllPostAudio(except?: HTMLAudioElement | null) { postAudios.forEac
 let musicScrollUntil = 0;
 // One sound at a time: of everything with music that is on screen, only the one showing the biggest part plays.
 const musicVis = new Map<object, { ratio: number; on: boolean; apply: (on: boolean) => void }>();
+// How much of a card counts as "on screen" (like Instagram / TikTok): its visible part measured against the SMALLER of the card and the screen,
+// blended with its share of the screen. A tall card that fills the screen therefore scores as high as a short card that is fully visible.
+const MUSIC_THRESHOLDS = Array.from({ length: 41 }, (_, i) => i / 40);
+function musicScore(en: IntersectionObserverEntry): number {
+  if (!en.isIntersecting) return 0;
+  const vh = en.rootBounds?.height || window.innerHeight || 1;
+  const h = Math.max(1, en.boundingClientRect.height);
+  const vis = en.intersectionRect.height;
+  return Math.min(1, (vis / Math.min(h, vh)) * 0.6 + (vis / vh) * 0.4);
+}
 function musicArbitrate() {
-  let best: object | null = null; let br = 0.4;
-  musicVis.forEach((v, k) => { if (v.ratio > br + 0.001) { br = v.ratio; best = k; } });
+  // The sound that is already playing keeps its place until it really leaves (it needs only 0.2 and gets a small bonus), a new one needs 0.4.
+  let best: object | null = null; let bs = 0;
+  musicVis.forEach((v, k) => { const need = v.on ? 0.2 : 0.4; if (v.ratio < need) return; const s = v.ratio + (v.on ? 0.15 : 0); if (s > bs) { bs = s; best = k; } });
   const scrolling = performance.now() < musicScrollUntil;
   musicVis.forEach((v, k) => {
     const want = k === best;
@@ -1517,7 +1637,7 @@ if (typeof window !== 'undefined') {
     const speed = (Math.abs(y - lastY) / Math.max(1, now - lastT)) * 1000;
     lastY = y; lastT = now;
     musicScrollUntil = now + 170;
-    if (speed > 600) { musicVis.forEach(m => { if (m.on) { m.on = false; m.apply(false); } }); stopPostMusic(); sweep(); }
+    if (speed > 1300) { musicVis.forEach(m => { if (m.on) { m.on = false; m.apply(false); } }); stopPostMusic(); sweep(); }
     window.clearTimeout(idleT);
     idleT = window.setTimeout(() => { sweep(); musicArbitrate(); }, 190);
   }, { passive: true });
@@ -6661,6 +6781,40 @@ export default function App() {
     return m;
   };
 
+  // Fast lane (receiver): text messages arrive over broadcast first; the database row confirms them (or they vanish after 8 s).
+  const fastMsgs = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!currentUserId) return;
+    const ch = supabase.channel(`inbox:${currentUserId}`);
+    ch.on('broadcast', { event: 'msg' }, ({ payload }) => {
+      const m = payload as { id?: string; conv?: string; from?: string; text?: string; reply?: string | null; ts?: number };
+      if (!m.id || !m.conv || !m.from || !m.text || m.from === currentUserId || kanBlocks.mine.has(m.from)) return;
+      const from = m.from, id = m.id, conv = m.conv, text = m.text;
+      const c0 = conversationsRef.current.find(c => c.id === conv && c.participants.includes(from));
+      if (!c0 || c0.messages.some(x => x.id === id)) return;
+      fastMsgs.current.set(id, window.setTimeout(() => {
+        fastMsgs.current.delete(id);
+        setConversations(prev => prev.map(c => (c.id !== conv ? c : { ...c, messages: c.messages.filter(x => x.id !== id) })));
+      }, 8000));
+      setConversations(prev => prev.map(c => (c.id !== conv || c.messages.some(x => x.id === id) ? c : { ...c, messages: [...c.messages, { id, senderId: from, text, timestamp: m.ts ?? Date.now(), read: false, replyToId: m.reply ?? undefined }], lastActivity: m.ts ?? Date.now() })));
+      playSound('receive');
+      markDelivered(currentUserId);
+      const ui = uiRef.current;
+      const sender = ui.users.find(x => x.id === from);
+      if (document.visibilityState === 'hidden') systemNotify(sender?.displayName ?? 'رسالة جديدة', messagePreviewText(text, null), `dm-${from}`, () => navRef.current.openChat(from), sender?.avatar);
+      else if (!(ui.tab === 'messages' && ui.chatWith === from)) toastRef.current({ title: sender?.displayName ?? 'رسالة جديدة', body: messagePreviewText(text, null), avatar: sender?.avatar, onOpen: () => navRef.current.openChat(from) });
+    });
+    ch.subscribe();
+    return () => { void supabase.removeChannel(ch); };
+  }, [currentUserId]);
+  useEffect(() => {
+    if (!currentUserId) return;
+    void loadBlocks(currentUserId);
+    const onVis = () => { if (document.visibilityState === 'visible') void loadBlocks(currentUserId); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [currentUserId]);
+
   // Latest screen state for the live handlers (they live inside long-running subscriptions).
   const [toast, setToast] = useState<InAppToast | null>(null);
   const toastRef = useRef<(t: Omit<InAppToast, 'id'>) => void>(() => undefined);
@@ -6848,6 +7002,8 @@ export default function App() {
       .channel('kan-chat')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async payload => {
         const row = payload.new as unknown as MessageRow;
+        const fastT = fastMsgs.current.get(row.id);
+        if (fastT !== undefined) { window.clearTimeout(fastT); fastMsgs.current.delete(row.id); return; } // already shown by the fast lane (sound + banner included)
         if (row.sender_id !== currentUserId) {
           { const gm = parseGame(row.text); if (!gm || gm.k === 'inv') playSound('receive'); } // chess moves make no message sound
           markDelivered(currentUserId);
@@ -7238,7 +7394,7 @@ export default function App() {
   }
 
   return (
-    <div dir={LANG === 'en' ? 'ltr' : 'rtl'} className="min-h-[100dvh] bg-gray-950 text-white font-sans overflow-x-clip">
+    <div dir={DIR} className="min-h-[100dvh] bg-gray-950 text-white font-sans overflow-x-clip">
       <style>{'html,body{scrollbar-width:none!important;-ms-overflow-style:none;-webkit-text-size-adjust:100%;overflow-x:hidden;overscroll-behavior-y:none;scroll-behavior:auto;-webkit-tap-highlight-color:transparent}img,video{-webkit-user-drag:none}.post-card{contain:layout style}[id^="msg-"],[id^="gmsg-"]{contain:layout style}.overflow-y-auto,.overflow-y-scroll{-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}.no-scrollbar,[class*=overflow-y-auto],[class*=overflow-x-auto]{-webkit-overflow-scrolling:touch}button,a{touch-action:manipulation}@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
       <KanDialogHost />
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
@@ -7258,9 +7414,9 @@ export default function App() {
               {menuOpen && (
                 <motion.div
                   key="bar"
-                  initial={{ opacity: 0, x: LANG === 'en' ? 12 : -12, scale: 0.96 }}
+                  initial={{ opacity: 0, x: DIR === 'ltr' ? 12 : -12, scale: 0.96 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
-                  exit={{ opacity: 0, x: LANG === 'en' ? 12 : -12, scale: 0.96, transition: { duration: 0.12, ease: 'easeIn' } }}
+                  exit={{ opacity: 0, x: DIR === 'ltr' ? 12 : -12, scale: 0.96, transition: { duration: 0.12, ease: 'easeIn' } }}
                   transition={{ type: 'tween', duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                   style={{ willChange: 'transform, opacity' }}
                   className="absolute end-full me-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 p-1 rounded-full bg-gray-900/95 border border-white/10 shadow-lg shadow-black/30"
@@ -7748,7 +7904,9 @@ function Feed({ posts, setPosts, users, currentUser, onOpenProfile, frontier, ha
 }) {
   const [mode, setMode] = useState<'all' | 'following' | 'files'>('all');
   const sentinel = useRef<HTMLDivElement>(null);
-  const sorted = useStableOrder(posts.filter(p => p.timestamp >= frontier));
+  useBlocks();
+  const okPost = makePostFilter(currentUser, users);
+  const sorted = useStableOrder(posts.filter(p => p.timestamp >= frontier && okPost(p)));
   const allPosts = mode === 'all'
     ? sorted
     : mode === 'files'
@@ -7962,7 +8120,7 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
     const a = ref.current;
     const card = holder.current?.closest('.post-card') as HTMLElement | null;
     // The sound belongs to the picture: it plays only while the picture is really on screen and stops the moment it is not.
-    const box = (card?.querySelector('img, video') as HTMLElement | null) ?? card ?? holder.current;
+    const box = card ?? (holder.current?.parentElement as HTMLElement | null) ?? holder.current; // the whole card is measured (proportionally), so a long card keeps its music while it fills the screen
     if (!a || !box || typeof IntersectionObserver === 'undefined') return;
     let vis = false;
     let tok = 0; // every on/off bumps it: a late "metadata loaded" / "play" from an older turn is ignored, so music can never start after its post left
@@ -7985,7 +8143,7 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
         if (a.readyState >= 1) go(); else { pending = go; a.addEventListener('loadedmetadata', go, { once: true }); a.load(); }
       } else { a.pause(); }
     };
-    const io = new IntersectionObserver(([en]) => { musicReport(a, en.isIntersecting ? en.intersectionRatio : 0, turn); }, { threshold: [0, 0.2, 0.4, 0.6, 0.8, 1] });
+    const io = new IntersectionObserver(([en]) => { musicReport(a, musicScore(en), turn); }, { threshold: MUSIC_THRESHOLDS });
     io.observe(box);
     const hide = () => { if (document.hidden) a.pause(); };
     document.addEventListener('visibilitychange', hide);
@@ -8695,7 +8853,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       else if (activeRef.current) { activeRef.current = false; video.pause(); video.currentTime = 0; }
     };
     // Two reels half on screen: only the one showing the bigger part plays (and its music).
-    const observer = new IntersectionObserver(([entry]) => { musicReport(box, entry.isIntersecting ? entry.intersectionRatio : 0, turn); }, { threshold: [0, 0.2, 0.4, 0.6, 0.8, 1] });
+    const observer = new IntersectionObserver(([entry]) => { musicReport(box, musicScore(entry), turn); }, { threshold: MUSIC_THRESHOLDS });
     observer.observe(box);
     return () => { observer.disconnect(); musicForget(box); };
   }, []);
@@ -9046,7 +9204,9 @@ function ReelsTab({ posts, setPosts, users, setUsers, currentUser, onOpenProfile
   const swReel = useRef<{ x: number; y: number; t: number } | null>(null);
   const [lockH, setLockH] = useState<number | null>(null); // keyboard must not resize the reels list (that scrolled to the next reel)
   const [listModal, setListModal] = useState<{ title: string; ids: string[] } | null>(null);
-  const reelsByTime = posts.filter(p => p.media?.type === 'video' && !p.isVideo).sort((a, b) => b.timestamp - a.timestamp);
+  useBlocks();
+  const okPost = makePostFilter(currentUser, users);
+  const reelsByTime = posts.filter(p => p.media?.type === 'video' && !p.isVideo && okPost(p)).sort((a, b) => b.timestamp - a.timestamp);
   const reels = useStableOrder(reelsByTime);
   const commentPost = commentsFor ? posts.find(p => p.id === commentsFor) : undefined;
   const [hasMore, setHasMore] = useState(true);
@@ -9923,7 +10083,9 @@ function VideosTab({ posts, setPosts, users, currentUser, setUsers, onOpenProfil
   const [loading, setLoading] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
-  const videos = useStableOrder(posts.filter(p => p.isVideo && p.media?.type === 'video'));
+  useBlocks();
+  const okPost = makePostFilter(currentUser, users);
+  const videos = useStableOrder(posts.filter(p => p.isVideo && p.media?.type === 'video' && okPost(p)));
   const [vf, setVf] = useState<'all' | 'subs' | 'saved' | 'lib'>('all');
   const [sort, setSort] = useState<'new' | 'top'>('new');
   const [channel, setChannel] = useState<string | null>(null);
@@ -10824,7 +10986,7 @@ function LocationPicker({ onPick, onClose }: { onPick: (l: GeoLoc) => void; onCl
   const [failed, setFailed] = useState(false);
   const rev = async (lat: number, lng: number): Promise<string> => {
     try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=${LANG === 'en' ? 'en' : 'ar'}&lat=${lat}&lon=${lng}`);
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=${LANG}&lat=${lat}&lon=${lng}`);
       const j = await r.json() as { display_name?: string };
       return j.display_name ? j.display_name.split(',').slice(0, 3).join('،').trim() : '';
     } catch { return ''; }
@@ -10857,7 +11019,7 @@ function LocationPicker({ onPick, onClose }: { onPick: (l: GeoLoc) => void; onCl
     if (c && Math.abs(Number(c[1])) <= 90 && Math.abs(Number(c[2])) <= 180) { mapRef.current?.setView([Number(c[1]), Number(c[2])], 16); setRes([]); void choose(Number(c[1]), Number(c[2])); return; }
     setBusy(true); setMsg('');
     try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=${LANG === 'en' ? 'en' : 'ar'}&q=${encodeURIComponent(v)}`);
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=${LANG}&q=${encodeURIComponent(v)}`);
       const j = await r.json() as { lat: string; lon: string; display_name: string }[];
       setRes(j.map(x => ({ lat: Number(x.lat), lng: Number(x.lon), name: x.display_name.split(',').slice(0, 3).join('،').trim() })));
       if (j.length === 0) setMsg('مفيش نتايج، اضغط على الخريطة لتحديد المكان');
@@ -12628,6 +12790,11 @@ function makeToggleFollow(currentUser: User, setUsers: React.Dispatch<React.SetS
   };
   return async (userId: string) => {
     const already = currentUser.following.includes(userId);
+    if (!already && userId !== currentUser.id && kanPrivateIds.has(userId)) {
+      const { error: rqErr } = await supabase.from('follow_requests').insert({ requester_id: currentUser.id, target_id: userId });
+      window.alert(rqErr && rqErr.code !== '23505' ? 'تعذّر إرسال طلب المتابعة' : 'تم إرسال طلب المتابعة ✓');
+      return;
+    }
     flipFollow(userId);
     const { error } = already
       ? await supabase.from('follows').delete().eq('follower_id', currentUser.id).eq('following_id', userId)
@@ -12963,15 +13130,187 @@ function NotificationSettings() {
   );
 }
 
+// ============ Privacy settings ============
+function PrivacyPanel({ currentUser, setUsers, onClose }: { currentUser: User; setUsers: React.Dispatch<React.SetStateAction<User[]>>; onClose: () => void }) {
+  useBackLayer(true, onClose);
+  const bv = useBlocks();
+  const [cf, setCf] = useState(false);
+  const [priv, setPriv] = useState(!!currentUser.isPrivate);
+  const [who, setWho] = useState<'everyone' | 'followers' | 'nobody'>(currentUser.whoCanMessage ?? 'everyone');
+  const [reqs, setReqs] = useState<string[]>([]);
+  const [names, setNames] = useState<Record<string, { name: string; username: string }>>({});
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState<{ id: string; name: string; username: string }[]>([]);
+  const me = currentUser.id;
+
+  const save = async (patch: Record<string, unknown>, undo: () => void): Promise<boolean> => {
+    const { error } = await supabase.from('profiles').update(patch).eq('id', me);
+    if (error) { console.error(error); undo(); window.alert('تعذّر حفظ إعداد الخصوصية. تأكد من تشغيل ملف SQL الخاص بالخصوصية.'); return false; }
+    return true;
+  };
+  const choosePrivate = async (v: boolean) => {
+    if (v === priv) return;
+    setPriv(v);
+    if (await save({ is_private: v }, () => setPriv(!v))) {
+      if (v) kanPrivateIds.add(me); else kanPrivateIds.delete(me);
+      setUsers(prev => prev.map(u => (u.id === me ? { ...u, isPrivate: v } : u)));
+    }
+  };
+  const chooseWho = async (v: 'everyone' | 'followers' | 'nobody') => {
+    if (v === who) return;
+    const old = who;
+    setWho(v);
+    if (await save({ who_can_message: v }, () => setWho(old))) setUsers(prev => prev.map(u => (u.id === me ? { ...u, whoCanMessage: v } : u)));
+  };
+
+  useEffect(() => {
+    let off = false;
+    void (async () => {
+      const { data } = await supabase.from('follow_requests').select('requester_id').eq('target_id', me);
+      if (!off) setReqs(((data ?? []) as { requester_id: string }[]).map(r => r.requester_id));
+    })();
+    return () => { off = true; };
+  }, [me]);
+  const wanted = [...kanBlocks.mine, ...reqs].filter(id => !names[id]);
+  useEffect(() => {
+    if (wanted.length === 0) return;
+    let off = false;
+    void (async () => {
+      const { data } = await supabase.from('profiles').select('id, display_name, username').in('id', wanted);
+      if (off || !data) return;
+      setNames(prev => { const n = { ...prev }; for (const r of data as { id: string; display_name: string; username: string }[]) n[r.id] = { name: r.display_name, username: r.username }; return n; });
+    })();
+    return () => { off = true; };
+  }, [wanted.join(','), bv]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const answer = async (id: string, ok: boolean) => {
+    const { error } = ok ? await supabase.rpc('accept_follow_request', { p_requester: id }) : await supabase.from('follow_requests').delete().eq('requester_id', id).eq('target_id', me);
+    if (error) { console.error(error); window.alert('تعذّر حفظ إعداد الخصوصية. تأكد من تشغيل ملف SQL الخاص بالخصوصية.'); return; }
+    setReqs(prev => prev.filter(x => x !== id));
+    if (ok) setUsers(prev => prev.map(u => (u.id === me ? { ...u, followers: u.followers.includes(id) ? u.followers : [...u.followers, id] } : u.id === id ? { ...u, following: u.following.includes(me) ? u.following : [...u.following, me] } : u)));
+  };
+  const search = async () => {
+    const v = q.trim().replace(/^@/, '').replace(/[%_,()]/g, '');
+    if (!v) { setFound([]); return; }
+    const { data } = await supabase.from('profiles').select('id, display_name, username').ilike('username', `%${v}%`).neq('id', me).limit(6);
+    setFound(((data ?? []) as { id: string; display_name: string; username: string }[]).map(r => ({ id: r.id, name: r.display_name, username: r.username })));
+  };
+  const card = 'bg-gray-900 border border-gray-800 rounded-2xl p-4';
+  const opt = (on: boolean) => `w-full flex items-center justify-between rounded-xl border px-3.5 py-3 text-sm text-start active:scale-[0.99] transition-transform ${on ? 'border-violet-400 bg-violet-500/15 text-white' : 'border-white/10 text-gray-200'}`;
+  return createPortal(
+    <div dir={DIR} className="kan-theme-text fixed inset-0 z-[160] bg-gray-950 text-white overflow-y-auto overscroll-contain">
+      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3.5 bg-gray-950/95 backdrop-blur border-b border-white/10">
+        <h2 className="font-bold text-base flex items-center gap-2"><LockIcon size={18} /> الخصوصية</h2>
+        <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10" aria-label="إغلاق"><X size={20} /></button>
+      </div>
+      <div className="max-w-xl mx-auto p-4 space-y-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <div className={card}>
+          <div className="text-sm font-semibold mb-3">نوع الحساب</div>
+          <div className="space-y-2">
+            <button onClick={() => void choosePrivate(false)} className={opt(!priv)}><span><span className="block font-semibold">عام</span><span className="block text-xs text-gray-400 mt-0.5">أي شخص يستطيع رؤية منشوراتك ومتابعتك.</span></span>{!priv && <Check size={16} className="text-violet-300 shrink-0" />}</button>
+            <button onClick={() => void choosePrivate(true)} className={opt(priv)}><span><span className="block font-semibold">خاص</span><span className="block text-xs text-gray-400 mt-0.5">المتابعون المقبولون فقط يرون منشوراتك، والمتابعة تحتاج موافقتك.</span></span>{priv && <Check size={16} className="text-violet-300 shrink-0" />}</button>
+          </div>
+        </div>
+        <div className={card}>
+          <div className="text-sm font-semibold mb-3">من يستطيع مراسلتي</div>
+          <div className="space-y-2">
+            {([['everyone', 'الجميع'], ['followers', 'من أتابعهم فقط'], ['nobody', 'لا أحد']] as const).map(([id, label]) => (
+              <button key={id} onClick={() => void chooseWho(id)} className={opt(who === id)}><span>{label}</span>{who === id && <Check size={16} className="text-violet-300 shrink-0" />}</button>
+            ))}
+          </div>
+        </div>
+        {(priv || reqs.length > 0) && (
+          <div className={card}>
+            <div className="text-sm font-semibold mb-3">طلبات المتابعة</div>
+            {reqs.length === 0 && <p className="text-xs text-gray-500">لا توجد طلبات</p>}
+            <div className="space-y-2">
+              {reqs.map(id => (
+                <div key={id} className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0"><div className="text-sm truncate">{names[id]?.name ?? '...'}</div><div className="text-xs text-gray-500 truncate">@{names[id]?.username ?? ''}</div></div>
+                  <button onClick={() => void answer(id, true)} className="px-3 py-1.5 rounded-full bg-violet-600 text-white text-xs font-bold active:scale-95">قبول</button>
+                  <button onClick={() => void answer(id, false)} className="px-3 py-1.5 rounded-full bg-white/10 text-gray-200 text-xs font-bold active:scale-95">رفض</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className={card}>
+          <div className="text-sm font-semibold mb-1">الأصدقاء المقربون</div>
+          <p className="text-xs text-gray-400 mb-3">اختر من يرى قصصك المخصصة للأصدقاء المقربين</p>
+          <button onClick={() => setCf(true)} className="w-full rounded-xl border border-white/10 py-2.5 text-sm font-semibold active:scale-95 transition-transform">تعديل القائمة</button>
+          {cf && <CloseFriendsModal meId={me} onClose={() => setCf(false)} />}
+        </div>
+        <div className={card}>
+          <div className="text-sm font-semibold mb-1">الحسابات المحظورة</div>
+          <p className="text-xs text-gray-400 mb-3">الحظر يمنع الشخص من مراسلتك ورؤية منشوراتك، وتختفي منشوراته عنك.</p>
+          <div className="flex gap-2 mb-3">
+            <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void search(); }} placeholder="ابحث باسم المستخدم لحظر شخص" className="flex-1 min-w-0 rounded-xl bg-gray-950/60 border border-white/10 px-3 py-2 text-[16px] text-white placeholder-gray-500 outline-none" />
+            <button onClick={() => void search()} className="px-3 rounded-xl bg-white/10" aria-label="بحث"><Search size={16} /></button>
+          </div>
+          {found.filter(f => !kanBlocks.mine.has(f.id)).map(f => (
+            <div key={f.id} className="flex items-center gap-2 mb-2">
+              <div className="flex-1 min-w-0"><div className="text-sm truncate">{f.name}</div><div className="text-xs text-gray-500 truncate">@{f.username}</div></div>
+              <button onClick={() => { void setBlocked(me, f.id, true); setFound(prev => prev.filter(x => x.id !== f.id)); }} className="px-3 py-1.5 rounded-full bg-red-500/90 text-white text-xs font-bold active:scale-95">حظر</button>
+            </div>
+          ))}
+          {kanBlocks.mine.size === 0 && <p className="text-xs text-gray-500">لا توجد حسابات محظورة</p>}
+          <div className="space-y-2">
+            {[...kanBlocks.mine].map(id => (
+              <div key={id} className="flex items-center gap-2">
+                <div className="flex-1 min-w-0"><div className="text-sm truncate">{names[id]?.name ?? '...'}</div><div className="text-xs text-gray-500 truncate">@{names[id]?.username ?? ''}</div></div>
+                <button onClick={() => void setBlocked(me, id, false)} className="px-3 py-1.5 rounded-full bg-white/10 text-gray-200 text-xs font-bold active:scale-95">إلغاء الحظر</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function PrivacyEntry({ currentUser, setUsers }: { currentUser: User; setUsers: React.Dispatch<React.SetStateAction<User[]>> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="w-full bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center gap-3 text-start active:scale-[0.99] transition-transform">
+        <span className="w-10 h-10 shrink-0 rounded-full bg-violet-500/15 flex items-center justify-center"><LockIcon size={18} className="text-violet-300" /></span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-sm font-semibold text-white">{t('الخصوصية')}</span>
+          <span className="block text-xs text-gray-400 mt-0.5">حسابك عام أم خاص، من يراسلك، المحظورون، الأصدقاء المقربون</span>
+        </span>
+        {DIR === 'rtl' ? <ChevronLeft size={18} className="text-gray-500" /> : <ChevronRight size={18} className="text-gray-500" />}
+      </button>
+      {open && <PrivacyPanel currentUser={currentUser} setUsers={setUsers} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 function LangPicker() {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const cur = LANGS.find(l => l.id === LANG) ?? LANGS[0];
+  const qq = q.trim().toLowerCase();
+  const list = LANGS.filter(l => !qq || l.name.toLowerCase().includes(qq) || l.id === qq);
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
       <div className="text-sm font-semibold text-white mb-3">{t('اللغة')} / Language</div>
-      <div className="grid grid-cols-2 gap-2">
-        {([['ar', 'العربية'], ['en', 'English']] as const).map(([id, label]) => (
-          <button key={id} onClick={() => { if (id !== LANG) setLangStored(id); }} className={`rounded-xl border py-2.5 text-sm font-semibold active:scale-95 transition-transform ${LANG === id ? 'border-violet-400 bg-violet-500/15 text-white' : 'border-white/10 bg-white/5 text-gray-300'}`}>{label}</button>
-        ))}
-      </div>
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-gray-950/60 px-3.5 py-3 text-sm text-white active:scale-[0.99] transition-transform">
+        <span className="font-semibold">{cur.name}</span>
+        <ChevronDown size={18} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="mt-2">
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search" className="w-full mb-2 rounded-xl bg-gray-950/60 border border-white/10 px-3 py-2 text-[16px] text-white placeholder-gray-500 outline-none" />
+          <div className="max-h-72 overflow-y-auto overscroll-contain rounded-xl border border-white/10 divide-y divide-white/5">
+            {list.map(l => (
+              <button key={l.id} onClick={() => { if (l.id !== LANG) setLangStored(l.id); else setOpen(false); }} className={`w-full flex items-center justify-between px-3.5 py-2.5 text-sm text-start ${LANG === l.id ? 'bg-violet-500/15 text-white' : 'text-gray-200 hover:bg-white/5'}`}>
+                <span>{l.name}</span>{LANG === l.id && <Check size={16} className="text-violet-300" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -13049,6 +13388,7 @@ function SettingsTab({ currentUser, setUsers }: {
     <div className="px-4 py-4 space-y-4">
       <h2 className="text-xl font-bold text-white">{t('الإعدادات')}</h2>
       <LangPicker />
+      <PrivacyEntry currentUser={currentUser} setUsers={setUsers} />
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
         <div className="text-sm font-semibold text-white mb-1">{t('المظهر')}</div>
         <p className="text-xs text-gray-400 mb-3">اختر الثيم الذي يريحك</p>
@@ -15708,6 +16048,10 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const [error, setError] = useState('');
 
   const messages = conversation?.messages || [];
+  useBlocks();
+  const cannotMsg = kanBlocks.mine.has(chatUser.id) ? 'لقد حظرت هذا الحساب. ألغِ الحظر لتتمكن من المراسلة.'
+    : kanBlocks.theirs.has(chatUser.id) ? 'لا يمكنك مراسلة هذا الحساب.'
+    : chatUser.whoCanMessage === 'nobody' || (chatUser.whoCanMessage === 'followers' && !chatUser.following.includes(currentUser.id)) ? 'هذا الحساب لا يستقبل رسائل منك.' : '';
   const [showGames, setShowGames] = useState(false);
   const [openGid, setOpenGid] = useState<string | null>(null);
   const games = useMemo(() => collectGames(messages, currentUser.id, chatUser.id), [messages, currentUser.id, chatUser.id]);
@@ -15881,6 +16225,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
   const send = async (opts: { text?: string; file?: Blob; mediaType?: 'image' | 'video' | 'voice' | 'file'; duration?: number; fileName?: string; replyToId?: string; id?: string }): Promise<boolean> => {
     const body = (opts.text ?? '').trim();
     if (!body && !opts.file) return false;
+    if (cannotMsg) { setError(cannotMsg); return false; }
     setError('');
     let convId: string;
     try {
@@ -15903,6 +16248,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
       c.id !== convId ? c : { ...c, messages: c.messages.some(m => m.id === id) ? c.messages : [...c.messages, msg], lastActivity: msg.timestamp }
     ));
     if (peerHere.current) presumed.current.add(id);
+    if (!opts.file && !parseGame(body) && !parseVote(body) && !parsePoll(body)) fastSend(chatUser.id, { id, conv: convId, from: currentUser.id, text: body, reply: opts.replyToId ?? null, ts: msg.timestamp });
     { const gm = parseGame(body); if (!gm || gm.k === 'inv') playSound('send'); }
     void (async () => {
       let dbPath: string | null = path;
@@ -16208,6 +16554,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
               </>
             )}
           </div>
+          <button onClick={async () => { const on = !kanBlocks.mine.has(chatUser.id); if (on && !(await kanConfirm('حظر هذا الحساب؟ لن يتمكن من مراسلتك ورؤية منشوراتك.'))) return; await setBlocked(currentUser.id, chatUser.id, on); }} className="p-2 hover:bg-gray-800 rounded-full transition-colors shrink-0" aria-label="حظر / إلغاء الحظر" title="حظر / إلغاء الحظر"><BlockIcon size={18} className={kanBlocks.mine.has(chatUser.id) ? 'text-red-400' : 'text-gray-400'} /></button>
           <div className="relative">
           <button
             onClick={() => { setShowBgPicker(!showBgPicker); setShowCallMenu(false); }}
@@ -16229,6 +16576,7 @@ function ChatView({ currentUser, chatUser, conversation, setConversations, onBac
         </div>
       </div>
 
+      {cannotMsg && <div className="px-4 py-2 text-center text-xs text-red-300 bg-red-500/10 border-b border-red-500/20">{cannotMsg}</div>}
       {/* Messages */}
       <div ref={scrollRef} onScroll={onScroll} onWheel={onUserScroll} onTouchMove={onUserScroll} className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3">
         {messages.length === 0 && (
