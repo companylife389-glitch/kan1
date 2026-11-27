@@ -1477,12 +1477,23 @@ let openReelHandler: (postId: string) => void = () => undefined;
 function openReel(postId: string) { stopPostMusic(); openReelHandler(postId); }
 // Only one piece of post music plays at a time.
 let playingAudio: HTMLAudioElement | null = null;
+// Every post-music <audio> registers here, so "stop everything" really stops everything (never two sounds at once).
+const postAudios = new Set<HTMLAudioElement>();
+function pauseAllPostAudio(except?: HTMLAudioElement | null) { postAudios.forEach(a => { if (a !== except && !a.paused) a.pause(); }); }
+// While the page is being scrolled (and for a moment after), no music may START: it starts only when the scroll settles.
+let musicScrollUntil = 0;
 // One sound at a time: of everything with music that is on screen, only the one showing the biggest part plays.
 const musicVis = new Map<object, { ratio: number; on: boolean; apply: (on: boolean) => void }>();
 function musicArbitrate() {
   let best: object | null = null; let br = 0.4;
   musicVis.forEach((v, k) => { if (v.ratio > br + 0.001) { br = v.ratio; best = k; } });
-  musicVis.forEach((v, k) => { const want = k === best; if (want !== v.on) { v.on = want; v.apply(want); } });
+  const scrolling = performance.now() < musicScrollUntil;
+  musicVis.forEach((v, k) => {
+    const want = k === best;
+    if (want === v.on) return;
+    if (want && scrolling) return; // wait for the scroll to settle (the idle timer arbitrates again)
+    v.on = want; v.apply(want);
+  });
 }
 function musicReport(key: object, ratio: number, apply: (on: boolean) => void) {
   const old = musicVis.get(key);
@@ -1490,7 +1501,7 @@ function musicReport(key: object, ratio: number, apply: (on: boolean) => void) {
   musicArbitrate();
 }
 function musicForget(key: object) { musicVis.delete(key); musicArbitrate(); }
-function stopPostMusic() { if (playingAudio) { playingAudio.pause(); playingAudio = null; } }
+function stopPostMusic() { pauseAllPostAudio(); if (playingAudio) { playingAudio.pause(); playingAudio = null; } }
 // Fast scrolling: sound stops the moment its post leaves the screen (not only when the observer finally reports it).
 if (typeof window !== 'undefined') {
   let lastY = window.scrollY; let lastT = performance.now(); let idleT = 0;
@@ -1500,9 +1511,10 @@ if (typeof window !== 'undefined') {
     const now = performance.now(); const y = window.scrollY;
     const speed = (Math.abs(y - lastY) / Math.max(1, now - lastT)) * 1000;
     lastY = y; lastT = now;
-    if (speed > 1200) { musicVis.forEach(m => { if (m.on) { m.on = false; m.apply(false); } }); stopPostMusic(); sweep(); }
+    musicScrollUntil = now + 170;
+    if (speed > 600) { musicVis.forEach(m => { if (m.on) { m.on = false; m.apply(false); } }); stopPostMusic(); sweep(); }
     window.clearTimeout(idleT);
-    idleT = window.setTimeout(() => { sweep(); musicArbitrate(); }, 140);
+    idleT = window.setTimeout(() => { sweep(); musicArbitrate(); }, 190);
   }, { passive: true });
 }
 if (typeof document !== 'undefined') document.addEventListener('play', e => { if (e.target instanceof HTMLVideoElement) stopPostMusic(); }, true);
@@ -7031,9 +7043,11 @@ export default function App() {
         done?.();
         return;
       }
-      setY(Math.floor(y * 0.78));
+      const dt = Math.min(48, now - lastT); lastT = now;
+      setY(Math.floor(y * Math.pow(0.78, dt / 16.7))); // frame-rate independent ease-out
       topAnim.current = requestAnimationFrame(step);
     };
+    let lastT = performance.now();
     topAnim.current = requestAnimationFrame(step);
   };
   // Home icon: from any other screen -> back to Home. On Home: ONE tap = animated glide to the top; DOUBLE tap = refresh the feed (pill + spinning icon).
@@ -7139,7 +7153,7 @@ export default function App() {
 
   return (
     <div dir={LANG === 'en' ? 'ltr' : 'rtl'} className="min-h-[100dvh] bg-gray-950 text-white font-sans overflow-x-clip">
-      <style>{'html,body{scrollbar-width:none!important;-ms-overflow-style:none;-webkit-text-size-adjust:100%;overflow-x:hidden;overscroll-behavior-y:none;scroll-behavior:auto;-webkit-tap-highlight-color:transparent}img,video{-webkit-user-drag:none}.post-card{contain:layout style;content-visibility:auto;contain-intrinsic-size:auto 560px}[id^="msg-"],[id^="gmsg-"]{contain:layout style}.overflow-y-auto,.overflow-y-scroll{-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}.no-scrollbar,[class*=overflow-y-auto],[class*=overflow-x-auto]{-webkit-overflow-scrolling:touch}button,a{touch-action:manipulation}@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
+      <style>{'html,body{scrollbar-width:none!important;-ms-overflow-style:none;-webkit-text-size-adjust:100%;overflow-x:hidden;overscroll-behavior-y:none;scroll-behavior:auto;-webkit-tap-highlight-color:transparent}img,video{-webkit-user-drag:none}.post-card{contain:layout style}[id^="msg-"],[id^="gmsg-"]{contain:layout style}.overflow-y-auto,.overflow-y-scroll{-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}.no-scrollbar,[class*=overflow-y-auto],[class*=overflow-x-auto]{-webkit-overflow-scrolling:touch}button,a{touch-action:manipulation}@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media (max-width:640px){input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}}'}</style>
       <KanDialogHost />
       <AnimatePresence>{toast && <ToastBanner key={toast.id} toast={toast} onClose={() => setToast(null)} />}</AnimatePresence>
       {viewPost && <PostViewer target={viewPost} posts={posts} setPosts={setPosts} users={users} currentUser={currentUser} onOpenProfile={openProfile} onClose={popScreen} />}
@@ -7157,11 +7171,12 @@ export default function App() {
               {menuOpen && (
                 <motion.div
                   key="bar"
-                  initial={{ opacity: 0, x: 14, scale: 0.94 }}
+                  initial={{ opacity: 0, x: LANG === 'en' ? 12 : -12, scale: 0.96 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
-                  exit={{ opacity: 0, x: 14, scale: 0.94 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
-                  className="flex items-center gap-0.5 p-1 ml-2 rounded-full bg-gray-900/95 border border-white/10 shadow-lg shadow-black/30"
+                  exit={{ opacity: 0, x: LANG === 'en' ? 12 : -12, scale: 0.96, transition: { duration: 0.12, ease: 'easeIn' } }}
+                  transition={{ type: 'tween', duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                  style={{ willChange: 'transform, opacity' }}
+                  className="absolute end-full me-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 p-1 rounded-full bg-gray-900/95 border border-white/10 shadow-lg shadow-black/30"
                 >
                   {([
                     { tab: 'notifications' as const, label: t('الإشعارات'), Icon: Bell, badge: notifUnread },
@@ -7175,7 +7190,7 @@ export default function App() {
                         key={tab}
                         onClick={() => goTab(tab)}
                         aria-label={label}
-                        className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 ${on ? 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-md shadow-violet-500/30' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+                        className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-[transform,background-color,color,box-shadow] duration-150 active:scale-90 ${on ? 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-md shadow-violet-500/30' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
                       >
                         <Icon size={18} className="text-white" />
                         {badge > 0 && (
@@ -7191,7 +7206,7 @@ export default function App() {
               onClick={() => setMenuOpen(o => !o)}
               aria-label={menuOpen ? t('إغلاق القائمة') : t('القائمة')}
               aria-expanded={menuOpen}
-              className={`relative w-10 h-10 rounded-full flex items-center justify-center border transition-all active:scale-90 ${menuOpen ? 'bg-violet-500/15 border-violet-400/30 text-violet-200' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white'}`}
+              className={`relative w-10 h-10 rounded-full flex items-center justify-center border transition-[transform,background-color,border-color,color] duration-150 active:scale-90 ${menuOpen ? 'bg-violet-500/15 border-violet-400/30 text-violet-200' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white'}`}
             >
               {menuOpen ? <X size={19} /> : <Menu size={19} />}
               {!menuOpen && unreadCount + notifUnread > 0 && <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-gray-950" />}
@@ -7344,11 +7359,11 @@ export default function App() {
                   key={tab}
                   data-tab={tab}
                   onClick={() => (tab === 'feed' ? onHomeTap() : tab === 'messages' && activeTab === 'messages' ? (setSelectedChat(null), window.dispatchEvent(new Event('kan-messages-home'))) : goTab(tab))}
-                  className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-0.5 py-2 rounded-2xl transition-colors active:scale-95 ${active ? 'text-white' : 'text-gray-300 hover:text-white'}`}
+                  className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-0.5 py-2 rounded-2xl transition-[transform,color] duration-150 active:scale-95 ${active ? 'text-white' : 'text-gray-300 hover:text-white'}`}
                 >
                   <Icon key={tab === 'feed' ? `hb${homeBounce}` : undefined} size={tab === 'reels' ? 31 : 24} strokeWidth={active ? 2.4 : 2} className={`${active ? 'text-cyan-300' : ''} ${tab === 'feed' && homeRefreshing ? 'kan-home-spin' : tab === 'feed' && homeBounce > 0 ? 'kan-home-pop' : ''}`} />
                   <span className={`text-[12px] leading-tight max-w-full ${active ? "font-bold text-white" : "font-semibold"}`}>{label}</span>
-                  <span className={`h-0.5 w-5 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
+                  <span className={`h-0.5 w-5 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-[opacity,transform] duration-200 origin-center ${active ? 'opacity-100 scale-x-100' : 'opacity-0 scale-x-50'}`} />
                 </button>
               );
             };
@@ -7832,12 +7847,12 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
   const start = music.start ?? 0;
   const win = music.start !== undefined ? (music.end && music.end > start ? music.end - start : 30) : Infinity;
   const [on, setOn] = useState(false);
-  useEffect(() => () => { const a = ref.current; if (a) { a.pause(); if (playingAudio === a) playingAudio = null; } }, []);
+  useEffect(() => { const a = ref.current; if (a) postAudios.add(a); return () => { if (a) postAudios.delete(a); const b = ref.current; if (b) { b.pause(); if (playingAudio === b) playingAudio = null; } }; }, []);
   const toggle = () => {
     const a = ref.current;
     if (!a) return;
     if (a.paused) {
-      if (playingAudio && playingAudio !== a) playingAudio.pause();
+      pauseAllPostAudio(a);
       playingAudio = a;
       const go = () => { if (a.currentTime < start || a.currentTime >= start + win) a.currentTime = start; void a.play().catch(() => undefined); };
       if (a.readyState >= 1) go(); else { a.addEventListener('loadedmetadata', go, { once: true }); a.load(); }
@@ -7854,22 +7869,32 @@ function MusicBar({ music, auto = false }: { music: { url: string; name: string;
     const box = (card?.querySelector('img, video') as HTMLElement | null) ?? card ?? holder.current;
     if (!a || !box || typeof IntersectionObserver === 'undefined') return;
     let vis = false;
+    let tok = 0; // every on/off bumps it: a late "metadata loaded" / "play" from an older turn is ignored, so music can never start after its post left
+    let pending: (() => void) | null = null;
+    postAudios.add(a);
     const turn = (on: boolean) => {
       vis = on;
+      const my = ++tok;
+      if (pending) { a.removeEventListener('loadedmetadata', pending); pending = null; }
       if (on) {
-        if (playingAudio && playingAudio !== a) playingAudio.pause();
+        pauseAllPostAudio(a);
         playingAudio = a;
         // Browsers can refuse sound before a tap: retry on the first touch while the post is on screen.
-        const go = () => { if (a.currentTime < start || a.currentTime >= start + win) a.currentTime = start; void a.play().catch(() => { const r = () => { if (vis && a.paused) void a.play().catch(() => undefined); }; window.addEventListener('pointerdown', r, { once: true }); window.addEventListener('touchend', r, { once: true }); }); };
-        if (a.readyState >= 1) go(); else { a.addEventListener('loadedmetadata', go, { once: true }); a.load(); }
+        const go = () => {
+          pending = null;
+          if (my !== tok || !vis) return;
+          if (a.currentTime < start || a.currentTime >= start + win) a.currentTime = start;
+          void a.play().then(() => { if (my !== tok || !vis) a.pause(); }).catch(() => { const r = () => { if (my === tok && vis && a.paused) void a.play().catch(() => undefined); }; window.addEventListener('pointerdown', r, { once: true }); window.addEventListener('touchend', r, { once: true }); });
+        };
+        if (a.readyState >= 1) go(); else { pending = go; a.addEventListener('loadedmetadata', go, { once: true }); a.load(); }
       } else { a.pause(); }
     };
-    const io = new IntersectionObserver(([en]) => { musicReport(a, en.isIntersecting ? en.intersectionRatio : 0, turn); }, { threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1] });
+    const io = new IntersectionObserver(([en]) => { musicReport(a, en.isIntersecting ? en.intersectionRatio : 0, turn); }, { threshold: [0, 0.2, 0.4, 0.6, 0.8, 1] });
     io.observe(box);
     const hide = () => { if (document.hidden) a.pause(); };
     document.addEventListener('visibilitychange', hide);
     window.addEventListener('pagehide', () => a.pause());
-    return () => { io.disconnect(); musicForget(a); document.removeEventListener('visibilitychange', hide); a.pause(); if (playingAudio === a) playingAudio = null; };
+    return () => { tok++; vis = false; if (pending) a.removeEventListener('loadedmetadata', pending); io.disconnect(); musicForget(a); document.removeEventListener('visibilitychange', hide); a.pause(); postAudios.delete(a); if (playingAudio === a) playingAudio = null; };
   }, [auto, start, win]);
   if (auto) {
     return (
@@ -8076,7 +8101,7 @@ function PostCard({ post, setPosts, users, currentUser, onOpenProfile, focusComm
   };
 
   return (
-    <motion.div initial={false} className="post-card bg-gray-900 border border-gray-800 rounded-2xl max-lg:bg-transparent max-lg:border-x-0 max-lg:border-t-0 max-lg:rounded-none overflow-hidden [contain:layout_paint] [content-visibility:auto] [contain-intrinsic-size:auto_420px]">
+    <motion.div initial={false} className="post-card bg-gray-900 border border-gray-800 rounded-2xl max-lg:bg-transparent max-lg:border-x-0 max-lg:border-t-0 max-lg:rounded-none overflow-hidden [contain:layout_paint]">
       <div className="p-4 flex items-center gap-3">
         <button onClick={() => onOpenProfile(author.id)} className="flex items-center gap-3 flex-1 min-w-0 text-right">
           <Avatar userId={author.id} src={author.avatar} name={author.displayName} size="md" />
@@ -8549,7 +8574,7 @@ function ReelItem({ post, author, users, setUsers, currentUser, muted, onToggleM
       else if (activeRef.current) { activeRef.current = false; video.pause(); video.currentTime = 0; }
     };
     // Two reels half on screen: only the one showing the bigger part plays (and its music).
-    const observer = new IntersectionObserver(([entry]) => { musicReport(box, entry.isIntersecting ? entry.intersectionRatio : 0, turn); }, { threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1] });
+    const observer = new IntersectionObserver(([entry]) => { musicReport(box, entry.isIntersecting ? entry.intersectionRatio : 0, turn); }, { threshold: [0, 0.2, 0.4, 0.6, 0.8, 1] });
     observer.observe(box);
     return () => { observer.disconnect(); musicForget(box); };
   }, []);
@@ -12543,12 +12568,12 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
           </div>
         ) : (
           <div className="space-y-2">
-            {myGroups.map(g => {
+            {myGroups.map((g, gi) => {
               const last = [...g.messages].reverse()[0];
               const unread = groupUnread(g, currentUser.id);
               const lastName = last ? (last.senderId === currentUser.id ? 'أنت' : users.find(u => u.id === last.senderId)?.displayName ?? '') : '';
               return (
-                <motion.button key={g.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} onClick={() => setSelectedGroup(g.id)} className="w-full flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl hover:border-gray-700 transition-all text-right">
+                <motion.button key={g.id} style={{ animationDelay: `${Math.min(gi, 8) * 28}ms` }} onClick={() => setSelectedGroup(g.id)} className="kan-row w-full flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl hover:border-gray-700 transition-[border-color,transform] duration-150 text-right">
                   <div className="relative">
                     <GroupAvatar name={g.name} src={g.avatar} size="lg" />
                     {unread > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-violet-500 rounded-full text-xs flex items-center justify-center font-bold">{unread > 9 ? '9+' : unread}</span>}
@@ -12575,14 +12600,14 @@ function MessagesTab({ currentUser, users, conversations, setConversations, grou
         </div>
       ) : (
         <div className="space-y-2">
-          {myConversations.map(conv => {
+          {myConversations.map((conv, ci) => {
             const otherUserId = conv.participants.find(id => id !== currentUser.id)!;
             const otherUser = users.find(u => u.id === otherUserId);
             if (!otherUser) return null;
             const lastMsg = conv.messages[conv.messages.length - 1];
             const unread = conv.messages.filter(m => m.senderId !== currentUser.id && !m.read).length;
             return (
-              <motion.button key={conv.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} onClick={() => setSelectedChat(otherUserId)} className="w-full flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl hover:border-gray-700 transition-all text-right">
+              <motion.button key={conv.id} style={{ animationDelay: `${Math.min(ci, 8) * 28}ms` }} onClick={() => setSelectedChat(otherUserId)} className="kan-row w-full flex items-center gap-3 p-3 bg-gray-900 border border-gray-800 rounded-xl hover:border-gray-700 transition-[border-color,transform] duration-150 text-right">
                 <div className="relative">
                   <Avatar userId={otherUser.id} src={otherUser.avatar} name={otherUser.displayName} size="lg" />
                   {unread > 0 && (

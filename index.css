@@ -68,25 +68,33 @@ textarea:focus {
 
 
 
-/* Animated "publish" button in the bottom bar */
-@keyframes kan-flow {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-@keyframes kan-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.55), 0 6px 22px rgba(6, 182, 212, 0.35); }
-  70%  { box-shadow: 0 0 0 14px rgba(124, 58, 237, 0), 0 6px 30px rgba(124, 58, 237, 0.45); }
-  100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0), 0 6px 22px rgba(6, 182, 212, 0.35); }
+/* Animated "publish" button in the bottom bar.
+   Only transform + opacity are animated (they run on the GPU), so it never repaints while the page scrolls. */
+@keyframes kan-ring {
+  0%   { transform: scale(1);   opacity: 0.55; }
+  70%  { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
 }
 @keyframes kan-float {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-3px); }
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(0, -3px, 0); }
 }
 .kan-fab {
-  background: linear-gradient(135deg, #7c3aed, #06b6d4, #7c3aed);
-  background-size: 220% 220%;
-  animation: kan-flow 4s ease infinite, kan-pulse 2.4s ease-out infinite, kan-float 3s ease-in-out infinite;
+  position: relative;
+  background: linear-gradient(135deg, #7c3aed, #06b6d4);
+  box-shadow: 0 6px 18px rgba(6, 182, 212, 0.35);
+  animation: kan-float 3s ease-in-out infinite;
+  will-change: transform;
+}
+.kan-fab::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #7c3aed, #06b6d4);
+  z-index: -1;
+  animation: kan-ring 2.4s ease-out infinite;
+  pointer-events: none;
 }
 .kan-gradient-text {
   background: linear-gradient(90deg, #a78bfa, #22d3ee);
@@ -97,7 +105,7 @@ textarea:focus {
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 @media (prefers-reduced-motion: reduce) {
-  .kan-fab { animation: none; }
+  .kan-fab, .kan-fab::after { animation: none; }
 }
 
 
@@ -198,8 +206,8 @@ button, a, [role='button'] { touch-action: manipulation; }
 button:active:not(:disabled) { transform: scale(0.97); }
 .overflow-y-auto, .overflow-auto { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 img, video { -webkit-user-drag: none; }
-.post-card { content-visibility: auto; contain-intrinsic-size: auto 520px; }
-button, a { transition-property: color, background-color, border-color, opacity, box-shadow, transform; }
+.post-card { contain: layout style; }
+button, a { transition-property: color, background-color, border-color, opacity, box-shadow, transform; transition-duration: 150ms; transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } button:active:not(:disabled) { transform: none; } }
 
 
@@ -208,6 +216,8 @@ html[dir='ltr'] .text-right { text-align: left; }
 
 
 /* Smoothness on phones: blur filters are the main cause of janky sheets and scrolling, so they are off there. */
+/* Fixed bars sit over the scrolling feed: a live blur behind them is repainted on every scroll frame on every device. */
+header, nav { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 @media (max-width: 767px) {
   [class*='backdrop-blur'] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 }
@@ -216,9 +226,18 @@ html[dir='ltr'] .text-right { text-align: left; }
 /* Weak phones: no endless animations, no background gradients, no shadows that repaint every frame. */
 @media (max-width: 767px) {
   body { background-image: none; }
-  .kan-fab { animation: none; box-shadow: 0 6px 18px rgba(6, 182, 212, 0.35); }
+  .kan-fab, .kan-fab::after { animation: none; }
   * { -webkit-tap-highlight-color: transparent; }
 }
 @media (prefers-reduced-motion: reduce), (update: slow) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+
+/* Chat / group list rows: a short, light slide-in (GPU only), staggered a little so it feels fluid, never heavy. */
+@keyframes kan-row {
+  from { opacity: 0; transform: translate3d(14px, 0, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+html[dir='rtl'] .kan-row { --kan-row-from: 14px; }
+.kan-row { animation: kan-row 0.22s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
